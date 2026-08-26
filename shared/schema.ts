@@ -1150,6 +1150,56 @@ export const voipPhoneNumbers = pgTable("voip_phone_numbers", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Local Presence is deliberately approval-gated. Package geography is JSON so
+// operations can change coverage without a deploy (or hard-coded state list).
+export const localPresencePackages = pgTable("local_presence_packages", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  code: text("code").notNull().unique(),
+  name: text("name").notNull(),
+  description: text("description").notNull(),
+  customerMonthlyPriceCents: integer("customer_monthly_price_cents").notNull(),
+  geographies: jsonb("geographies").$type<Array<{ state: string; areaCode: string; targetDids: number; minimumDids: number }>>().notNull(),
+  status: text("status").notNull().default("ACTIVE"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const localPresenceRequests = pgTable("local_presence_requests", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  product: text("product").notNull(),
+  requestedPackageId: uuid("requested_package_id").references(() => localPresencePackages.id).notNull(),
+  requestedAt: timestamp("requested_at").defaultNow(),
+  requestedBy: text("requested_by").notNull(),
+  status: text("status").notNull().default("REQUESTED"),
+  coverageRequired: jsonb("coverage_required").$type<Array<{ state: string; areaCode: string; required: number; minimum: number; existing: number; need: number; available?: number; availabilityStatus?: string }>>(),
+  estimatedDidCount: integer("estimated_did_count"),
+  estimatedProviderCostCents: integer("estimated_provider_cost_cents"),
+  customerPriceCents: integer("customer_price_cents"),
+  approvedBy: text("approved_by"),
+  approvedAt: timestamp("approved_at"),
+  provisioningStartedAt: timestamp("provisioning_started_at"),
+  completedAt: timestamp("completed_at"),
+  notes: text("notes"),
+  releaseReviewRequired: boolean("release_review_required").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({ tenantStatusIdx: index("local_presence_requests_tenant_status_idx").on(table.tenantId, table.status) }));
+
+export const voiceVerificationStatuses = pgTable("voice_verification_statuses", {
+  tenantId: uuid("tenant_id").primaryKey().references(() => tenants.id, { onDelete: "cascade" }),
+  subaccount: text("subaccount").notNull().default("NOT VERIFIED"),
+  primaryDid: text("primary_did").notNull().default("NOT VERIFIED"),
+  outboundCall: text("outbound_call").notNull().default("NOT TESTED"),
+  inboundCall: text("inbound_call").notNull().default("NOT TESTED"),
+  webhookSignatureValidation: text("webhook_signature_validation").notNull().default("NOT TESTED"),
+  callbackRouting: text("callback_routing").notNull().default("NOT TESTED"),
+  localPresenceCallerId: text("local_presence_caller_id").notNull().default("NOT TESTED"),
+  smsRegression: text("sms_regression").notNull().default("NOT TESTED"),
+  tenantIsolation: text("tenant_isolation").notNull().default("NOT TESTED"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // VoIP Call Logs (tracks all inbound and outbound calls)
 export const voipCallLogs = pgTable("voip_call_logs", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1966,6 +2016,8 @@ export type CommunicationSequenceEnrollment = typeof communicationSequenceEnroll
 export type InsertCommunicationSequenceEnrollment = z.infer<typeof insertCommunicationSequenceEnrollmentSchema>;
 export type VoipPhoneNumber = typeof voipPhoneNumbers.$inferSelect;
 export type InsertVoipPhoneNumber = z.infer<typeof insertVoipPhoneNumberSchema>;
+export type LocalPresencePackage = typeof localPresencePackages.$inferSelect;
+export type LocalPresenceRequest = typeof localPresenceRequests.$inferSelect;
 export type VoipCallLog = typeof voipCallLogs.$inferSelect;
 export type InsertVoipCallLog = z.infer<typeof insertVoipCallLogSchema>;
 export type PaymentProcessingLog = typeof paymentProcessingLogs.$inferSelect;

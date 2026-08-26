@@ -33,6 +33,9 @@ import {
   autoResponseUsage,
   messagingUsageEvents,
   voipPhoneNumbers,
+  localPresencePackages,
+  localPresenceRequests,
+  voiceVerificationStatuses,
   manualArrangements,
   manualPayments,
   pushDevices,
@@ -24876,6 +24879,106 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // below under /api/voice and continue to use provider signature/account validation.
   app.use('/api/voip', authenticateUser, requireVoiceProduct);
 
+  // Local Presence customer requests never call Twilio. Purchasing is only
+  // reachable through the separately authorized Global Admin provision action.
+  app.get('/api/voip/local-presence', async (req, res) => {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    const [packages, requests] = await Promise.all([
+      db.select().from(localPresencePackages).where(eq(localPresencePackages.status, 'ACTIVE')),
+      db.select().from(localPresenceRequests).where(eq(localPresenceRequests.tenantId, user.tenantId)).orderBy(desc(localPresenceRequests.requestedAt)),
+    ]);
+    res.json({ packages, request: requests[0] || null });
+  });
+
+  app.post('/api/voip/local-presence/requests', requireOwner, async (req, res) => {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    const parsed = z.object({ packageId: z.string().uuid() }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: 'A valid package is required' });
+    const [pkg] = await db.select().from(localPresencePackages).where(and(eq(localPresencePackages.id, parsed.data.packageId), eq(localPresencePackages.status, 'ACTIVE')));
+    if (!pkg) return res.status(404).json({ message: 'Active package not found' });
+    const [created] = await db.insert(localPresenceRequests).values({
+      tenantId: user.tenantId, product: process.env.APP_BRAND === 'chiamo' ? 'CHIAMO_VOICE' : 'CHAIN_VOICE',
+      requestedPackageId: pkg.id, requestedBy: (user as any).email || (user as any).username || user.id,
+      customerPriceCents: pkg.customerMonthlyPriceCents,
+    }).returning();
+    res.status(201).json(created);
+  });
+
+  app.get('/api/admin/communications', isPlatformAdmin, async (_req, res) => {
+    const [companies, requests, packages, numbers, verification] = await Promise.all([
+      db.select({ id: tenants.id, name: tenants.name, twilioAccountSid: tenants.twilioAccountSid, twilioSubaccountStatus: tenants.twilioSubaccountStatus, twilioPhoneNumber: tenants.twilioPhoneNumber }).from(tenants),
+      db.select().from(localPresenceRequests).orderBy(desc(localPresenceRequests.requestedAt)),
+      db.select().from(localPresencePackages).orderBy(localPresencePackages.name),
+      db.select().from(voipPhoneNumbers), db.select().from(voiceVerificationStatuses),
+    ]);
+    const duplicateSids = companies.filter(c => c.twilioAccountSid).filter((c, i, all) => all.findIndex(x => x.twilioAccountSid === c.twilioAccountSid) !== i).map(c => c.twilioAccountSid);
+    res.json({ companies, requests, packages, numbers, verification, ownershipAudit: { ambiguous: companies.filter(c => duplicateSids.includes(c.twilioAccountSid)), duplicateSids } });
+  });
+
+  app.post('/api/admin/communications/packages', isPlatformAdmin, async (req, res) => {
+    const data = z.object({ code: z.string().min(1), name: z.string().min(1), description: z.string(), customerMonthlyPriceCents: z.number().int().nonnegative(), geographies: z.array(z.object({ state: z.string().min(2), areaCode: z.string().regex(/^\d{3}$/), targetDids: z.number().int().positive(), minimumDids: z.number().int().nonnegative() })), status: z.enum(['DRAFT','ACTIVE','INACTIVE']) }).parse(req.body);
+    const [pkg] = await db.insert(localPresencePackages).values(data).onConflictDoUpdate({ target: localPresencePackages.code, set: { ...data, updatedAt: new Date() } }).returning();
+    res.json(pkg);
+  });
+
+  app.post('/api/admin/communications/requests/:id/calculate', isPlatformAdmin, async (req, res) => {
+    const [request] = await db.select().from(localPresenceRequests).where(eq(localPresenceRequests.id, req.params.id));
+    if (!request) return res.status(404).json({ message: 'Request not found' });
+    const [pkg] = await db.select().from(localPresencePackages).where(eq(localPresencePackages.id, request.requestedPackageId));
+    const existing = await db.select({ areaCode: voipPhoneNumbers.areaCode, state: voipPhoneNumbers.state }).from(voipPhoneNumbers).where(and(eq(voipPhoneNumbers.tenantId, request.tenantId), eq(voipPhoneNumbers.numberType, 'LOCAL_PRESENCE')));
+    const { calculateCoverage, costReview } = await import('./localPresenceService');
+    const coverage = calculateCoverage(pkg.geographies, existing);
+    const missing = coverage.reduce((sum, row) => sum + row.need, 0);
+    const cost = costReview(missing, Number(process.env.TWILIO_DID_MONTHLY_COST_CENTS || 115), pkg.customerMonthlyPriceCents);
+    const [updated] = await db.update(localPresenceRequests).set({ coverageRequired: coverage, estimatedDidCount: missing, estimatedProviderCostCents: cost.estimatedProviderCostCents, customerPriceCents: pkg.customerMonthlyPriceCents, status: 'COVERAGE_CALCULATED', updatedAt: new Date() }).where(eq(localPresenceRequests.id, request.id)).returning();
+    res.json({ ...updated, costReview: cost });
+  });
+
+  app.post('/api/admin/communications/requests/:id/availability', isPlatformAdmin, async (req, res) => {
+    const [request] = await db.select().from(localPresenceRequests).where(eq(localPresenceRequests.id, req.params.id));
+    if (!request?.coverageRequired) return res.status(409).json({ message: 'Calculate coverage first' });
+    const { searchAvailableLocalNumbers } = await import('./twilioVoiceService');
+    const coverage = await Promise.all(request.coverageRequired.map(async row => {
+      if (!row.need) return { ...row, available: 0, availabilityStatus: 'AVAILABLE' };
+      try { const found = await searchAvailableLocalNumbers(row.areaCode, row.need, request.tenantId); const available = found.length; return { ...row, available, availabilityStatus: available >= row.need ? 'AVAILABLE' : available ? 'LIMITED' : 'UNAVAILABLE' }; }
+      catch { return { ...row, available: 0, availabilityStatus: 'CHECK_FAILED' }; }
+    }));
+    const [updated] = await db.update(localPresenceRequests).set({ coverageRequired: coverage, status: 'AVAILABILITY_REVIEW', updatedAt: new Date() }).where(eq(localPresenceRequests.id, request.id)).returning();
+    res.json(updated);
+  });
+
+  app.post('/api/admin/communications/requests/:id/approve', isPlatformAdmin, async (req: any, res) => {
+    const confirmation = z.object({ confirm: z.literal(true) }).safeParse(req.body);
+    if (!confirmation.success) return res.status(400).json({ message: 'Explicit approval confirmation is required' });
+    const [updated] = await db.update(localPresenceRequests).set({ status: 'APPROVED', approvedBy: req.user?.id || 'global-admin', approvedAt: new Date(), updatedAt: new Date() }).where(and(eq(localPresenceRequests.id, req.params.id), inArray(localPresenceRequests.status, ['COVERAGE_CALCULATED','AVAILABILITY_REVIEW','COST_REVIEW']))).returning();
+    if (!updated) return res.status(409).json({ message: 'Request is not ready for approval' });
+    res.json(updated);
+  });
+
+  app.post('/api/admin/communications/requests/:id/provision', isPlatformAdmin, async (req, res) => {
+    const [request] = await db.select().from(localPresenceRequests).where(eq(localPresenceRequests.id, req.params.id));
+    if (!request) return res.status(404).json({ message: 'Request not found' });
+    const { assertProvisionable, coverageMeetsMinimum } = await import('./localPresenceService');
+    try { assertProvisionable(request.status, request.approvedAt); } catch (error: any) { return res.status(409).json({ message: error.message }); }
+    await db.update(localPresenceRequests).set({ status: 'PROVISIONING', provisioningStartedAt: new Date() }).where(eq(localPresenceRequests.id, request.id));
+    const { searchAvailableLocalNumbers, provisionPhoneNumber, extractAreaCode } = await import('./twilioVoiceService');
+    const provisioned: Record<string, number> = {}; const failures: string[] = [];
+    for (const row of request.coverageRequired || []) for (let i = 0; i < row.need; i++) {
+      try {
+        const [candidate] = await searchAvailableLocalNumbers(row.areaCode, 1, request.tenantId); if (!candidate) throw new Error('Unavailable');
+        const bought = await provisionPhoneNumber(candidate.phoneNumber, `Local Presence ${row.areaCode}`, request.tenantId); if (!bought) throw new Error('Purchase failed');
+        await voipStorage.createVoipPhoneNumber({ tenantId: request.tenantId, phoneNumber: bought.phoneNumber, areaCode: extractAreaCode(bought.phoneNumber), state: row.state, numberType: 'LOCAL_PRESENCE', twilioPhoneSid: bought.sid, twilioSubaccountSid: bought.subaccountSid, status: 'ACTIVE', voiceEnabled: true, smsEnabled: false, isPrimary: false, isActive: true, capabilities: { voice: true, sms: true } });
+        provisioned[row.areaCode] = (provisioned[row.areaCode] || 0) + 1;
+      } catch { failures.push(row.areaCode); }
+    }
+    const active = coverageMeetsMinimum(request.coverageRequired || [], provisioned);
+    const status = active ? 'ACTIVE' : failures.length ? 'PARTIALLY_PROVISIONED' : 'FAILED';
+    const [updated] = await db.update(localPresenceRequests).set({ status, completedAt: active ? new Date() : null, notes: failures.length ? `Missing coverage: ${Array.from(new Set(failures)).join(', ')}` : request.notes, updatedAt: new Date() }).where(eq(localPresenceRequests.id, request.id)).returning();
+    res.json(updated);
+  });
+
   // Generate Twilio Voice token for browser-based calling
   app.get('/api/voip/token', authenticateUser, async (req, res) => {
     try {
@@ -25655,7 +25758,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // TwiML endpoint for outbound calls (called by Twilio)
-  app.post('/api/voice/outbound', async (req, res) => {
+  const validateTwilioVoiceSignature = async (req: any, res: any, next: any) => {
+    const signature = req.header('x-twilio-signature');
+    if (!signature) return res.status(403).send('Invalid Twilio signature');
+    const accountSid = req.body?.AccountSid;
+    const [company] = accountSid ? await db.select({ authToken: tenants.twilioAuthToken }).from(tenants).where(eq(tenants.twilioAccountSid, accountSid)).limit(1) : [];
+    if (!company?.authToken) return res.status(403).send('Unknown Twilio account');
+    const forwardedProto = String(req.header('x-forwarded-proto') || req.protocol).split(',')[0].trim();
+    const forwardedHost = String(req.header('x-forwarded-host') || req.header('host') || '').split(',')[0].trim();
+    const configuredOrigin = process.env.PUBLIC_APP_URL || process.env.APP_URL;
+    const publicUrl = configuredOrigin ? `${configuredOrigin.replace(/\/$/, '')}${req.originalUrl}` : `${forwardedProto}://${forwardedHost}${req.originalUrl}`;
+    const { default: twilioSdk } = await import('twilio');
+    if (!twilioSdk.validateRequest(company.authToken, signature, publicUrl, req.body || {})) return res.status(403).send('Invalid Twilio signature');
+    next();
+  };
+
+  app.post('/api/voice/outbound', validateTwilioVoiceSignature, async (req, res) => {
     try {
       const { To, From, CallSid } = req.body;
       // Twilio Client identities are tenantId_userId. Enforce Chiamo billing and
@@ -25703,7 +25821,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // TwiML endpoint for inbound calls (called by Twilio when someone calls your number)
-  app.post('/api/voice/inbound', async (req, res) => {
+  app.post('/api/voice/inbound', validateTwilioVoiceSignature, async (req, res) => {
     try {
       const { From, To, CallSid, AccountSid } = req.body;
       
@@ -25781,7 +25899,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Dial status callback (called by Twilio when dial attempt completes)
-  app.post('/api/voice/dial-status', async (req, res) => {
+  app.post('/api/voice/dial-status', validateTwilioVoiceSignature, async (req, res) => {
     try {
       const { CallSid, DialCallStatus, DialCallSid } = req.body;
       console.log("Dial status callback:", { CallSid, DialCallStatus, DialCallSid });
@@ -25804,7 +25922,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Call status callback (called by Twilio during call lifecycle)
-  app.post('/api/voice/call-status', async (req, res) => {
+  app.post('/api/voice/call-status', validateTwilioVoiceSignature, async (req, res) => {
     try {
       const { CallSid, CallStatus, Duration, From, To, Timestamp } = req.body;
 
@@ -25835,7 +25953,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Recording status callback (called by Twilio when recording is ready)
-  app.post('/api/voice/recording-status', async (req, res) => {
+  app.post('/api/voice/recording-status', validateTwilioVoiceSignature, async (req, res) => {
     try {
       const { CallSid, RecordingSid, RecordingUrl, RecordingStatus, RecordingDuration } = req.body;
 

@@ -142,6 +142,13 @@ export default function PhonesPage() {
   const { data: phoneNumbers = [], isLoading: loadingNumbers } = useQuery<VoipPhoneNumber[]>({
     queryKey: ["/api/voip/phone-numbers"],
   });
+  const { data: localPresence } = useQuery<any>({ queryKey: ["/api/voip/local-presence"] });
+  const [selectedLocalPresencePackage, setSelectedLocalPresencePackage] = useState("");
+  const requestLocalPresence = useMutation({
+    mutationFn: () => apiRequest('POST', '/api/voip/local-presence/requests', { packageId: selectedLocalPresencePackage }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/voip/local-presence"] }); toast({ title: 'Request submitted', description: 'No numbers will be purchased until Global Admin reviews and approves coverage.' }); },
+    onError: (error: any) => toast({ title: 'Request failed', description: error.message, variant: 'destructive' }),
+  });
 
   const { data: billingSummary, isLoading: loadingBilling } = useQuery<VoipBillingSummary>({
     queryKey: ["/api/voip/billing-summary"],
@@ -404,7 +411,7 @@ export default function PhonesPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid h-auto w-full grid-cols-2 gap-1 p-1 sm:grid-cols-5 lg:w-[650px]">
+          <TabsList className="grid h-auto w-full grid-cols-2 gap-1 p-1 sm:grid-cols-6 lg:w-[820px]">
             <TabsTrigger value="dashboard" className="flex items-center gap-2">
               <BarChart3 className="h-4 w-4" /> Dashboard
             </TabsTrigger>
@@ -419,6 +426,9 @@ export default function PhonesPage() {
             </TabsTrigger>
             <TabsTrigger value="billing" className="flex items-center gap-2">
               <DollarSign className="h-4 w-4" /> Billing
+            </TabsTrigger>
+            <TabsTrigger value="local-presence" className="flex items-center gap-2">
+              <Phone className="h-4 w-4" /> Local Presence
             </TabsTrigger>
           </TabsList>
 
@@ -573,6 +583,20 @@ export default function PhonesPage() {
                 </CardContent>
               </Card>
             )}
+          </TabsContent>
+
+          {/* Phone Numbers Tab */}
+          <TabsContent value="local-presence" className="mt-6">
+            <Card className={cardBaseClasses}>
+              <CardHeader><CardTitle className="text-white">Local Presence</CardTitle><CardDescription className="text-blue-100/60">Use dedicated local business numbers based on the area you are calling.</CardDescription></CardHeader>
+              <CardContent className="space-y-5">
+                <div className="flex flex-wrap gap-3 text-sm"><Badge>{localPresence?.request?.status || 'NOT ENABLED'}</Badge>{localPresence?.request && <span className="text-blue-100/70">Current request is under internal review. Provider cost is never displayed here.</span>}</div>
+                {!localPresence?.request || ['FAILED','CANCELLED'].includes(localPresence.request.status) ? <>
+                  <div className="grid gap-3 md:grid-cols-3">{(localPresence?.packages || []).map((pkg: any) => <button key={pkg.id} type="button" onClick={() => setSelectedLocalPresencePackage(pkg.id)} className={`rounded-xl border p-4 text-left ${selectedLocalPresencePackage === pkg.id ? 'border-sky-400 bg-sky-500/15' : 'border-white/10 bg-white/5'}`}><p className="font-semibold text-white">{pkg.name}</p><p className="mt-1 text-sm text-blue-100/60">{pkg.description}</p><p className="mt-3 text-blue-200">${(pkg.customerMonthlyPriceCents / 100).toFixed(2)}/month</p></button>)}</div>
+                  <Button disabled={!selectedLocalPresencePackage || requestLocalPresence.isPending} onClick={() => requestLocalPresence.mutate()} className="bg-sky-500 hover:bg-sky-600">{requestLocalPresence.isPending ? 'Submitting…' : 'Submit Request'}</Button>
+                </> : <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="font-medium text-white">Current status: {localPresence.request.status.replaceAll('_', ' ')}</p><p className="mt-1 text-sm text-blue-100/60">Provisioning begins only after coverage, availability, cost, and Global Admin approval reviews.</p></div>}
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Phone Numbers Tab */}
