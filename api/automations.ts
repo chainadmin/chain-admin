@@ -544,7 +544,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
           scheduleWeekdays: scheduleWeekdaysNormalized,
           targetType: resolvedTargetType as any,
           isActive: isActive !== undefined ? Boolean(isActive) : true,
-        })
+        } as any)
         .returning();
 
       res.status(201).json(formatAutomation(newAutomation));

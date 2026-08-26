@@ -1,6 +1,7 @@
 import {
   users,
   tenants,
+  tenantSmsConfigurations,
   platformUsers,
   agencyCredentials,
   consumers,
@@ -51,6 +52,7 @@ import {
   type UpsertUser,
   type Tenant,
   type InsertTenant,
+  type TenantSmsConfiguration,
   type PlatformUser,
   type InsertPlatformUser,
   type SelectAgencyCredentials,
@@ -232,6 +234,11 @@ export interface IStorage {
     twilioCampaignId?: string | null;
     customSenderEmail?: string | null;
   }): Promise<Tenant>;
+  getTenantSmsConfiguration(tenantId: string): Promise<TenantSmsConfiguration | undefined>;
+  updateTenantSmsConfiguration(
+    tenantId: string,
+    updates: Partial<Omit<TenantSmsConfiguration, 'tenantId' | 'configVersion' | 'updatedAt'>>,
+  ): Promise<TenantSmsConfiguration>;
   
   // Platform user operations
   getPlatformUser(authId: string): Promise<PlatformUser | undefined>;
@@ -351,7 +358,7 @@ export interface IStorage {
   // SMS opt-out and blocked number operations
   markConsumerSmsOptedOut(consumerId: string, optedOut: boolean): Promise<Consumer>;
   getConsumersByPhoneNumber(phoneNumber: string, tenantId?: string): Promise<Consumer[]>;
-  getSmsBlockedNumbers(tenantId: string): Promise<{ phoneNumber: string; reason: string; errorCode?: string | null; errorMessage?: string | null; failureCount: number; firstFailedAt: Date; lastFailedAt: Date }[]>;
+  getSmsBlockedNumbers(tenantId: string): Promise<{ phoneNumber: string; reason: string; errorCode?: string | null; errorMessage?: string | null; failureCount: number | null; firstFailedAt: Date | null; lastFailedAt: Date | null }[]>;
   addSmsBlockedNumber(tenantId: string, phoneNumber: string, reason: string, errorCode?: string, errorMessage?: string): Promise<void>;
   removeSmsBlockedNumber(tenantId: string, phoneNumber: string): Promise<void>;
   isPhoneNumberBlocked(tenantId: string, phoneNumber: string): Promise<boolean>;
@@ -3732,7 +3739,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createInvoice(invoice: InsertInvoice): Promise<Invoice> {
-    const [newInvoice] = await db.insert(invoices).values(invoice).returning();
+    const [newInvoice] = await db.insert(invoices).values(invoice as typeof invoices.$inferInsert).returning();
     return newInvoice;
   }
 
@@ -4149,6 +4156,34 @@ export class DatabaseStorage implements IStorage {
       .where(eq(tenants.id, id))
       .returning();
     return updatedTenant;
+  }
+
+  async getTenantSmsConfiguration(tenantId: string): Promise<TenantSmsConfiguration | undefined> {
+    const [configuration] = await db
+      .select()
+      .from(tenantSmsConfigurations)
+      .where(eq(tenantSmsConfigurations.tenantId, tenantId))
+      .limit(1);
+    return configuration;
+  }
+
+  async updateTenantSmsConfiguration(
+    tenantId: string,
+    updates: Partial<Omit<TenantSmsConfiguration, 'tenantId' | 'configVersion' | 'updatedAt'>>,
+  ): Promise<TenantSmsConfiguration> {
+    const [configuration] = await db
+      .insert(tenantSmsConfigurations)
+      .values({ tenantId, ...updates })
+      .onConflictDoUpdate({
+        target: tenantSmsConfigurations.tenantId,
+        set: {
+          ...updates,
+          configVersion: sql`${tenantSmsConfigurations.configVersion} + 1`,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return configuration;
   }
 
   // Push notification operations

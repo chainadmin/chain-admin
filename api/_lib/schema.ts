@@ -216,6 +216,22 @@ export const emailTracking = pgTable("email_tracking", {
   trackingData: jsonb("tracking_data").default(sql`'{}'::jsonb`),
 });
 
+export const emailLogs = pgTable("email_logs", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "set null" }),
+  messageId: text("message_id"),
+  fromEmail: text("from_email").notNull(),
+  toEmail: text("to_email").notNull(),
+  subject: text("subject").notNull(),
+  htmlBody: text("html_body"),
+  textBody: text("text_body"),
+  status: text("status").default("sent"),
+  tag: text("tag"),
+  metadata: jsonb("metadata").default(sql`'{}'::jsonb`),
+  sentAt: timestamp("sent_at").defaultNow(),
+});
+
 // SMS templates (per tenant)
 export const smsTemplates = pgTable("sms_templates", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -336,7 +352,10 @@ export const tenantSettings = pgTable("tenant_settings", {
   merchantProvider: text("merchant_provider"),
   merchantAccountId: text("merchant_account_id"),
   merchantApiKey: text("merchant_api_key"),
+  merchantApiPin: text("merchant_api_pin"),
   merchantName: text("merchant_name"),
+  merchantType: text("merchant_type"),
+  useSandbox: boolean("use_sandbox").default(true),
   enableOnlinePayments: boolean("enable_online_payments").default(false),
 });
 

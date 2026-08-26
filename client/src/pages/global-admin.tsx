@@ -47,11 +47,9 @@ export default function GlobalAdmin() {
   const [smsConfigDialogOpen, setSmsConfigDialogOpen] = useState(false);
   const [selectedTenantForSms, setSelectedTenantForSms] = useState<any>(null);
   const [smsConfig, setSmsConfig] = useState({
-    twilioAccountSid: '',
-    twilioAuthToken: '',
-    twilioPhoneNumber: '',
-    twilioBusinessName: '',
-    twilioCampaignId: ''
+    accountSid: '', authSecret: '', phoneNumber: '', messagingServiceSid: '',
+    businessIdentifier: '', campaignIdentifier: '', approvalStatus: 'not_configured',
+    enabled: false, testStatus: 'not_tested', authSecretConfigured: false,
   });
 
   // Subscription approval state
@@ -312,11 +310,9 @@ export default function GlobalAdmin() {
       });
       setSmsConfigDialogOpen(false);
       setSmsConfig({
-        twilioAccountSid: '',
-        twilioAuthToken: '',
-        twilioPhoneNumber: '',
-        twilioBusinessName: '',
-        twilioCampaignId: ''
+        accountSid: '', authSecret: '', phoneNumber: '', messagingServiceSid: '',
+        businessIdentifier: '', campaignIdentifier: '', approvalStatus: 'not_configured',
+        enabled: false, testStatus: 'not_tested', authSecretConfigured: false,
       });
     },
     onError: () => {
@@ -988,16 +984,22 @@ export default function GlobalAdmin() {
     });
   };
   
-  const handleOpenSmsConfig = (tenant: any) => {
+  const handleOpenSmsConfig = async (tenant: any) => {
     setSelectedTenantForSms(tenant);
-    setSmsConfig({
-      twilioAccountSid: tenant.twilioAccountSid || '',
-      twilioAuthToken: tenant.twilioAuthToken || '',
-      twilioPhoneNumber: tenant.twilioPhoneNumber || '',
-      twilioBusinessName: tenant.twilioBusinessName || '',
-      twilioCampaignId: tenant.twilioCampaignId || ''
-    });
     setSmsConfigDialogOpen(true);
+    try {
+      const response = await apiRequest('GET', `/api/admin/tenants/${tenant.id}/sms-config`);
+      const data = await response.json();
+      setSmsConfig({
+        accountSid: data.accountSid || '', authSecret: '', phoneNumber: data.phoneNumber || '',
+        messagingServiceSid: data.messagingServiceSid || '', businessIdentifier: data.businessIdentifier || '',
+        campaignIdentifier: data.campaignIdentifier || '', approvalStatus: data.approvalStatus || 'not_configured',
+        enabled: data.enabled === true, testStatus: data.testStatus || 'not_tested',
+        authSecretConfigured: data.authSecretConfigured === true,
+      });
+    } catch (error: any) {
+      toast({ title: "Unable to load SMS configuration", description: error.message, variant: "destructive" });
+    }
   };
   
   const handleSaveSmsConfig = () => {
@@ -3653,11 +3655,11 @@ export default function GlobalAdmin() {
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="twilio-account-sid">Twilio Account SID</Label>
+               <Label htmlFor="twilio-account-sid">SMS Account SID</Label>
               <Input
                 id="twilio-account-sid"
-                value={smsConfig.twilioAccountSid}
-                onChange={(e) => setSmsConfig({ ...smsConfig, twilioAccountSid: e.target.value })}
+                 value={smsConfig.accountSid}
+                 onChange={(e) => setSmsConfig({ ...smsConfig, accountSid: e.target.value })}
                 placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                 data-testid="input-twilio-account-sid"
               />
@@ -3668,9 +3670,9 @@ export default function GlobalAdmin() {
               <Input
                 id="twilio-auth-token"
                 type="password"
-                value={smsConfig.twilioAuthToken}
-                onChange={(e) => setSmsConfig({ ...smsConfig, twilioAuthToken: e.target.value })}
-                placeholder="Enter auth token"
+                 value={smsConfig.authSecret}
+                 onChange={(e) => setSmsConfig({ ...smsConfig, authSecret: e.target.value })}
+                 placeholder={smsConfig.authSecretConfigured ? "Configured — leave blank to keep" : "Enter auth token"}
                 data-testid="input-twilio-auth-token"
               />
             </div>
@@ -3679,8 +3681,8 @@ export default function GlobalAdmin() {
               <Label htmlFor="twilio-phone-number">Twilio Phone Number</Label>
               <Input
                 id="twilio-phone-number"
-                value={smsConfig.twilioPhoneNumber}
-                onChange={(e) => setSmsConfig({ ...smsConfig, twilioPhoneNumber: e.target.value })}
+                 value={smsConfig.phoneNumber}
+                 onChange={(e) => setSmsConfig({ ...smsConfig, phoneNumber: e.target.value })}
                 placeholder="+1234567890"
                 data-testid="input-twilio-phone-number"
               />
@@ -3691,8 +3693,8 @@ export default function GlobalAdmin() {
               <Label htmlFor="twilio-business-name">Business Name (for A2P 10DLC)</Label>
               <Input
                 id="twilio-business-name"
-                value={smsConfig.twilioBusinessName}
-                onChange={(e) => setSmsConfig({ ...smsConfig, twilioBusinessName: e.target.value })}
+                 value={smsConfig.businessIdentifier}
+                 onChange={(e) => setSmsConfig({ ...smsConfig, businessIdentifier: e.target.value })}
                 placeholder="Agency business name"
                 data-testid="input-twilio-business-name"
               />
@@ -3702,12 +3704,20 @@ export default function GlobalAdmin() {
               <Label htmlFor="twilio-campaign-id">Campaign ID (Optional)</Label>
               <Input
                 id="twilio-campaign-id"
-                value={smsConfig.twilioCampaignId}
-                onChange={(e) => setSmsConfig({ ...smsConfig, twilioCampaignId: e.target.value })}
+                 value={smsConfig.campaignIdentifier}
+                 onChange={(e) => setSmsConfig({ ...smsConfig, campaignIdentifier: e.target.value })}
                 placeholder="CMPxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
                 data-testid="input-twilio-campaign-id"
               />
               <p className="text-sm text-gray-500">A2P 10DLC Campaign ID if registered</p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="sms-messaging-service">Messaging Service SID (Optional)</Label>
+              <Input id="sms-messaging-service" value={smsConfig.messagingServiceSid} onChange={(e) => setSmsConfig({ ...smsConfig, messagingServiceSid: e.target.value })} placeholder="MGxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2"><Label>Approval</Label><select className="h-10 w-full rounded-md border px-3" value={smsConfig.approvalStatus} onChange={e => setSmsConfig({ ...smsConfig, approvalStatus: e.target.value })}>{['not_configured','pending','approved','active','rejected','suspended'].map(x => <option key={x} value={x}>{x.replace('_',' ')}</option>)}</select></div>
+              <div className="flex items-end gap-3 pb-2"><Switch checked={smsConfig.enabled} onCheckedChange={enabled => setSmsConfig({ ...smsConfig, enabled })} /><Label>SMS enabled</Label></div>
             </div>
             
             <div className="flex justify-end space-x-3 pt-4">

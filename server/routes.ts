@@ -36,6 +36,7 @@ import {
   localPresencePackages,
   localPresenceRequests,
   voiceVerificationStatuses,
+  tenantSmsConfigurations,
   manualArrangements,
   manualPayments,
   pushDevices,
@@ -10003,9 +10004,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           twilioCampaignId !== undefined ||
           customSenderEmail !== undefined) {
         const existingTenant = await storage.getTenant(tenantId);
+        const { encryptCredential } = await import('./credentialCrypto');
         const finalTwilioAuthToken = twilioAuthToken === '••••••••'
           ? existingTenant?.twilioAuthToken
-          : (twilioAuthToken || null);
+          : (twilioAuthToken ? encryptCredential(twilioAuthToken) : null);
         await storage.updateTenantTwilioSettings(tenantId, {
           twilioAccountSid: twilioAccountSid || null,
           twilioAuthToken: finalTwilioAuthToken,
@@ -14606,7 +14608,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
               console.log('✅ Payment schedule created for NMI arrangement');
 
               if ((settings as any)?.dmpEnabled && account.filenumber) {
-                const consumerName = consumer ? `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim() : '';
+                const scheduleConsumer = await storage.getConsumer(consumerId);
+                const consumerName = scheduleConsumer ? `${scheduleConsumer.firstName || ''} ${scheduleConsumer.lastName || ''}`.trim() : '';
                 const arrangementSent = await dmpService.insertPaymentArrangement(tenantId, {
                   filenumber: account.filenumber,
                   payorname: consumerName || 'Consumer',
@@ -20508,25 +20511,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update tenant SMS configuration (platform admin only)
+  app.get('/api/admin/tenants/:id/sms-config', isPlatformAdmin, async (req, res) => {
+    const config = await storage.getTenantSmsConfiguration(req.params.id);
+    if (!config) return res.json({ approvalStatus: 'not_configured', enabled: false, testStatus: 'not_tested', authSecretConfigured: false });
+    const { authSecret, ...safe } = config;
+    res.json({ ...safe, authSecretConfigured: Boolean(authSecret) });
+  });
+
   app.put('/api/admin/tenants/:id/sms-config', isPlatformAdmin, async (req: any, res) => {
     try {
-      const { 
-        twilioAccountSid, 
-        twilioAuthToken, 
-        twilioPhoneNumber, 
-        twilioBusinessName, 
-        twilioCampaignId 
-      } = req.body;
-      
-      // Update tenant Twilio settings
-      await storage.updateTenantTwilioSettings(req.params.id, {
-        twilioAccountSid: twilioAccountSid || null,
-        twilioAuthToken: twilioAuthToken || null,
-        twilioPhoneNumber: twilioPhoneNumber || null,
-        twilioBusinessName: twilioBusinessName || null,
-        twilioCampaignId: twilioCampaignId || null,
-      });
-      
+      const parsed = z.object({
+        accountSid: z.string().trim().max(80).nullable().optional(),
+        authSecret: z.string().max(500).optional(),
+        phoneNumber: z.string().trim().max(30).nullable().optional(),
+        messagingServiceSid: z.string().trim().max(80).nullable().optional(),
+        businessIdentifier: z.string().trim().max(200).nullable().optional(),
+        campaignIdentifier: z.string().trim().max(100).nullable().optional(),
+        approvalStatus: z.enum(['not_configured','pending','approved','active','rejected','suspended']).optional(),
+        enabled: z.boolean().optional(),
+        testStatus: z.enum(['not_tested','passed','failed']).optional(),
+      }).parse(req.body);
+      const existing = await storage.getTenantSmsConfiguration(req.params.id);
+      const { encryptCredential } = await import('./credentialCrypto');
+      const updates: any = { ...parsed };
+      if (parsed.authSecret?.trim()) updates.authSecret = encryptCredential(parsed.authSecret.trim());
+      else delete updates.authSecret;
+      if (updates.enabled === true && updates.approvalStatus !== 'active' && existing?.approvalStatus !== 'active') {
+        return res.status(409).json({ message: "SMS can only be enabled after approval is active" });
+      }
+      await storage.updateTenantSmsConfiguration(req.params.id, updates);
+      smsService.invalidateTenantClient(req.params.id);
       res.json({ message: "SMS configuration updated successfully" });
     } catch (error) {
       console.error('Error updating SMS configuration:', error);
@@ -20893,6 +20907,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get additional stats for each tenant
       const tenantsWithStats = await Promise.all(
         tenants.map(async (tenant) => {
+          const {
+            twilioAuthToken: _twilioAuthToken,
+            twilioApiKeySecret: _twilioApiKeySecret,
+            ownerSSN: _ownerSSN,
+            ...safeTenant
+          } = tenant;
           const consumerCount = await storage.getConsumerCountByTenant(tenant.id);
           const accountCount = await storage.getAccountCountByTenant(tenant.id);
           const totalBalance = await storage.getTotalBalanceByTenant(tenant.id);
@@ -20913,7 +20933,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             .limit(1);
           
           return {
-            ...tenant,
+            ...safeTenant,
             enabledAddons: settings?.enabledAddons || [],
             currentPeriodStart: subscription?.currentPeriodStart,
             currentPeriodEnd: subscription?.currentPeriodEnd,
@@ -23136,6 +23156,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error('❌ Twilio webhook missing MessageSid');
         return res.status(400).json({ message: 'Missing MessageSid' });
       }
+      const trackingInfo = await storage.findSmsTrackingByExternalId(messageSid);
+      if (!trackingInfo?.tenantId) return res.status(403).json({ message: 'Unknown message' });
+      const smsConfig = await storage.getTenantSmsConfiguration(trackingInfo.tenantId);
+      const signature = req.header('x-twilio-signature');
+      if (!smsConfig?.authSecret || !signature || smsConfig.accountSid !== req.body.AccountSid) {
+        return res.status(403).json({ message: 'Invalid provider account' });
+      }
+      const forwardedProto = String(req.header('x-forwarded-proto') || req.protocol).split(',')[0].trim();
+      const forwardedHost = String(req.header('x-forwarded-host') || req.header('host') || '').split(',')[0].trim();
+      const configuredOrigin = process.env.PUBLIC_APP_URL || process.env.APP_URL;
+      const publicUrl = configuredOrigin ? `${configuredOrigin.replace(/\/$/, '')}${req.originalUrl}` : `${forwardedProto}://${forwardedHost}${req.originalUrl}`;
+      const { default: twilioSdk } = await import('twilio');
+      const { decryptCredential } = await import('./credentialCrypto');
+      if (!twilioSdk.validateRequest(decryptCredential(smsConfig.authSecret), signature, publicUrl, req.body || {})) {
+        return res.status(403).json({ message: 'Invalid Twilio signature' });
+      }
 
       const relevantStatuses = new Set(['sent', 'delivered', 'undelivered', 'failed']);
       if (!relevantStatuses.has(status)) {
@@ -23149,12 +23185,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`📊 SMS Segments detected: ${quantity} (raw: ${segmentsRaw})`);
 
-      let tenantId = (req.body.TenantId || req.body.tenantId) as string | undefined;
-      const trackingInfo = await storage.findSmsTrackingByExternalId(messageSid);
-
-      if (!tenantId) {
-        tenantId = trackingInfo?.tenantId ?? undefined;
-      }
+      const tenantId = trackingInfo.tenantId;
 
       if (trackingInfo?.tracking) {
         console.log(`✅ Found tracking record: ID=${trackingInfo.tracking.id}`);
@@ -23725,6 +23756,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const fromPhone = (From || '').trim();
       const toPhone = (To || '').trim();
       const messageBody = Body || '';
+      const messagingServiceSid = String(req.body.MessagingServiceSid || '');
+      const matchingConfigs = await db.select({
+        tenantId: tenantSmsConfigurations.tenantId,
+        accountSid: tenantSmsConfigurations.accountSid,
+        authSecret: tenantSmsConfigurations.authSecret,
+      }).from(tenantSmsConfigurations).where(and(
+        or(
+          eq(tenantSmsConfigurations.phoneNumber, toPhone),
+          messagingServiceSid
+            ? eq(tenantSmsConfigurations.messagingServiceSid, messagingServiceSid)
+            : eq(tenantSmsConfigurations.phoneNumber, toPhone),
+        ),
+        eq(tenantSmsConfigurations.enabled, true),
+      ));
+      if (matchingConfigs.length !== 1) return res.status(403).send('Unknown or ambiguous SMS recipient');
+      const inboundConfig = matchingConfigs[0];
+      const signature = req.header('x-twilio-signature');
+      if (!signature || !inboundConfig.authSecret || inboundConfig.accountSid !== req.body.AccountSid) {
+        return res.status(403).send('Invalid provider account');
+      }
+      const forwardedProto = String(req.header('x-forwarded-proto') || req.protocol).split(',')[0].trim();
+      const forwardedHost = String(req.header('x-forwarded-host') || req.header('host') || '').split(',')[0].trim();
+      const configuredOrigin = process.env.PUBLIC_APP_URL || process.env.APP_URL;
+      const publicUrl = configuredOrigin ? `${configuredOrigin.replace(/\/$/, '')}${req.originalUrl}` : `${forwardedProto}://${forwardedHost}${req.originalUrl}`;
+      const { default: twilioSdk } = await import('twilio');
+      const { decryptCredential } = await import('./credentialCrypto');
+      if (!twilioSdk.validateRequest(decryptCredential(inboundConfig.authSecret), signature, publicUrl, req.body || {})) {
+        return res.status(403).send('Invalid Twilio signature');
+      }
       
       console.log('💬 SMS details:', {
         from: fromPhone,
@@ -23733,15 +23793,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       // Find the tenant by matching the To phone number
-      const allTenants = await storage.getAllTenants();
-      let matchedTenant = null;
-      
-      for (const tenant of allTenants) {
-        if (tenant.twilioPhoneNumber && toPhone.includes(tenant.twilioPhoneNumber)) {
-          matchedTenant = tenant;
-          break;
-        }
-      }
+      const matchedTenant = await storage.getTenant(inboundConfig.tenantId);
 
       if (!matchedTenant) {
         console.warn('⚠️ Could not match inbound SMS to any tenant:', toPhone);
@@ -24993,10 +25045,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "VoIP access not enabled for this user" });
       }
 
-      const { generateVoiceToken } = await import('./twilioVoiceService');
-      // Identity format: tenantId_agentId - allows routing inbound calls to correct tenant's agents
-      const identity = `${user.tenantId}_${user.id}`;
-      const token = generateVoiceToken(identity, user.tenantId);
+      const { generateVoiceToken, buildTenantVoiceIdentity } = await import('./twilioVoiceService');
+      const identity = buildTenantVoiceIdentity(user.tenantId, user.id);
+      const token = await generateVoiceToken(user.id, user.tenantId);
       
       if (!token) {
         return res.status(500).json({ message: "Failed to generate voice token - Twilio not configured" });
@@ -25649,55 +25700,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "VoIP access not enabled for this user" });
       }
 
-      const { toNumber, consumerId, accountId, callerIdMode: rawCallerIdMode } = req.body;
+      const { toNumber, consumerId, accountId, selectedNumberId: requestedNumberId, callerIdMode } = req.body;
 
       if (!toNumber) {
         return res.status(400).json({ message: "Phone number to call is required" });
       }
 
-      // Validate callerIdMode - default to 'auto' if invalid
-      const validModes = ['auto', 'private', 'office'];
-      const callerIdMode = validModes.includes(rawCallerIdMode) ? rawCallerIdMode : 'auto';
-
-      const { extractAreaCode, formatPhoneE164 } = await import('./twilioVoiceService');
-      
       const allNumbers = await voipStorage.getVoipPhoneNumbersByTenant(user.tenantId);
-      let fromPhoneNumber: typeof allNumbers[0] | undefined;
-      let isPrivate = false;
-
-      // Handle caller ID mode
-      if (callerIdMode === 'private') {
-        // Private mode - use any number but mark as private (will block caller ID)
-        isPrivate = true;
-        fromPhoneNumber = allNumbers.find(n => n.isActive);
-      } else if (callerIdMode === 'office') {
-        // Office mode - use toll-free number
-        fromPhoneNumber = allNumbers.find(n => n.numberType === 'TOLL_FREE' && n.isActive);
-        if (!fromPhoneNumber) {
-          return res.status(400).json({ message: "No toll-free number configured. Add a toll-free number to use Office caller ID." });
-        }
-      } else {
-        // Auto mode - find the best outbound caller ID based on the destination area code
-        const destinationAreaCode = extractAreaCode(toNumber);
-        fromPhoneNumber = await voipStorage.getVoipPhoneNumberByAreaCode(destinationAreaCode, user.tenantId);
-        
-        if (!fromPhoneNumber) {
-          // Fall back to primary number
-          fromPhoneNumber = await voipStorage.getPrimaryVoipPhoneNumber(user.tenantId);
-        }
-
-        if (!fromPhoneNumber) {
-          // Get any active number
-          fromPhoneNumber = allNumbers.find(n => n.isActive);
-        }
+      const selectedNumberId = requestedNumberId
+        || (callerIdMode === 'office' ? allNumbers.find(number => number.numberType === 'TOLL_FREE' && number.isActive)?.id : undefined);
+      if (consumerId) {
+        const [owned] = await db.select({ id: consumers.id }).from(consumers).where(and(eq(consumers.id, consumerId), eq(consumers.tenantId, user.tenantId))).limit(1);
+        if (!owned) return res.status(400).json({ message: "Consumer does not belong to this company" });
       }
-
-      if (!fromPhoneNumber) {
-        return res.status(400).json({ message: "No phone numbers configured. Please add a phone number first." });
+      if (accountId) {
+        const [owned] = await db.select({ id: accountsTable.id }).from(accountsTable).where(and(eq(accountsTable.id, accountId), eq(accountsTable.tenantId, user.tenantId))).limit(1);
+        if (!owned) return res.status(400).json({ message: "Account does not belong to this company" });
       }
-
-      // Determine the displayed caller ID
-      const displayedCallerId = isPrivate ? 'Anonymous' : fromPhoneNumber.phoneNumber;
+      const packages = await db.select({ geographies: localPresencePackages.geographies }).from(localPresencePackages).where(eq(localPresencePackages.status, 'ACTIVE'));
+      const areaStates = new Map<string, string>();
+      for (const pkg of packages) for (const geo of pkg.geographies || []) areaStates.set(geo.areaCode, geo.state);
+      const { selectDialingNumber } = await import('./localPresenceService');
+      const decision = selectDialingNumber({
+        tenantId: user.tenantId,
+        dialString: toNumber,
+        numbers: allNumbers as any,
+        selectedNumberId,
+        areaCodeToState: areaCode => areaStates.get(areaCode),
+      });
+      const fromPhoneNumber = decision.selectedNumber;
 
       // Create call log entry
       const callLog = await voipStorage.createVoipCallLog({
@@ -25707,20 +25738,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         agentCredentialId: user.credentialId || null,
         direction: 'outbound',
         fromNumber: fromPhoneNumber.phoneNumber,
-        toNumber: formatPhoneE164(toNumber),
+        toNumber: decision.destination,
         status: 'initiated',
         startedAt: new Date(),
       });
+      const jwt = (await import('jsonwebtoken')).default;
+      const selectionToken = jwt.sign({
+        purpose: 'voice-call-selection',
+        tenantId: user.tenantId,
+        callLogId: callLog.id,
+        destination: decision.destination,
+        callerId: fromPhoneNumber.phoneNumber,
+      }, process.env.JWT_SECRET!, { expiresIn: '5m' });
 
       res.json({
         callLogId: callLog.id,
-        fromNumber: displayedCallerId,
+        selectionToken,
+        fromNumber: fromPhoneNumber.phoneNumber,
         actualFromNumber: fromPhoneNumber.phoneNumber,
-        toNumber: formatPhoneE164(toNumber),
+        toNumber: decision.destination,
         status: 'initiated',
-        isPrivate,
-        callerIdMode: callerIdMode || 'auto',
-        message: isPrivate ? 'Call initiated with blocked caller ID.' : 'Call initiated. Use the Twilio Voice SDK to handle the call.'
+        localPresenceRequested: decision.localPresenceRequested,
+        selectionReason: decision.selectionReason,
+        isPrivate: callerIdMode === 'private',
+        message: 'Call initiated. Use the Twilio Voice SDK to handle the call.'
       });
     } catch (error) {
       console.error("Error initiating call:", error);
@@ -25744,7 +25785,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Call log not found" });
       }
 
-      const updated = await voipStorage.updateVoipCallLog(id, {
+      const updated = await voipStorage.updateVoipCallLog(id, user.tenantId, {
         notes,
         consumerId: consumerId || callLog.consumerId,
         accountId: accountId || callLog.accountId,
@@ -25762,23 +25803,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const signature = req.header('x-twilio-signature');
     if (!signature) return res.status(403).send('Invalid Twilio signature');
     const accountSid = req.body?.AccountSid;
-    const [company] = accountSid ? await db.select({ authToken: tenants.twilioAuthToken }).from(tenants).where(eq(tenants.twilioAccountSid, accountSid)).limit(1) : [];
+    const [company] = accountSid ? await db.select({ id: tenants.id, authToken: tenants.twilioAuthToken }).from(tenants).where(eq(tenants.twilioAccountSid, accountSid)).limit(1) : [];
     if (!company?.authToken) return res.status(403).send('Unknown Twilio account');
     const forwardedProto = String(req.header('x-forwarded-proto') || req.protocol).split(',')[0].trim();
     const forwardedHost = String(req.header('x-forwarded-host') || req.header('host') || '').split(',')[0].trim();
-    const configuredOrigin = process.env.PUBLIC_APP_URL || process.env.APP_URL;
+    const configuredOrigin = process.env.TWILIO_VOICE_WEBHOOK_BASE_URL || process.env.PUBLIC_APP_URL || process.env.APP_URL;
     const publicUrl = configuredOrigin ? `${configuredOrigin.replace(/\/$/, '')}${req.originalUrl}` : `${forwardedProto}://${forwardedHost}${req.originalUrl}`;
     const { default: twilioSdk } = await import('twilio');
-    if (!twilioSdk.validateRequest(company.authToken, signature, publicUrl, req.body || {})) return res.status(403).send('Invalid Twilio signature');
+    const { decryptCredential } = await import('./credentialCrypto');
+    if (!twilioSdk.validateRequest(decryptCredential(company.authToken), signature, publicUrl, req.body || {})) return res.status(403).send('Invalid Twilio signature');
+    req.twilioTenantId = company.id;
     next();
   };
 
   app.post('/api/voice/outbound', validateTwilioVoiceSignature, async (req, res) => {
     try {
-      const { To, From, CallSid } = req.body;
-      // Twilio Client identities are tenantId_userId. Enforce Chiamo billing and
-      // the single bundled phone-system switch again at the provider boundary.
-      const clientTenantId = typeof From === 'string' && From.startsWith('client:') ? From.slice(7).split('_')[0] : null;
+      const { SelectionToken, CallSid } = req.body;
+      const clientTenantId = (req as any).twilioTenantId as string | undefined;
       if (clientTenantId) {
         const { getChiamoPhoneSystemAccess } = await import('./chiamoAccess');
         const access = await getChiamoPhoneSystemAccess(clientTenantId);
@@ -25794,20 +25835,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Never trust a client-supplied From as caller ID. Select only from this
       // authenticated identity's tenant inventory.
-      const destinationAreaCode = (await import('./twilioVoiceService')).extractAreaCode(To || '');
-      const callerId = await voipStorage.getVoipPhoneNumberByAreaCode(destinationAreaCode, clientTenantId)
-        || await voipStorage.getPrimaryVoipPhoneNumber(clientTenantId);
+      const jwt = (await import('jsonwebtoken')).default;
+      let selection: any;
+      try {
+        selection = jwt.verify(String(SelectionToken || ''), process.env.JWT_SECRET!);
+      } catch {
+        return res.status(403).send('<Response><Say>Invalid call authorization.</Say><Hangup/></Response>');
+      }
+      if (selection?.purpose !== 'voice-call-selection' || selection.tenantId !== clientTenantId) {
+        return res.status(403).send('<Response><Say>Invalid call authorization.</Say><Hangup/></Response>');
+      }
+      const allNumbers = await voipStorage.getVoipPhoneNumbersByTenant(clientTenantId);
+      const callerId = allNumbers.find(number => number.phoneNumber === selection.callerId && number.isActive);
       if (!callerId) {
         res.type('text/xml');
         return res.status(409).send('<Response><Say>No active company caller ID is configured.</Say><Hangup/></Response>');
       }
+      const bound = await voipStorage.bindVoipCallSid(selection.callLogId, clientTenantId, CallSid);
+      if (!bound) return res.status(409).send('<Response><Say>Call authorization was already used.</Say><Hangup/></Response>');
       
       const { generateTwiML } = await import('./twilioVoiceService');
       
       // Generate TwiML to dial the number
       const twiml = generateTwiML({
         action: 'dial',
-        to: To,
+        to: selection.destination,
         from: callerId.phoneNumber,
         record: true,
       });
@@ -25824,11 +25876,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/voice/inbound', validateTwilioVoiceSignature, async (req, res) => {
     try {
       const { From, To, CallSid, AccountSid } = req.body;
+      const validatedTenantId = (req as any).twilioTenantId as string;
       
       // Find the tenant that owns this phone number
       const tenantId = await voipStorage.getTenantByPhoneNumber(To);
       
-      if (!tenantId) {
+      if (!tenantId || tenantId !== validatedTenantId) {
         console.error("No tenant found for phone number:", To);
         res.type('text/xml');
         res.send('<Response><Say>This number is not configured. Goodbye.</Say></Response>');
@@ -25884,8 +25937,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Ring all agents with VoIP access for this tenant simultaneously
         // Agent identity format: tenantId_agentId (allows routing to specific tenant's agents)
+        const { buildTenantVoiceIdentity } = await import('./twilioVoiceService');
         voipAgents.forEach(agent => {
-          dial.client(`${tenantId}_${agent.id}`);
+          dial.client(buildTenantVoiceIdentity(tenantId, agent.id));
         });
       }
 
@@ -25905,12 +25959,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log("Dial status callback:", { CallSid, DialCallStatus, DialCallSid });
       
       // Update call log based on dial outcome
-      const callLog = await voipStorage.getVoipCallLogByCallSid(CallSid);
+      const tenantId = (req as any).twilioTenantId as string;
+      const callLog = await voipStorage.getVoipCallLogByCallSid(CallSid, tenantId);
       if (callLog) {
         if (DialCallStatus === 'completed' || DialCallStatus === 'answered') {
-          await voipStorage.updateVoipCallLog(callLog.id, { status: 'completed', answeredAt: new Date() });
+          await voipStorage.updateVoipCallLog(callLog.id, tenantId, { status: 'completed', answeredAt: new Date() });
         } else if (DialCallStatus === 'no-answer' || DialCallStatus === 'busy' || DialCallStatus === 'failed') {
-          await voipStorage.updateVoipCallLog(callLog.id, { status: DialCallStatus, endedAt: new Date() });
+          await voipStorage.updateVoipCallLog(callLog.id, tenantId, { status: DialCallStatus, endedAt: new Date() });
         }
       }
       
@@ -25927,7 +25982,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { CallSid, CallStatus, Duration, From, To, Timestamp } = req.body;
 
       // Update call log with status
-      const callLog = await voipStorage.getVoipCallLogByCallSid(CallSid);
+      const tenantId = (req as any).twilioTenantId as string;
+      const callLog = await voipStorage.getVoipCallLogByCallSid(CallSid, tenantId);
       if (callLog) {
         const updates: any = {
           status: CallStatus,
@@ -25942,7 +25998,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
-        await voipStorage.updateVoipCallLog(callLog.id, updates);
+        await voipStorage.updateVoipCallLog(callLog.id, tenantId, updates);
       }
 
       res.sendStatus(200);
@@ -25958,9 +26014,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { CallSid, RecordingSid, RecordingUrl, RecordingStatus, RecordingDuration } = req.body;
 
       // Update call log with recording info
-      const callLog = await voipStorage.getVoipCallLogByCallSid(CallSid);
+      const tenantId = (req as any).twilioTenantId as string;
+      const callLog = await voipStorage.getVoipCallLogByCallSid(CallSid, tenantId);
       if (callLog) {
-        await voipStorage.updateVoipCallLog(callLog.id, {
+        await voipStorage.updateVoipCallLog(callLog.id, tenantId, {
           recordingSid: RecordingSid,
           recordingUrl: `${RecordingUrl}.mp3`,
           recordingStatus: RecordingStatus,
@@ -25999,7 +26056,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const { getRecordingUrl } = await import('./twilioVoiceService');
-      const url = await getRecordingUrl(recordingSid);
+      const url = await getRecordingUrl(user.tenantId, recordingSid);
 
       if (!url) {
         return res.status(404).json({ message: "Recording not found" });
@@ -26029,13 +26086,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { callSid } = req.params;
       
       // Verify the call belongs to this tenant
-      const callLog = await voipStorage.getVoipCallLogByCallSid(callSid);
-      if (!callLog || callLog.tenantId !== user.tenantId) {
+      const callLog = await voipStorage.getVoipCallLogByCallSid(callSid, user.tenantId);
+      if (!callLog) {
         return res.status(404).json({ message: "Call not found" });
       }
       
       const { hangupCall } = await import('./twilioVoiceService');
-      const success = await hangupCall(callSid);
+      const success = await hangupCall(user.tenantId, callSid);
 
       if (success) {
         res.json({ message: "Call ended" });

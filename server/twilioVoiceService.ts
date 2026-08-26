@@ -1,41 +1,44 @@
 import twilio from 'twilio';
+import { createHash } from 'node:crypto';
 import AccessToken from 'twilio/lib/jwt/AccessToken.js';
-import { getCompanyTwilioClient, resolveCompanyTwilioAccount } from './companyTwilioService';
+import {
+  getCompanyTwilioClient,
+  resolveCompanyTwilioAccount,
+  resolveCompanyTwilioVoiceConfiguration,
+  voiceWebhookBaseUrl,
+  type CompanyTwilioVoiceConfiguration,
+} from './companyTwilioService';
 import { extractAreaCode } from './phoneNumberUtils';
 export { extractAreaCode } from './phoneNumberUtils';
 const { VoiceGrant } = AccessToken;
 
-const accountSid = process.env.TWILIO_ACCOUNT_SID;
-const authToken = process.env.TWILIO_AUTH_TOKEN;
-const apiKeySid = process.env.TWILIO_API_KEY_SID;
-const apiKeySecret = process.env.TWILIO_API_KEY_SECRET;
+export type CompanyTwilioClientFactory = (tenantId: string) => Promise<twilio.Twilio>;
 
-let twilioClient: twilio.Twilio | null = null;
-
-if (accountSid && authToken) {
-  twilioClient = twilio(accountSid, authToken);
-  console.log('Twilio Voice service initialized');
-} else {
-  console.warn('Twilio Voice service not configured - missing credentials');
+export function buildTenantVoiceIdentity(tenantId: string, userIdentity: string): string {
+  if (!tenantId || !userIdentity) throw new Error('Tenant and user identity are required');
+  const canonicalIdentity = `${tenantId.length}:${tenantId}${userIdentity.length}:${userIdentity}`;
+  return `tenant-user-${createHash('sha256').update(canonicalIdentity).digest('hex')}`;
 }
 
-export function getTwilioClient(): twilio.Twilio | null {
-  return twilioClient;
-}
-
-export function generateVoiceToken(identity: string, tenantId: string): string | null {
-  if (!accountSid || !apiKeySid || !apiKeySecret) {
-    console.error('Cannot generate voice token - missing Twilio API credentials');
-    return null;
-  }
-
-  const token = new AccessToken(accountSid, apiKeySid, apiKeySecret, {
-    identity: identity,
+export async function generateVoiceToken(
+  userIdentity: string,
+  tenantId: string,
+  configurationResolver: (tenantId: string) => Promise<CompanyTwilioVoiceConfiguration>
+    = resolveCompanyTwilioVoiceConfiguration,
+): Promise<string> {
+  const configuration = await configurationResolver(tenantId);
+  const token = new AccessToken(
+    configuration.subaccountSid,
+    configuration.apiKeySid,
+    configuration.apiKeySecret,
+    {
+    identity: buildTenantVoiceIdentity(tenantId, userIdentity),
     ttl: 3600,
-  });
+    },
+  );
 
   const voiceGrant = new VoiceGrant({
-    outgoingApplicationSid: process.env.TWILIO_TWIML_APP_SID,
+    outgoingApplicationSid: configuration.twimlAppSid,
     incomingAllow: true,
   });
 
@@ -57,17 +60,15 @@ export function formatPhoneE164(phone: string): string {
 
 
 export async function initiateOutboundCall(
+  tenantId: string,
   toNumber: string,
   fromNumber: string,
-  callbackUrl: string
+  callbackUrl: string,
+  clientFactory: CompanyTwilioClientFactory = getCompanyTwilioClient,
 ): Promise<{ callSid: string; status: string } | null> {
-  if (!twilioClient) {
-    console.error('Twilio client not initialized');
-    return null;
-  }
-
   try {
-    const call = await twilioClient.calls.create({
+    const client = await clientFactory(tenantId);
+    const call = await client.calls.create({
       to: formatPhoneE164(toNumber),
       from: formatPhoneE164(fromNumber),
       url: callbackUrl,
@@ -87,14 +88,14 @@ export async function initiateOutboundCall(
   }
 }
 
-export async function getRecordingUrl(recordingSid: string): Promise<string | null> {
-  if (!twilioClient) {
-    console.error('Twilio client not initialized');
-    return null;
-  }
-
+export async function getRecordingUrl(
+  tenantId: string,
+  recordingSid: string,
+  clientFactory: CompanyTwilioClientFactory = getCompanyTwilioClient,
+): Promise<string | null> {
   try {
-    const recording = await twilioClient.recordings(recordingSid).fetch();
+    const client = await clientFactory(tenantId);
+    const recording = await client.recordings(recordingSid).fetch();
     return `https://api.twilio.com${recording.uri.replace('.json', '.mp3')}`;
   } catch (error: any) {
     console.error('Failed to get recording URL:', error.message);
@@ -102,14 +103,14 @@ export async function getRecordingUrl(recordingSid: string): Promise<string | nu
   }
 }
 
-export async function hangupCall(callSid: string): Promise<boolean> {
-  if (!twilioClient) {
-    console.error('Twilio client not initialized');
-    return false;
-  }
-
+export async function hangupCall(
+  tenantId: string,
+  callSid: string,
+  clientFactory: CompanyTwilioClientFactory = getCompanyTwilioClient,
+): Promise<boolean> {
   try {
-    await twilioClient.calls(callSid).update({ status: 'completed' });
+    const client = await clientFactory(tenantId);
+    await client.calls(callSid).update({ status: 'completed' });
     return true;
   } catch (error: any) {
     console.error('Failed to hangup call:', error.message);
@@ -176,8 +177,8 @@ export async function searchAvailableLocalNumbers(
   tenantId?: string,
 ): Promise<AvailablePhoneNumber[]> {
   try {
-    const client = tenantId ? await getCompanyTwilioClient(tenantId, true) : twilioClient;
-    if (!client) throw new Error('Twilio client not initialized');
+    if (!tenantId) throw new Error('Organization is required to search DIDs');
+    const client = await getCompanyTwilioClient(tenantId, true);
     const numbers = await client.availablePhoneNumbers('US')
       .local
       .list({
@@ -209,8 +210,8 @@ export async function searchAvailableTollFreeNumbers(
   tenantId?: string,
 ): Promise<AvailablePhoneNumber[]> {
   try {
-    const client = tenantId ? await getCompanyTwilioClient(tenantId, true) : twilioClient;
-    if (!client) throw new Error('Twilio client not initialized');
+    if (!tenantId) throw new Error('Organization is required to search DIDs');
+    const client = await getCompanyTwilioClient(tenantId, true);
     const numbers = await client.availablePhoneNumbers('US')
       .tollFree
       .list({
@@ -245,13 +246,9 @@ export async function provisionPhoneNumber(
     if (!tenantId) throw new Error('Organization is required for DID provisioning');
     const account = await resolveCompanyTwilioAccount(tenantId, { createIfMissing: true });
     const client = await getCompanyTwilioClient(tenantId);
-    const voiceUrl = process.env.REPLIT_DEV_DOMAIN 
-      ? `https://${process.env.REPLIT_DEV_DOMAIN}/api/voice/inbound`
-      : undefined;
-    
-    const statusCallback = process.env.REPLIT_DEV_DOMAIN
-      ? `https://${process.env.REPLIT_DEV_DOMAIN}/api/voice/call-status`
-      : undefined;
+    const callbackBase = voiceWebhookBaseUrl();
+    const voiceUrl = `${callbackBase}/api/voice/inbound`;
+    const statusCallback = `${callbackBase}/api/voice/call-status`;
 
     const purchasedNumber = await client.incomingPhoneNumbers.create({
       phoneNumber,

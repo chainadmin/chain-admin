@@ -75,10 +75,14 @@ export const tenants = pgTable("tenants", {
   postmarkBroadcastStream: text("postmark_broadcast_stream").default('broadcast'),
   postmarkInboundAddress: text("postmark_inbound_address"),
   maxActiveUsers: integer("max_active_users").default(2).notNull(), // Included-seat threshold; municipalities receive 66 and may add metered users above it
-  // Twilio integration (each agency has their own)
+  // Twilio Voice integration (legacy column names retained for compatibility).
+  // SMS credentials live in tenantSmsConfigurations and must not update these.
   twilioAccountSid: text("twilio_account_sid"), // Twilio Account SID
   twilioSubaccountStatus: text("twilio_subaccount_status").default('not_configured'),
   twilioAuthToken: text("twilio_auth_token"), // Twilio Auth Token (encrypted in production)
+  twilioApiKeySid: text("twilio_api_key_sid"),
+  twilioApiKeySecret: text("twilio_api_key_secret"),
+  twilioTwimlAppSid: text("twilio_twiml_app_sid"),
   twilioPhoneNumber: text("twilio_phone_number"), // Twilio phone number with country code
   twilioBusinessName: text("twilio_business_name"), // Business name registered with campaign
   twilioCampaignId: text("twilio_campaign_id"), // 10DLC Campaign ID if applicable
@@ -113,6 +117,25 @@ export const tenants = pgTable("tenants", {
   walletAutoReloadAmountCents: integer("wallet_auto_reload_amount_cents").default(2500),
   walletPaymentMethodToken: text("wallet_payment_method_token"), // Stored payment method id (Stripe/AuthNet/etc.)
   createdAt: timestamp("created_at").defaultNow(),
+});
+
+// SMS provider credentials are intentionally separate from the legacy Twilio
+// fields on tenants, which are also used by Voice provisioning.
+export const tenantSmsConfigurations = pgTable("tenant_sms_configurations", {
+  tenantId: uuid("tenant_id").primaryKey().references(() => tenants.id, { onDelete: "cascade" }),
+  accountSid: text("account_sid"),
+  // Secret-bearing field: only select it through the dedicated server storage method.
+  authSecret: text("auth_secret"),
+  phoneNumber: text("phone_number"),
+  messagingServiceSid: text("messaging_service_sid"),
+  businessIdentifier: text("business_identifier"),
+  campaignIdentifier: text("campaign_identifier"),
+  approvalStatus: text("approval_status").notNull().default("not_configured"),
+  enabled: boolean("enabled").notNull().default(false),
+  testStatus: text("test_status").notNull().default("not_tested"),
+  lastTestedAt: timestamp("last_tested_at"),
+  configVersion: integer("config_version").notNull().default(1),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
 // Wallet (one per tenant when billingMode='wallet')
@@ -1929,6 +1952,7 @@ export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type Tenant = typeof tenants.$inferSelect;
 export type InsertTenant = z.infer<typeof insertTenantSchema>;
+export type TenantSmsConfiguration = typeof tenantSmsConfigurations.$inferSelect;
 export type AgencyTrialRegistration = z.infer<typeof agencyTrialRegistrationSchema>;
 export type SelectAgencyCredentials = typeof agencyCredentials.$inferSelect;
 export type InsertAgencyCredentials = typeof agencyCredentials.$inferInsert;

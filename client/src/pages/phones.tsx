@@ -918,7 +918,7 @@ export default function PhonesPage() {
                       <div>
                         <div className="font-mono text-white">{number.phoneNumber}</div>
                         <div className="text-xs text-blue-100/60">
-                          {number.numberType === 'TOLL_FREE' ? 'Toll-Free' : `Local (${number.areaCode})`}
+                          {number.numberType === 'toll_free' ? 'Toll-Free' : `Local (${number.areaCode})`}
                           {number.friendlyName && ` · ${number.friendlyName}`}
                         </div>
                       </div>

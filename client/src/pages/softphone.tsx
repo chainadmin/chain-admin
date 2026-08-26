@@ -364,10 +364,11 @@ export default function SoftphonePage() {
         const data = await response.json();
         throw new Error(data.message || "Failed to initiate call");
       }
-      const callInfo: { actualFromNumber: string; toNumber: string; isPrivate: boolean } = await response.json();
+      const callInfo: { actualFromNumber: string; toNumber: string; isPrivate: boolean; selectionToken: string } = await response.json();
 
       const connectParams: Record<string, string> = {
         To: callInfo.toNumber,
+        SelectionToken: callInfo.selectionToken,
       };
       if (!callInfo.isPrivate && callInfo.actualFromNumber) {
         connectParams.From = callInfo.actualFromNumber;

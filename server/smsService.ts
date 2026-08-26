@@ -1,6 +1,7 @@
 import twilio from 'twilio';
 import { storage } from './storage';
 import { smaxService } from './smaxService';
+import { decryptCredential } from './credentialCrypto';
 
 interface SmsThrottleConfig {
   maxPerMinute: number;
@@ -17,8 +18,44 @@ interface QueuedSms {
   metadata?: { automationId?: string; automationName?: string; source?: string };
 }
 
+export interface SmsProviderConfiguration {
+  tenantId: string;
+  accountSid: string | null;
+  authSecret: string | null;
+  phoneNumber: string | null;
+  messagingServiceSid: string | null;
+  approvalStatus: string;
+  enabled: boolean;
+  configVersion: number;
+}
+
+const SENDABLE_SMS_STATUSES = new Set(['active', 'approved']);
+
+/**
+ * Resolve only the requested company's SMS configuration. There is deliberately
+ * no environment/platform fallback here.
+ */
+export async function resolveSmsProviderConfiguration(
+  tenantId: string,
+  loader: (tenantId: string) => Promise<SmsProviderConfiguration | undefined>,
+): Promise<SmsProviderConfiguration | null> {
+  const configuration = await loader(tenantId);
+  if (
+    !configuration ||
+    configuration.tenantId !== tenantId ||
+    !configuration.enabled ||
+    !SENDABLE_SMS_STATUSES.has(configuration.approvalStatus.toLowerCase()) ||
+    !configuration.accountSid ||
+    !configuration.authSecret ||
+    (!configuration.phoneNumber && !configuration.messagingServiceSid)
+  ) {
+    return null;
+  }
+  return configuration;
+}
+
 class SmsService {
-  private clients: Map<string, twilio.Twilio> = new Map(); // Store client per tenant
+  private clients: Map<string, { client: twilio.Twilio; version: number; accountSid: string }> = new Map();
   private sendQueue: QueuedSms[] = [];
   private processing = false;
   private sentCounts: Map<string, { count: number; resetTime: number }> = new Map();
@@ -74,70 +111,59 @@ class SmsService {
   }
 
   constructor() {
-    this.initializeDefaultTwilio();
     // Start processing queue every 10 seconds
-    setInterval(() => this.processQueue(), 10000);
+    setInterval(() => this.processQueue(), 10000).unref();
     // Reset rate limit counters every minute
-    setInterval(() => this.resetCounters(), 60000);
+    setInterval(() => this.resetCounters(), 60000).unref();
   }
 
-  private initializeDefaultTwilio() {
-    // Initialize with default credentials if available (for backwards compatibility)
-    const accountSid = process.env.TWILIO_ACCOUNT_SID;
-    const authToken = process.env.TWILIO_AUTH_TOKEN;
-
-    if (accountSid && authToken) {
-      this.clients.set('default', twilio(accountSid, authToken));
-      console.log('Twilio SMS service initialized');
-    } else {
-      console.warn('Twilio credentials not found. SMS service will be disabled.');
-    }
+  /** Admin credential updates can call this to force immediate client rotation. */
+  invalidateTenantClient(tenantId: string): void {
+    this.clients.delete(tenantId);
   }
 
   private async getTwilioClient(tenantId: string): Promise<twilio.Twilio | null> {
-    // Check if we already have a client for this tenant
-    if (this.clients.has(tenantId)) {
-      return this.clients.get(tenantId)!;
-    }
-
     try {
-      // Get tenant-specific Twilio credentials from tenants table
-      const tenant = await storage.getTenant(tenantId);
-      
-      if (tenant?.twilioAccountSid && tenant?.twilioAuthToken) {
-        const client = twilio(tenant.twilioAccountSid, tenant.twilioAuthToken);
-        this.clients.set(tenantId, client);
-        return client;
+      const configuration = await resolveSmsProviderConfiguration(
+        tenantId,
+        (id) => storage.getTenantSmsConfiguration(id),
+      );
+      if (!configuration) {
+        this.clients.delete(tenantId);
+        return null;
       }
+
+      const cached = this.clients.get(tenantId);
+      if (
+        cached &&
+        cached.version === configuration.configVersion &&
+        cached.accountSid === configuration.accountSid
+      ) return cached.client;
+
+      const client = twilio(configuration.accountSid!, decryptCredential(configuration.authSecret!));
+      this.clients.set(tenantId, {
+        client,
+        version: configuration.configVersion,
+        accountSid: configuration.accountSid!,
+      });
+      return client;
     } catch (error) {
-      console.error(`Error getting Twilio credentials for tenant ${tenantId}:`, error);
+      this.clients.delete(tenantId);
+      console.error(`Unable to load SMS provider configuration for tenant ${tenantId}`);
+      return null;
     }
-
-    // Municipalities must never send through another tenant's/global Twilio account.
-    const tenant = await storage.getTenant(tenantId);
-    if (tenant?.businessType === 'municipality') return null;
-
-    // Legacy non-municipal tenants may use the platform fallback.
-    return this.clients.get('default') || null;
   }
 
-  private async getTwilioPhoneNumber(tenantId: string): Promise<string | null> {
+  private async getSmsProviderConfiguration(tenantId: string): Promise<SmsProviderConfiguration | null> {
     try {
-      // Get tenant-specific phone number from tenants table
-      const tenant = await storage.getTenant(tenantId);
-      
-      if (tenant?.twilioPhoneNumber) {
-        return tenant.twilioPhoneNumber;
-      }
+      return await resolveSmsProviderConfiguration(
+        tenantId,
+        (id) => storage.getTenantSmsConfiguration(id),
+      );
     } catch (error) {
-      console.error(`Error getting Twilio phone number for tenant ${tenantId}:`, error);
+      console.error(`Unable to load SMS sender configuration for tenant ${tenantId}`);
+      return null;
     }
-
-    const tenant = await storage.getTenant(tenantId);
-    if (tenant?.businessType === 'municipality') return null;
-
-    // Legacy non-municipal tenants may use the platform fallback.
-    return process.env.TWILIO_PHONE_NUMBER || null;
   }
 
   private resetCounters() {
@@ -313,9 +339,9 @@ class SmsService {
         throw new Error('Twilio client not configured for this agency');
       }
 
-      const fromNumber = await this.getTwilioPhoneNumber(tenantId);
-      if (!fromNumber) {
-        throw new Error('Twilio phone number not configured for this agency');
+      const providerConfiguration = await this.getSmsProviderConfiguration(tenantId);
+      if (!providerConfiguration) {
+        throw new Error('SMS provider not configured or approved for this agency');
       }
 
       // Get the webhook URL from environment
@@ -343,10 +369,14 @@ class SmsService {
 
       const messageOptions: any = {
         body: message,
-        from: fromNumber,
         to: to,
         provideFeedback: true,
       };
+      if (providerConfiguration.messagingServiceSid) {
+        messageOptions.messagingServiceSid = providerConfiguration.messagingServiceSid;
+      } else {
+        messageOptions.from = providerConfiguration.phoneNumber;
+      }
       
       // Only add statusCallback if we have a valid URL (no wildcard)
       if (webhookUrl) {
@@ -853,8 +883,8 @@ class SmsService {
         };
       }
 
-      const tenant = await storage.getTenant(tenantId);
-      const twilioPhoneNumber = tenant?.twilioPhoneNumber;
+      const providerConfiguration = await this.getSmsProviderConfiguration(tenantId);
+      const twilioPhoneNumber = providerConfiguration?.phoneNumber;
       if (!twilioPhoneNumber) {
         return {
           success: false,

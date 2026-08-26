@@ -1,4 +1,5 @@
 import { pool } from './db';
+import { encryptCredential } from './credentialCrypto';
 
 export async function runMigrations() {
   let client;
@@ -2167,6 +2168,73 @@ export async function runMigrations() {
       console.log('  ✓ enterprise user/Postmark columns and contact indexes');
     } catch (err: any) {
       console.log(`  ⚠ enterprise capacity migration: ${err.message}`);
+    }
+
+    // Voice runtime credentials and SMS provider ownership are separate. Voice
+    // resources are automatically provisioned; SMS remains manually approved.
+    try {
+      await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS twilio_api_key_sid TEXT`);
+      await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS twilio_api_key_secret TEXT`);
+      await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS twilio_twiml_app_sid TEXT`);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS tenant_sms_configurations (
+          tenant_id UUID PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+          account_sid TEXT,
+          auth_secret TEXT,
+          phone_number TEXT,
+          messaging_service_sid TEXT,
+          business_identifier TEXT,
+          campaign_identifier TEXT,
+          approval_status TEXT NOT NULL DEFAULT 'not_configured',
+          enabled BOOLEAN NOT NULL DEFAULT FALSE,
+          test_status TEXT NOT NULL DEFAULT 'not_tested',
+          last_tested_at TIMESTAMP,
+          config_version INTEGER NOT NULL DEFAULT 1,
+          updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+      `);
+      await client.query(`
+        INSERT INTO tenant_sms_configurations
+          (tenant_id, account_sid, phone_number, business_identifier, campaign_identifier, approval_status, enabled)
+        SELECT id, twilio_account_sid, twilio_phone_number, twilio_business_name, twilio_campaign_id,
+          'not_configured', FALSE
+        FROM tenants
+        WHERE twilio_account_sid IS NOT NULL OR twilio_auth_token IS NOT NULL OR twilio_phone_number IS NOT NULL
+        ON CONFLICT (tenant_id) DO NOTHING
+      `);
+      const plaintextVoiceTokens = await client.query(`
+        SELECT id, twilio_auth_token, twilio_api_key_secret
+        FROM tenants
+        WHERE (twilio_auth_token IS NOT NULL AND twilio_auth_token NOT LIKE 'enc:v1:%')
+           OR (twilio_api_key_secret IS NOT NULL AND twilio_api_key_secret NOT LIKE 'enc:v1:%')
+      `);
+      for (const row of plaintextVoiceTokens.rows) {
+        await client.query(
+          `UPDATE tenants
+           SET twilio_auth_token = COALESCE($2, twilio_auth_token),
+               twilio_api_key_secret = COALESCE($3, twilio_api_key_secret)
+           WHERE id = $1`,
+          [
+            row.id,
+            row.twilio_auth_token ? encryptCredential(row.twilio_auth_token) : null,
+            row.twilio_api_key_secret ? encryptCredential(row.twilio_api_key_secret) : null,
+          ],
+        );
+      }
+      const plaintextSmsTokens = await client.query(`
+        SELECT tenant_id, auth_secret
+        FROM tenant_sms_configurations
+        WHERE auth_secret IS NOT NULL AND auth_secret NOT LIKE 'enc:v1:%'
+      `);
+      for (const row of plaintextSmsTokens.rows) {
+        await client.query(
+          `UPDATE tenant_sms_configurations SET auth_secret = $2 WHERE tenant_id = $1`,
+          [row.tenant_id, encryptCredential(row.auth_secret)],
+        );
+      }
+      console.log('  ✓ separate Voice resources and tenant SMS configurations');
+    } catch (err: any) {
+      console.log(`  ⚠ Voice/SMS separation migration: ${err.message}`);
     }
 
     console.log('✅ Database migrations completed successfully');

@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, or, isNull } from "drizzle-orm";
 import {
   voipPhoneNumbers,
   voipCallLogs,
@@ -23,12 +23,13 @@ export interface IVoipStorage {
   
   getVoipCallLogsByTenant(tenantId: string, limit?: number, offset?: number): Promise<VoipCallLog[]>;
   getVoipCallLogById(id: string, tenantId: string): Promise<VoipCallLog | undefined>;
-  getVoipCallLogByCallSid(callSid: string): Promise<VoipCallLog | undefined>;
+  getVoipCallLogByCallSid(callSid: string, tenantId: string): Promise<VoipCallLog | undefined>;
   getVoipCallLogsByConsumer(consumerId: string, tenantId: string): Promise<VoipCallLog[]>;
   getVoipCallLogsByAgent(agentCredentialId: string, tenantId: string, limit?: number): Promise<VoipCallLog[]>;
   createVoipCallLog(callLog: InsertVoipCallLog): Promise<VoipCallLog>;
-  updateVoipCallLog(id: string, updates: Partial<VoipCallLog>): Promise<VoipCallLog>;
-  updateVoipCallLogByCallSid(callSid: string, updates: Partial<VoipCallLog>): Promise<VoipCallLog | undefined>;
+  updateVoipCallLog(id: string, tenantId: string, updates: Partial<VoipCallLog>): Promise<VoipCallLog | undefined>;
+  updateVoipCallLogByCallSid(callSid: string, tenantId: string, updates: Partial<VoipCallLog>): Promise<VoipCallLog | undefined>;
+  bindVoipCallSid(id: string, tenantId: string, callSid: string): Promise<boolean>;
   getTenantByPhoneNumber(phoneNumber: string): Promise<string | null>;
 }
 
@@ -156,11 +157,11 @@ export class VoipStorage implements IVoipStorage {
     return result[0];
   }
 
-  async getVoipCallLogByCallSid(callSid: string): Promise<VoipCallLog | undefined> {
+  async getVoipCallLogByCallSid(callSid: string, tenantId: string): Promise<VoipCallLog | undefined> {
     const result = await db
       .select()
       .from(voipCallLogs)
-      .where(eq(voipCallLogs.callSid, callSid));
+      .where(and(eq(voipCallLogs.callSid, callSid), eq(voipCallLogs.tenantId, tenantId)));
     return result[0];
   }
 
@@ -201,22 +202,36 @@ export class VoipStorage implements IVoipStorage {
     return result[0];
   }
 
-  async updateVoipCallLog(id: string, updates: Partial<VoipCallLog>): Promise<VoipCallLog> {
+  async updateVoipCallLog(id: string, tenantId: string, updates: Partial<VoipCallLog>): Promise<VoipCallLog | undefined> {
+    const { id: _id, tenantId: _tenantId, ...safeUpdates } = updates;
     const result = await db
       .update(voipCallLogs)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(voipCallLogs.id, id))
+      .set({ ...safeUpdates, updatedAt: new Date() })
+      .where(and(eq(voipCallLogs.id, id), eq(voipCallLogs.tenantId, tenantId)))
       .returning();
     return result[0];
   }
 
-  async updateVoipCallLogByCallSid(callSid: string, updates: Partial<VoipCallLog>): Promise<VoipCallLog | undefined> {
+  async updateVoipCallLogByCallSid(callSid: string, tenantId: string, updates: Partial<VoipCallLog>): Promise<VoipCallLog | undefined> {
+    const { id: _id, tenantId: _tenantId, callSid: _callSid, ...safeUpdates } = updates;
     const result = await db
       .update(voipCallLogs)
-      .set({ ...updates, updatedAt: new Date() })
-      .where(eq(voipCallLogs.callSid, callSid))
+      .set({ ...safeUpdates, updatedAt: new Date() })
+      .where(and(eq(voipCallLogs.callSid, callSid), eq(voipCallLogs.tenantId, tenantId)))
       .returning();
     return result[0];
+  }
+
+  async bindVoipCallSid(id: string, tenantId: string, callSid: string): Promise<boolean> {
+    const result = await db.update(voipCallLogs)
+      .set({ callSid, updatedAt: new Date() })
+      .where(and(
+        eq(voipCallLogs.id, id),
+        eq(voipCallLogs.tenantId, tenantId),
+        or(isNull(voipCallLogs.callSid), eq(voipCallLogs.callSid, callSid)),
+      ))
+      .returning({ id: voipCallLogs.id });
+    return result.length === 1;
   }
 
   async getTenantByPhoneNumber(phoneNumber: string): Promise<string | null> {

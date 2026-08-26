@@ -736,7 +736,7 @@ export async function activateAddonForTenant(
   // cannot actually allocate them a working number — otherwise the tenant
   // would be billed for a non-functional add-on.
   let provisionedMeta: any = (existing[0]?.metadata as any) || {};
-  let provisionedPhone: { phoneNumber: string; sid: string } | null = null;
+  let provisionedPhone: { phoneNumber: string; sid: string; subaccountSid: string } | null = null;
   if (addon.code === 'dedicated_number') {
     try {
       const { provisionPhoneNumber, searchAvailableLocalNumbers } = await import('./twilioVoiceService');
@@ -766,7 +766,7 @@ export async function activateAddonForTenant(
           errorBody: { message: 'Failed to provision dedicated number with Twilio. Please try again.' },
         };
       }
-      provisionedPhone = { phoneNumber: provisioned.phoneNumber, sid: provisioned.sid };
+      provisionedPhone = { phoneNumber: provisioned.phoneNumber, sid: provisioned.sid, subaccountSid: provisioned.subaccountSid };
     } catch (e: any) {
       console.error('[addons] dedicated_number provisioning error (Twilio not configured?)', e);
       return {
