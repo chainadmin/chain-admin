@@ -1,5 +1,8 @@
 import twilio from 'twilio';
 import AccessToken from 'twilio/lib/jwt/AccessToken.js';
+import { getCompanyTwilioClient, resolveCompanyTwilioAccount } from './companyTwilioService';
+import { extractAreaCode } from './phoneNumberUtils';
+export { extractAreaCode } from './phoneNumberUtils';
 const { VoiceGrant } = AccessToken;
 
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -41,17 +44,6 @@ export function generateVoiceToken(identity: string, tenantId: string): string |
   return token.toJwt();
 }
 
-export function extractAreaCode(phoneNumber: string): string {
-  const cleaned = phoneNumber.replace(/\D/g, '');
-  if (cleaned.startsWith('1') && cleaned.length === 11) {
-    return cleaned.substring(1, 4);
-  }
-  if (cleaned.length === 10) {
-    return cleaned.substring(0, 3);
-  }
-  return '';
-}
-
 export function formatPhoneE164(phone: string): string {
   const cleaned = phone.replace(/\D/g, '');
   if (cleaned.startsWith('1') && cleaned.length === 11) {
@@ -62,6 +54,7 @@ export function formatPhoneE164(phone: string): string {
   }
   return phone;
 }
+
 
 export async function initiateOutboundCall(
   toNumber: string,
@@ -179,15 +172,13 @@ export interface AvailablePhoneNumber {
 
 export async function searchAvailableLocalNumbers(
   areaCode: string,
-  limit: number = 10
+  limit: number = 10,
+  tenantId?: string,
 ): Promise<AvailablePhoneNumber[]> {
-  if (!twilioClient) {
-    console.error('Twilio client not initialized');
-    return [];
-  }
-
   try {
-    const numbers = await twilioClient.availablePhoneNumbers('US')
+    const client = tenantId ? await getCompanyTwilioClient(tenantId, true) : twilioClient;
+    if (!client) throw new Error('Twilio client not initialized');
+    const numbers = await client.availablePhoneNumbers('US')
       .local
       .list({
         areaCode: parseInt(areaCode),
@@ -214,15 +205,13 @@ export async function searchAvailableLocalNumbers(
 }
 
 export async function searchAvailableTollFreeNumbers(
-  limit: number = 10
+  limit: number = 10,
+  tenantId?: string,
 ): Promise<AvailablePhoneNumber[]> {
-  if (!twilioClient) {
-    console.error('Twilio client not initialized');
-    return [];
-  }
-
   try {
-    const numbers = await twilioClient.availablePhoneNumbers('US')
+    const client = tenantId ? await getCompanyTwilioClient(tenantId, true) : twilioClient;
+    if (!client) throw new Error('Twilio client not initialized');
+    const numbers = await client.availablePhoneNumbers('US')
       .tollFree
       .list({
         voiceEnabled: true,
@@ -249,14 +238,13 @@ export async function searchAvailableTollFreeNumbers(
 
 export async function provisionPhoneNumber(
   phoneNumber: string,
-  friendlyName?: string
-): Promise<{ sid: string; phoneNumber: string } | null> {
-  if (!twilioClient) {
-    console.error('Twilio client not initialized');
-    return null;
-  }
-
+  friendlyName?: string,
+  tenantId?: string,
+): Promise<{ sid: string; phoneNumber: string; subaccountSid: string } | null> {
   try {
+    if (!tenantId) throw new Error('Organization is required for DID provisioning');
+    const account = await resolveCompanyTwilioAccount(tenantId, { createIfMissing: true });
+    const client = await getCompanyTwilioClient(tenantId);
     const voiceUrl = process.env.REPLIT_DEV_DOMAIN 
       ? `https://${process.env.REPLIT_DEV_DOMAIN}/api/voice/inbound`
       : undefined;
@@ -265,7 +253,7 @@ export async function provisionPhoneNumber(
       ? `https://${process.env.REPLIT_DEV_DOMAIN}/api/voice/call-status`
       : undefined;
 
-    const purchasedNumber = await twilioClient.incomingPhoneNumbers.create({
+    const purchasedNumber = await client.incomingPhoneNumbers.create({
       phoneNumber,
       friendlyName: friendlyName || `Chain VoIP - ${phoneNumber}`,
       voiceUrl,
@@ -277,6 +265,7 @@ export async function provisionPhoneNumber(
     return {
       sid: purchasedNumber.sid,
       phoneNumber: purchasedNumber.phoneNumber,
+      subaccountSid: account.subaccountSid,
     };
   } catch (error: any) {
     console.error('Failed to provision phone number:', error.message);
@@ -284,14 +273,11 @@ export async function provisionPhoneNumber(
   }
 }
 
-export async function releasePhoneNumber(phoneSid: string): Promise<boolean> {
-  if (!twilioClient) {
-    console.error('Twilio client not initialized');
-    return false;
-  }
-
+export async function releasePhoneNumber(phoneSid: string, tenantId?: string): Promise<boolean> {
   try {
-    await twilioClient.incomingPhoneNumbers(phoneSid).remove();
+    if (!tenantId) throw new Error('Organization is required for DID release');
+    const client = await getCompanyTwilioClient(tenantId);
+    await client.incomingPhoneNumbers(phoneSid).remove();
     return true;
   } catch (error: any) {
     console.error('Failed to release phone number:', error.message);
@@ -312,14 +298,11 @@ export interface OwnedPhoneNumber {
   areaCode: string;
 }
 
-export async function listOwnedPhoneNumbers(): Promise<OwnedPhoneNumber[]> {
-  if (!twilioClient) {
-    console.error('Twilio client not initialized');
-    return [];
-  }
-
+export async function listOwnedPhoneNumbers(tenantId?: string): Promise<OwnedPhoneNumber[]> {
   try {
-    const numbers = await twilioClient.incomingPhoneNumbers.list({ limit: 100 });
+    if (!tenantId) throw new Error('Organization is required to list DIDs');
+    const client = await getCompanyTwilioClient(tenantId);
+    const numbers = await client.incomingPhoneNumbers.list({ limit: 100 });
     
     return numbers.map((num) => ({
       sid: num.sid,

@@ -108,7 +108,7 @@ export class VoipStorage implements IVoipStorage {
     let tollFreeCount = 0;
     for (const num of numbers) {
       if (num.isActive) {
-        if (num.numberType === 'toll_free') {
+        if (num.numberType === 'TOLL_FREE') {
           tollFreeCount++;
         } else {
           localCount++;

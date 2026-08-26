@@ -600,7 +600,7 @@ export function registerWalletRoutes(app: Express) {
         if (dedicated?.twilioSid) {
           try {
             const { releasePhoneNumber } = await import('./twilioVoiceService');
-            await releasePhoneNumber(dedicated.twilioSid);
+            await releasePhoneNumber(dedicated.twilioSid, tenantId);
             try {
               await db.update(voipPhoneNumbers)
                 .set({ isActive: false, isPrimary: false } as any)
@@ -656,7 +656,7 @@ export function registerWalletRoutes(app: Express) {
         if (dedicated?.twilioSid) {
           try {
             const { releasePhoneNumber } = await import('./twilioVoiceService');
-            await releasePhoneNumber(dedicated.twilioSid);
+            await releasePhoneNumber(dedicated.twilioSid, tenantId);
             console.log(`[addons] dedicated_number released for tenant ${tenantId}: ${dedicated.phoneNumber}`);
             try {
               await db.update(voipPhoneNumbers)
@@ -742,7 +742,7 @@ export async function activateAddonForTenant(
       const { provisionPhoneNumber, searchAvailableLocalNumbers } = await import('./twilioVoiceService');
       let phoneNumber: string | null = null;
       try {
-        const candidates = await searchAvailableLocalNumbers(areaCode || '');
+        const candidates = await searchAvailableLocalNumbers(areaCode || '', 10, tenantId);
         if (Array.isArray(candidates) && candidates.length > 0) {
           phoneNumber = candidates[0].phoneNumber;
         }
@@ -759,7 +759,7 @@ export async function activateAddonForTenant(
           },
         };
       }
-      const provisioned = await provisionPhoneNumber(phoneNumber, `Chain SMS - ${tenantId.slice(0, 8)}`);
+      const provisioned = await provisionPhoneNumber(phoneNumber, `Chain DID - ${tenantId.slice(0, 8)}`, tenantId);
       if (!provisioned) {
         return {
           errorStatus: 502,
@@ -792,7 +792,7 @@ export async function activateAddonForTenant(
       if (provisionedPhone) {
         try {
           const { releasePhoneNumber } = await import('./twilioVoiceService');
-          await releasePhoneNumber(provisionedPhone.sid);
+          await releasePhoneNumber(provisionedPhone.sid, tenantId);
         } catch (releaseErr) {
           console.error('[addons] failed to release Twilio number after charge failure', releaseErr);
         }
@@ -834,7 +834,11 @@ export async function activateAddonForTenant(
         twilioPhoneSid: provisionedPhone.sid,
         isActive: true,
         isPrimary: true,
-        numberType: 'local',
+        numberType: 'PRIMARY',
+        areaCode: provisionedPhone.phoneNumber.replace(/\D/g, '').slice(-10, -7),
+        twilioSubaccountSid: provisionedPhone.subaccountSid,
+        status: 'ACTIVE',
+        smsEnabled: false,
       } as any);
     } catch (e) {
       console.error('[addons] failed to record dedicated_number in voip_phone_numbers', e);

@@ -54,7 +54,7 @@ interface VoipPhoneNumber {
   tenantId: string;
   phoneNumber: string;
   areaCode: string;
-  numberType: 'local' | 'toll_free';
+  numberType: 'PRIMARY' | 'LOCAL_PRESENCE' | 'PORTED' | 'TOLL_FREE';
   friendlyName: string;
   twilioPhoneSid: string | null;
   isPrimary: boolean;
@@ -631,11 +631,11 @@ export default function PhonesPage() {
                             )}
                           </TableCell>
                           <TableCell>
-                            <Badge className={number.numberType === 'toll_free' 
+                            <Badge className={number.numberType === 'TOLL_FREE'
                               ? "bg-green-500/20 text-green-300 border-green-400/30"
                               : "bg-blue-500/20 text-blue-300 border-blue-400/30"
                             }>
-                              {number.numberType === 'toll_free' ? 'Toll-Free' : 'Local'}
+                              {number.numberType === 'TOLL_FREE' ? 'Toll-Free' : 'Local'}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-blue-100/80">{number.friendlyName || '-'}</TableCell>
@@ -894,7 +894,7 @@ export default function PhonesPage() {
                       <div>
                         <div className="font-mono text-white">{number.phoneNumber}</div>
                         <div className="text-xs text-blue-100/60">
-                          {number.numberType === 'toll_free' ? 'Toll-Free' : `Local (${number.areaCode})`}
+                          {number.numberType === 'TOLL_FREE' ? 'Toll-Free' : `Local (${number.areaCode})`}
                           {number.friendlyName && ` · ${number.friendlyName}`}
                         </div>
                       </div>
