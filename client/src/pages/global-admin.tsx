@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import AdminAuth from "@/components/admin-auth";
 import { TenantAgreementsPanel } from "@/components/global-admin/tenant-agreements-panel";
 import { PlatformAnnouncementsPanel } from "@/components/global-admin/platform-announcements-panel";
+import { CommunicationsPanel } from "@/components/global-admin/communications-panel";
 import { DOCUMENT_SIGNING_ADDON_PRICE, AI_AUTO_RESPONSE_ADDON_PRICE } from "@shared/billing-plans";
 import { ChiamoAdminModule } from "@/pages/chiamo-admin";
 // Simple currency formatter
@@ -1328,6 +1329,7 @@ export default function GlobalAdmin() {
               {[
                 ["admin-overview", "Overview", LayoutDashboard],
                 ["admin-companies", "Companies", Building2],
+                ["admin-communications", "Communications / Twilio", Phone],
                 ["admin-users", "Users", Users],
                 ["admin-billing", "Billing", CreditCard],
                 ["admin-account-tools", "Account Tools", Wrench],
@@ -1343,6 +1345,7 @@ export default function GlobalAdmin() {
           </aside>
           <main className="min-w-0">
         {globalAdminSection === "chiamo" ? <ChiamoAdminModule /> : <>
+        <CommunicationsPanel />
         {/* Platform Stats */}
         <div id="admin-overview" className="scroll-mt-4">
         {statsLoading ? (
