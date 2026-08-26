@@ -77,6 +77,7 @@ export const tenants = pgTable("tenants", {
   maxActiveUsers: integer("max_active_users").default(2).notNull(), // Included-seat threshold; municipalities receive 66 and may add metered users above it
   // Twilio integration (each agency has their own)
   twilioAccountSid: text("twilio_account_sid"), // Twilio Account SID
+  twilioSubaccountStatus: text("twilio_subaccount_status").default('not_configured'),
   twilioAuthToken: text("twilio_auth_token"), // Twilio Auth Token (encrypted in production)
   twilioPhoneNumber: text("twilio_phone_number"), // Twilio phone number with country code
   twilioBusinessName: text("twilio_business_name"), // Business name registered with campaign
@@ -1133,9 +1134,15 @@ export const voipPhoneNumbers = pgTable("voip_phone_numbers", {
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
   phoneNumber: text("phone_number").notNull(), // E.164 format (+1234567890)
   areaCode: text("area_code").notNull(), // 3-digit area code for matching
-  numberType: text("number_type", { enum: ['local', 'toll_free'] }).default('local').notNull(), // Type of phone number
+  numberType: text("number_type", { enum: ['PRIMARY', 'LOCAL_PRESENCE', 'PORTED', 'TOLL_FREE'] }).default('LOCAL_PRESENCE').notNull(),
   friendlyName: text("friendly_name"), // Display name for the number
   twilioPhoneSid: text("twilio_phone_sid"), // Twilio Phone Number SID
+  twilioSubaccountSid: text("twilio_subaccount_sid"),
+  state: text("state"),
+  status: text("status").default('PENDING').notNull(),
+  voiceEnabled: boolean("voice_enabled").default(true).notNull(),
+  smsEnabled: boolean("sms_enabled").default(false).notNull(),
+  routingConfiguration: jsonb("routing_configuration").default(sql`'{}'::jsonb`),
   capabilities: jsonb("capabilities").default(sql`'{"voice": true, "sms": false}'::jsonb`), // What this number can do
   isActive: boolean("is_active").default(true),
   isPrimary: boolean("is_primary").default(false), // Default outbound number when no area code match

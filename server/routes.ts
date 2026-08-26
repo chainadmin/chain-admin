@@ -24981,7 +24981,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { areaCode } = req.params;
       const { searchAvailableLocalNumbers } = await import('./twilioVoiceService');
-      const numbers = await searchAvailableLocalNumbers(areaCode, 10);
+      const numbers = await searchAvailableLocalNumbers(areaCode, 10, user.tenantId);
       res.json(numbers);
     } catch (error) {
       console.error("Error searching local numbers:", error);
@@ -24998,7 +24998,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { searchAvailableTollFreeNumbers } = await import('./twilioVoiceService');
-      const numbers = await searchAvailableTollFreeNumbers(10);
+      const numbers = await searchAvailableTollFreeNumbers(10, user.tenantId);
       res.json(numbers);
     } catch (error) {
       console.error("Error searching toll-free numbers:", error);
@@ -25018,13 +25018,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { searchAvailableLocalNumbers, searchAvailableTollFreeNumbers } = await import('./twilioVoiceService');
       
       let numbers;
-      if (type === 'toll_free') {
-        numbers = await searchAvailableTollFreeNumbers(10);
+      if (type === 'toll_free' || type === 'TOLL_FREE') {
+        numbers = await searchAvailableTollFreeNumbers(10, user.tenantId);
       } else {
         if (!areaCode) {
           return res.status(400).json({ message: "Area code is required for local numbers" });
         }
-        numbers = await searchAvailableLocalNumbers(areaCode as string, 10);
+        numbers = await searchAvailableLocalNumbers(areaCode as string, 10, user.tenantId);
       }
       
       res.json({ numbers });
@@ -25051,7 +25051,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { provisionPhoneNumber, extractAreaCode, formatPhoneE164 } = await import('./twilioVoiceService');
       
       // Provision the number in Twilio
-      const provisionedNumber = await provisionPhoneNumber(phoneNumber);
+      const provisionedNumber = await provisionPhoneNumber(phoneNumber, undefined, user.tenantId);
       
       const formattedNumber = formatPhoneE164(phoneNumber);
       const areaCode = extractAreaCode(phoneNumber);
@@ -25065,12 +25065,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         tenantId: user.tenantId,
         phoneNumber: formattedNumber,
         areaCode,
-        numberType: numberType || (areaCode.match(/^8(00|88|77|66|55|44|33)$/) ? 'toll_free' : 'local'),
+        numberType: isPrimary ? 'PRIMARY' : (numberType === 'toll_free' || numberType === 'TOLL_FREE' || areaCode.match(/^8(00|88|77|66|55|44|33)$/) ? 'TOLL_FREE' : 'LOCAL_PRESENCE'),
         friendlyName: isPrimary ? 'Main Line' : null,
         twilioPhoneSid: provisionedNumber!.sid,
+        twilioSubaccountSid: provisionedNumber!.subaccountSid,
+        status: 'ACTIVE',
+        voiceEnabled: true,
+        smsEnabled: false,
         isPrimary,
         isActive: true,
-        capabilities: { voice: true, sms: true },
+        capabilities: { voice: true, sms: true }, // capability only; smsEnabled remains false pending compliance
       });
 
       res.json(newNumber);
@@ -25091,7 +25095,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { listOwnedPhoneNumbers } = await import('./twilioVoiceService');
       
       // Get all numbers owned in Twilio
-      const ownedNumbers = await listOwnedPhoneNumbers();
+      const ownedNumbers = await listOwnedPhoneNumbers(user.tenantId);
       
       // Get all numbers assigned to tenants in our database
       const assignedNumbers = await voipStorage.getAllAssignedPhoneNumbers();
@@ -25140,7 +25144,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         tenantId: user.tenantId,
         phoneNumber: formattedNumber,
         areaCode,
-        numberType: numberType || (areaCode.match(/^8(00|88|77|66|55|44|33)$/) ? 'toll_free' : 'local'),
+        numberType: isPrimary ? 'PRIMARY' : (numberType === 'toll_free' || numberType === 'TOLL_FREE' || areaCode.match(/^8(00|88|77|66|55|44|33)$/) ? 'TOLL_FREE' : 'LOCAL_PRESENCE'),
         friendlyName: isPrimary ? 'Main Line' : null,
         twilioPhoneSid: twilioSid,
         isPrimary,
@@ -25172,14 +25176,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { provisionPhoneNumber, extractAreaCode, formatPhoneE164, isTollFreeNumber } = await import('./twilioVoiceService');
       
       // Provision the number with Twilio
-      const provisioned = await provisionPhoneNumber(phoneNumber);
+      const provisioned = await provisionPhoneNumber(phoneNumber, undefined, user.tenantId);
       if (!provisioned) {
         return res.status(500).json({ message: "Failed to provision phone number with Twilio" });
       }
 
       // Determine number type
-      const detectedNumberType = isTollFreeNumber(phoneNumber) ? 'toll_free' : 'local';
-      const finalNumberType = numberType || detectedNumberType;
+      const detectedNumberType = isTollFreeNumber(phoneNumber) ? 'TOLL_FREE' : 'LOCAL_PRESENCE';
+      const finalNumberType = numberType === 'toll_free' || numberType === 'TOLL_FREE' || detectedNumberType === 'TOLL_FREE' ? 'TOLL_FREE' : 'LOCAL_PRESENCE';
       
       const formattedNumber = formatPhoneE164(phoneNumber);
       const areaCode = extractAreaCode(phoneNumber);
@@ -25193,9 +25197,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         tenantId: user.tenantId,
         phoneNumber: formattedNumber,
         areaCode,
-        numberType: finalNumberType,
-        friendlyName: `${finalNumberType === 'toll_free' ? 'Toll-Free' : 'Local'} (${areaCode})`,
+        numberType: isPrimary ? 'PRIMARY' : finalNumberType,
+        friendlyName: `${finalNumberType === 'TOLL_FREE' ? 'Toll-Free' : 'Local'} (${areaCode})`,
         twilioPhoneSid: provisioned.sid,
+        twilioSubaccountSid: provisioned.subaccountSid,
+        status: 'ACTIVE',
+        voiceEnabled: true,
+        smsEnabled: false,
         isPrimary,
         isActive: true,
         capabilities: { voice: true, sms: false },
@@ -25229,7 +25237,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Release from Twilio if we have the SID
       if (phoneNumber.twilioPhoneSid) {
         const { releasePhoneNumber } = await import('./twilioVoiceService');
-        const released = await releasePhoneNumber(phoneNumber.twilioPhoneSid);
+        const released = await releasePhoneNumber(phoneNumber.twilioPhoneSid, user.tenantId);
         if (!released) {
           return res.status(500).json({ message: "Failed to release phone number from Twilio" });
         }
@@ -25561,7 +25569,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fromPhoneNumber = allNumbers.find(n => n.isActive);
       } else if (callerIdMode === 'office') {
         // Office mode - use toll-free number
-        fromPhoneNumber = allNumbers.find(n => n.numberType === 'toll_free' && n.isActive);
+        fromPhoneNumber = allNumbers.find(n => n.numberType === 'TOLL_FREE' && n.isActive);
         if (!fromPhoneNumber) {
           return res.status(400).json({ message: "No toll-free number configured. Add a toll-free number to use Office caller ID." });
         }
@@ -25661,6 +25669,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.send('<Response><Say>Your Chiamo phone system is not active.</Say><Hangup/></Response>');
         }
       }
+      if (!clientTenantId) {
+        res.type('text/xml');
+        return res.status(403).send('<Response><Say>Unauthorized caller identity.</Say><Hangup/></Response>');
+      }
+
+      // Never trust a client-supplied From as caller ID. Select only from this
+      // authenticated identity's tenant inventory.
+      const destinationAreaCode = (await import('./twilioVoiceService')).extractAreaCode(To || '');
+      const callerId = await voipStorage.getVoipPhoneNumberByAreaCode(destinationAreaCode, clientTenantId)
+        || await voipStorage.getPrimaryVoipPhoneNumber(clientTenantId);
+      if (!callerId) {
+        res.type('text/xml');
+        return res.status(409).send('<Response><Say>No active company caller ID is configured.</Say><Hangup/></Response>');
+      }
       
       const { generateTwiML } = await import('./twilioVoiceService');
       
@@ -25668,7 +25690,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const twiml = generateTwiML({
         action: 'dial',
         to: To,
-        from: From,
+        from: callerId.phoneNumber,
         record: true,
       });
 
@@ -25683,7 +25705,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // TwiML endpoint for inbound calls (called by Twilio when someone calls your number)
   app.post('/api/voice/inbound', async (req, res) => {
     try {
-      const { From, To, CallSid } = req.body;
+      const { From, To, CallSid, AccountSid } = req.body;
       
       // Find the tenant that owns this phone number
       const tenantId = await voipStorage.getTenantByPhoneNumber(To);
@@ -25693,6 +25715,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         res.type('text/xml');
         res.send('<Response><Say>This number is not configured. Goodbye.</Say></Response>');
         return;
+      }
+      const ownedNumber = (await voipStorage.getVoipPhoneNumbersByTenant(tenantId))
+        .find(number => number.phoneNumber === (To?.startsWith('+') ? To : `+1${String(To || '').replace(/\D/g, '')}`));
+      if (!ownedNumber || !AccountSid || ownedNumber.twilioSubaccountSid !== AccountSid) {
+        res.type('text/xml');
+        return res.status(403).send('<Response><Say>Invalid provider account.</Say><Hangup/></Response>');
       }
 
       const { getChiamoPhoneSystemAccess } = await import('./chiamoAccess');

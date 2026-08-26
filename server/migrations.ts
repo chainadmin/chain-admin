@@ -1734,10 +1734,29 @@ export async function runMigrations() {
     
     console.log('Adding number_type column to voip_phone_numbers...');
     try {
-      await client.query(`ALTER TABLE voip_phone_numbers ADD COLUMN IF NOT EXISTS number_type TEXT DEFAULT 'local' NOT NULL`);
+      await client.query(`ALTER TABLE voip_phone_numbers ADD COLUMN IF NOT EXISTS number_type TEXT DEFAULT 'LOCAL_PRESENCE' NOT NULL`);
       console.log(`  ✓ number_type`);
     } catch (err: any) {
       console.log(`  ⚠ number_type (already exists or error): ${err.message}`);
+    }
+
+    // Company-level Twilio ownership. Existing twilio_account_sid values are the
+    // SMS subaccounts and are intentionally reused rather than copied/recreated.
+    try {
+      await client.query(`ALTER TABLE tenants ADD COLUMN IF NOT EXISTS twilio_subaccount_status TEXT DEFAULT 'not_configured'`);
+      await client.query(`UPDATE tenants SET twilio_subaccount_status = 'active' WHERE twilio_account_sid IS NOT NULL AND twilio_subaccount_status = 'not_configured'`);
+      await client.query(`ALTER TABLE voip_phone_numbers ADD COLUMN IF NOT EXISTS twilio_subaccount_sid TEXT`);
+      await client.query(`ALTER TABLE voip_phone_numbers ADD COLUMN IF NOT EXISTS state TEXT`);
+      await client.query(`ALTER TABLE voip_phone_numbers ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'PENDING' NOT NULL`);
+      await client.query(`ALTER TABLE voip_phone_numbers ADD COLUMN IF NOT EXISTS voice_enabled BOOLEAN DEFAULT true NOT NULL`);
+      await client.query(`ALTER TABLE voip_phone_numbers ADD COLUMN IF NOT EXISTS sms_enabled BOOLEAN DEFAULT false NOT NULL`);
+      await client.query(`ALTER TABLE voip_phone_numbers ADD COLUMN IF NOT EXISTS routing_configuration JSONB DEFAULT '{}'::jsonb`);
+      await client.query(`UPDATE voip_phone_numbers SET number_type = CASE WHEN is_primary THEN 'PRIMARY' WHEN number_type = 'toll_free' THEN 'TOLL_FREE' ELSE 'LOCAL_PRESENCE' END`);
+      await client.query(`UPDATE voip_phone_numbers n SET twilio_subaccount_sid = t.twilio_account_sid FROM tenants t WHERE n.tenant_id = t.id AND n.twilio_subaccount_sid IS NULL`);
+      await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS voip_phone_numbers_provider_sid_idx ON voip_phone_numbers(twilio_subaccount_sid, twilio_phone_sid) WHERE twilio_phone_sid IS NOT NULL`);
+      console.log('  ✓ company Twilio ownership columns and existing DID classification');
+    } catch (err: any) {
+      console.log(`  ⚠ company Twilio ownership migration: ${err.message}`);
     }
     
     // Create VoIP call logs table
