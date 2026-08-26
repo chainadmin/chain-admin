@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Building2, Users, DollarSign, TrendingUp, Eye, Ban, CheckCircle, AlertTriangle, Plus, Mail, MessageSquare, Phone, Trash2, Search, Shield, CreditCard, Send, Settings, Repeat, FileText, MessagesSquare, Zap, LogOut, LogIn, QrCode, Download, Pencil, RotateCcw, Bot, RefreshCw } from "lucide-react";
+import { Building2, Users, DollarSign, TrendingUp, Eye, Ban, CheckCircle, AlertTriangle, Plus, Mail, MessageSquare, Phone, Trash2, Search, Shield, CreditCard, Send, Settings, Repeat, FileText, MessagesSquare, Zap, LogOut, LogIn, QrCode, Download, Pencil, RotateCcw, Bot, RefreshCw, LayoutDashboard, Wrench, LifeBuoy, ChevronLeft, ChevronRight } from "lucide-react";
 import { QRCodeSVG } from "qrcode.react";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -28,6 +28,11 @@ export default function GlobalAdmin() {
   const { toast } = useToast();
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [globalAdminSection, setGlobalAdminSection] = useState<"chain" | "chiamo">("chain");
+  const [companyStatus, setCompanyStatus] = useState("all");
+  const [companySearch, setCompanySearch] = useState("");
+  const [companySort, setCompanySort] = useState("name");
+  const [companyPage, setCompanyPage] = useState(1);
+  const COMPANY_PAGE_SIZE = 25;
   const chiamoLeadsQuery = useQuery<any[]>({ queryKey: ['/api/admin/chiamo/leads'], enabled: isAdminAuthenticated });
   const chiamoUsageQuery = useQuery<any>({ queryKey: ['/api/admin/chiamo/usage'], enabled: isAdminAuthenticated });
   
@@ -160,6 +165,10 @@ export default function GlobalAdmin() {
   // No need to check Replit auth or database roles
   const isPlatformAdmin = isAdminAuthenticated;
 
+  const scrollToAdminSection = (id: string) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   // Fetch all tenants
   const { data: tenants, isLoading: tenantsLoading } = useQuery({
     queryKey: ['/api/admin/tenants'],
@@ -171,6 +180,33 @@ export default function GlobalAdmin() {
     queryKey: ['/api/admin/stats'],
     enabled: isPlatformAdmin
   });
+
+  const tenantList = (tenants as any[] | undefined) || [];
+  const companyCounts = tenantList.reduce((counts, tenant) => {
+    counts.all += 1;
+    if (!tenant.isActive) counts.suspended += 1;
+    else if (tenant.subscriptionStatus === "past_due") counts.past_due += 1;
+    else if (tenant.isTrialAccount) counts.trial += 1;
+    else if (tenant.isPaidAccount) counts.paid += 1;
+    else counts.unpaid += 1;
+    return counts;
+  }, { all: 0, paid: 0, trial: 0, unpaid: 0, past_due: 0, suspended: 0 });
+  const filteredCompanies = tenantList
+    .filter((tenant) => {
+      const statusMatches = companyStatus === "all" ||
+        (companyStatus === "paid" && tenant.isPaidAccount && tenant.isActive) ||
+        (companyStatus === "trial" && tenant.isTrialAccount && tenant.isActive) ||
+        (companyStatus === "unpaid" && !tenant.isPaidAccount && !tenant.isTrialAccount && tenant.isActive) ||
+        (companyStatus === "past_due" && tenant.subscriptionStatus === "past_due") ||
+        (companyStatus === "suspended" && !tenant.isActive);
+      const term = companySearch.trim().toLowerCase();
+      return statusMatches && (!term || [tenant.name, tenant.email, tenant.slug, tenant.planId].some(value => String(value || "").toLowerCase().includes(term)));
+    })
+    .sort((a, b) => companySort === "activity"
+      ? new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime()
+      : String(a.name || "").localeCompare(String(b.name || "")));
+  const companyPageCount = Math.max(1, Math.ceil(filteredCompanies.length / COMPANY_PAGE_SIZE));
+  const pagedCompanies = filteredCompanies.slice((companyPage - 1) * COMPANY_PAGE_SIZE, companyPage * COMPANY_PAGE_SIZE);
 
   // Fetch subscription requests
   const { data: subscriptionRequests, isLoading: subscriptionRequestsLoading } = useQuery({
@@ -1285,8 +1321,30 @@ export default function GlobalAdmin() {
           </Dialog>
           </div>
         </div>
+        <div className="grid items-start gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
+          <aside className="sticky top-4 z-20 rounded-2xl border border-white/10 bg-[#111a30]/95 p-3 shadow-xl backdrop-blur" aria-label="Global Admin sections">
+            <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-[0.18em] text-blue-100/50">Global Admin</p>
+            <nav className="flex gap-2 overflow-x-auto lg:flex-col" data-testid="global-admin-sidebar">
+              {[
+                ["admin-overview", "Overview", LayoutDashboard],
+                ["admin-companies", "Companies", Building2],
+                ["admin-users", "Users", Users],
+                ["admin-billing", "Billing", CreditCard],
+                ["admin-account-tools", "Account Tools", Wrench],
+                ["admin-system", "System", Settings],
+                ["admin-support", "Support", LifeBuoy],
+              ].map(([id, label, Icon]: any) => (
+                <button key={id} onClick={() => { setGlobalAdminSection("chain"); setTimeout(() => scrollToAdminSection(id), 0); }} className="flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-blue-100/80 hover:bg-white/10 hover:text-white">
+                  <Icon className="h-4 w-4" />{label}
+                </button>
+              ))}
+              <button onClick={() => setGlobalAdminSection("chiamo")} className="flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-emerald-300 hover:bg-emerald-500/10"><Phone className="h-4 w-4" />Chiamo Connect</button>
+            </nav>
+          </aside>
+          <main className="min-w-0">
         {globalAdminSection === "chiamo" ? <ChiamoAdminModule /> : <>
         {/* Platform Stats */}
+        <div id="admin-overview" className="scroll-mt-4">
         {statsLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
             {[...Array(6)].map((_, i) => (
@@ -1371,11 +1429,12 @@ export default function GlobalAdmin() {
             </div>
           </div>
         )}
+        </div>
 
-        <PlatformAnnouncementsPanel />
+        <div id="admin-support" className="scroll-mt-4"><PlatformAnnouncementsPanel /></div>
 
         {/* Marketing QR Code Section */}
-        <div className="mb-8 rounded-3xl border border-white/10 bg-white/5 shadow-lg shadow-blue-900/20 backdrop-blur">
+        <div id="admin-system" className="mb-8 scroll-mt-4 rounded-3xl border border-white/10 bg-white/5 shadow-lg shadow-blue-900/20 backdrop-blur">
           <div className="p-6 border-b border-white/10">
             <div className="flex items-center gap-3">
               <QrCode className="h-5 w-5 text-blue-300" />
@@ -1464,7 +1523,7 @@ export default function GlobalAdmin() {
         </div>
 
         {/* Subscription Requests */}
-        <div className="mb-8 rounded-3xl border border-white/10 bg-white/5 shadow-lg shadow-blue-900/20 backdrop-blur">
+        <div id="admin-billing" className="mb-8 scroll-mt-4 rounded-3xl border border-white/10 bg-white/5 shadow-lg shadow-blue-900/20 backdrop-blur">
           <div className="p-6 border-b border-white/10">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-semibold text-blue-50">Subscription Requests</h2>
@@ -2359,7 +2418,7 @@ export default function GlobalAdmin() {
         </Dialog>
 
         {/* Global Consumer Management */}
-        <div className="mb-8 rounded-3xl border border-white/10 bg-white/5 shadow-lg shadow-blue-900/20 backdrop-blur">
+        <div id="admin-users" className="mb-8 scroll-mt-4 rounded-3xl border border-white/10 bg-white/5 shadow-lg shadow-blue-900/20 backdrop-blur">
           <div className="p-6 border-b border-white/10">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-semibold text-blue-50">Global Consumer Management</h2>
@@ -2767,7 +2826,7 @@ export default function GlobalAdmin() {
         </div>
 
         {/* Balance Maintenance Section */}
-        <div className="rounded-3xl border border-white/10 bg-white/5 shadow-lg shadow-blue-900/20 backdrop-blur">
+        <div id="admin-account-tools" className="scroll-mt-4 rounded-3xl border border-white/10 bg-white/5 shadow-lg shadow-blue-900/20 backdrop-blur">
           <div className="p-6 border-b border-white/10">
             <div className="flex items-center space-x-3">
               <RefreshCw className="h-5 w-5 text-blue-300" />
@@ -2788,7 +2847,7 @@ export default function GlobalAdmin() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Agencies</SelectItem>
-                    {(tenants as any[])?.map((tenant: any) => (
+                    {tenantList.map((tenant: any) => (
                       <SelectItem key={tenant.id} value={tenant.id}>{tenant.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -3037,11 +3096,20 @@ export default function GlobalAdmin() {
         </div>
 
         {/* Tenants Table */}
-        <div className="rounded-3xl border border-white/10 bg-white/5 shadow-lg shadow-blue-900/20 backdrop-blur">
-          <div className="p-6 border-b border-white/10">
-            <h2 className="text-xl font-semibold text-blue-50">Agency Management</h2>
+        <div id="admin-companies" className="scroll-mt-4 rounded-3xl border border-white/10 bg-white/5 shadow-lg shadow-blue-900/20 backdrop-blur">
+          <div className="space-y-4 border-b border-white/10 p-6">
+            <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+              <div><h2 className="text-xl font-semibold text-blue-50">Companies</h2><p className="mt-1 text-sm text-blue-100/60">Find an organization, then use its focused quick actions.</p></div>
+              <div className="flex gap-2">
+                <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-100/40"/><Input value={companySearch} onChange={(event) => { setCompanySearch(event.target.value); setCompanyPage(1); }} placeholder="Search companies…" className="w-full pl-9 md:w-64" data-testid="input-company-search"/></div>
+                <Select value={companySort} onValueChange={setCompanySort}><SelectTrigger className="w-36"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="name">Name</SelectItem><SelectItem value="activity">Last activity</SelectItem></SelectContent></Select>
+              </div>
+            </div>
+            <div className="flex gap-2 overflow-x-auto" role="tablist" aria-label="Company billing status">
+              {[['paid','Paid'],['trial','Trial'],['unpaid','Unpaid'],['past_due','Past Due'],['suspended','Suspended'],['all','All']].map(([value,label]) => <Button key={value} role="tab" aria-selected={companyStatus === value} variant={companyStatus === value ? "default" : "outline"} size="sm" className="shrink-0" onClick={() => { setCompanyStatus(value); setCompanyPage(1); }}>{label} ({companyCounts[value as keyof typeof companyCounts]})</Button>)}
+            </div>
           </div>
-          <div className="p-6">
+          <div className="max-h-[68vh] overflow-y-auto p-6">
             {tenantsLoading ? (
               <div className="space-y-4">
                 {[...Array(3)].map((_, i) => (
@@ -3052,7 +3120,7 @@ export default function GlobalAdmin() {
               </div>
             ) : (
               <div className="space-y-4">
-                {(tenants as any[])?.map((tenant: any) => (
+                {pagedCompanies.map((tenant: any) => (
                   <div key={tenant.id} className="border border-white/10 rounded-lg p-4 bg-white/[0.02]" data-testid={`card-tenant-${tenant.id}`}>
                     {/* Header Section */}
                     <div className="flex items-start justify-between mb-3">
@@ -3462,17 +3530,23 @@ export default function GlobalAdmin() {
                   </div>
                 ))}
                 
-                {(!(tenants as any[]) || (tenants as any[]).length === 0) && (
+                {pagedCompanies.length === 0 && (
                   <div className="text-center py-8">
                     <Building2 className="h-12 w-12 text-blue-300/40 mx-auto mb-4" />
                     <p className="text-blue-100/60">No agencies registered yet</p>
                   </div>
                 )}
+                <div className="sticky bottom-0 flex items-center justify-between border-t border-white/10 bg-[#111a30]/95 px-2 py-3 text-sm text-blue-100/70 backdrop-blur">
+                  <span>{filteredCompanies.length} companies · Page {companyPage} of {companyPageCount}</span>
+                  <div className="flex gap-2"><Button variant="outline" size="sm" disabled={companyPage === 1} onClick={() => setCompanyPage(page => Math.max(1, page - 1))}><ChevronLeft className="h-4 w-4"/>Previous</Button><Button variant="outline" size="sm" disabled={companyPage === companyPageCount} onClick={() => setCompanyPage(page => Math.min(companyPageCount, page + 1))}>Next<ChevronRight className="h-4 w-4"/></Button></div>
+                </div>
               </div>
             )}
           </div>
         </div>
         </>}
+          </main>
+        </div>
       </div>
 
       {/* Tenant Agreements Panel */}
