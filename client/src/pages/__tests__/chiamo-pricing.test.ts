@@ -11,6 +11,16 @@ test("Chiamo plans remain isolated at approved initial prices", () => {
   assert.equal(CHIAMO_SUPPORT_EMAIL, "support@chiamoconnect.com");
 });
 
+test("admin overrides, add-ons, charges, and credits use one centralized calculation", () => {
+  const bill = calculateChiamoMonthlyService("business", 9, true, {
+    customBasePriceCents: 35000, includedUsers: 8, additionalUserPriceCents: 2000,
+    smsOverageCents: 500, additionalNumberChargeCents: 1000,
+    customCharges: [{ name: "Managed setup", cents: 3000 }], discounts: [{ name: "Credit", cents: 1500 }],
+  });
+  assert.equal(bill?.additionalUserChargeCents, 2000);
+  assert.equal(bill?.totalCents, 52500);
+});
+
 test("Business example is $599 and has no voice-minute line item", () => {
   const bill = calculateChiamoMonthlyService("business", 10, true);
   assert.equal(bill?.additionalUsers, 3);

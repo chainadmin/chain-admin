@@ -13,12 +13,30 @@ export const chiamoSmsStatuses = ["NOT_REQUESTED", "REQUESTED", "REGISTRATION_RE
 export const chiamoTestStatuses = ["NOT_TESTED", "PASSED", "FAILED"] as const;
 export const chiamoUsageLevels = ["NORMAL", "ELEVATED", "HIGH", "REVIEW REQUIRED"] as const;
 
-export function calculateChiamoMonthlyService(planId: string, users: number, texting: boolean, customBasePriceCents?: number | null) {
-  const plan = chiamoPlans.find(item => item.id === planId);
+export type ChiamoBillingOverrides = {
+  customBasePriceCents?: number | null;
+  includedUsers?: number | null;
+  additionalUserPriceCents?: number | null;
+  additionalNumberChargeCents?: number;
+  smsOverageCents?: number;
+  customCharges?: Array<{ name: string; cents: number }>;
+  discounts?: Array<{ name: string; cents: number }>;
+};
+
+/** The single source of truth for both customer and Global Admin estimates. */
+export function calculateChiamoMonthlyService(planId: string, users: number, texting: boolean, overrides: ChiamoBillingOverrides | number | null = {}) {
+  const plan = chiamoPlans.find(item => item.id === planId) || (planId === "enterprise" ? { id:"enterprise", name:"Enterprise", monthlyPriceCents:0, includedUsers:1, additionalUserPriceCents:2500, includedNumbers:0, features:["Negotiated service configuration"] } : undefined);
   if (!plan) return null;
-  const basePriceCents = customBasePriceCents ?? plan.monthlyPriceCents;
-  const additionalUsers = Math.max(0, users - plan.includedUsers);
-  const additionalUserChargeCents = additionalUsers * plan.additionalUserPriceCents;
+  const options = typeof overrides === "number" ? { customBasePriceCents: overrides } : (overrides || {});
+  const basePriceCents = options.customBasePriceCents ?? plan.monthlyPriceCents;
+  const includedUsers = options.includedUsers ?? plan.includedUsers;
+  const additionalUsers = Math.max(0, users - includedUsers);
+  const additionalUserChargeCents = additionalUsers * (options.additionalUserPriceCents ?? plan.additionalUserPriceCents);
   const textingChargeCents = texting ? chiamoTextingAddon.monthlyPriceCents : 0;
-  return { plan, basePriceCents, additionalUsers, additionalUserChargeCents, textingChargeCents, totalCents: basePriceCents + additionalUserChargeCents + textingChargeCents };
+  const customChargesCents = (options.customCharges || []).reduce((sum, charge) => sum + charge.cents, 0);
+  const creditsCents = (options.discounts || []).reduce((sum, credit) => sum + credit.cents, 0);
+  const smsOverageCents = options.smsOverageCents || 0;
+  const additionalNumberChargeCents = options.additionalNumberChargeCents || 0;
+  const totalCents = Math.max(0, basePriceCents + additionalUserChargeCents + textingChargeCents + smsOverageCents + additionalNumberChargeCents + customChargesCents - creditsCents);
+  return { plan, basePriceCents, includedUsers, additionalUsers, additionalUserChargeCents, textingChargeCents, smsOverageCents, additionalNumberChargeCents, customChargesCents, creditsCents, totalCents };
 }
