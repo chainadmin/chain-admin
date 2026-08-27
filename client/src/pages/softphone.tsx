@@ -37,6 +37,13 @@ interface ParkedCall {
   parkedAt: string;
 }
 
+interface HeldCall {
+  id: string;
+  callerName: string;
+  callerNumber: string;
+  heldAt: string;
+}
+
 interface AgentUser {
   id: string;
   username: string;
@@ -79,6 +86,7 @@ export default function SoftphonePage() {
   const [callerIdMode, setCallerIdMode] = useState<"auto" | "private" | "office">("auto");
   const [isOnHold, setIsOnHold] = useState(false);
   const [parkedCalls, setParkedCalls] = useState<ParkedCall[]>([]);
+  const [heldCall, setHeldCall] = useState<HeldCall | null>(null);
   const [activeCallerName, setActiveCallerName] = useState("");
 
   const [inboundCall, setInboundCall] = useState<Call | null>(null);
@@ -202,6 +210,11 @@ export default function SoftphonePage() {
     } catch (error) {
       // Park list is non-critical for placing and receiving calls.
     }
+  };
+
+  const refreshHeldCall = async () => {
+    const response = await fetch("/api/voip/held-calls", { headers: getAuthHeaders() });
+    if (response.ok) setHeldCall(await response.json());
   };
 
   const handleAuthError = () => {
@@ -472,19 +485,46 @@ export default function SoftphonePage() {
     initiateCallMutation.mutate(dialpadNumber);
   };
 
-  const handleToggleHold = () => {
-    const nextHoldState = !isOnHold;
-    activeCallRef.current?.mute(nextHoldState || isMuted);
-    setIsOnHold(nextHoldState);
+  const handleToggleHold = async () => {
+    const activeCallSid = activeCallRef.current?.parameters.CallSid;
+    if (!activeCallSid) return;
+    const response = await fetch("/api/voip/held-calls", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      body: JSON.stringify({ activeCallSid, callerName: activeCallerName, callerNumber: dialpadNumber }),
+    });
+    if (!response.ok) {
+      toast({ title: "Could not place call on hold", description: "The caller remains connected.", variant: "destructive" });
+      return;
+    }
+    setHeldCall(await response.json());
+    setIsOnHold(true);
+    toast({ title: "Caller is on hold", description: "The selected hold music is playing. Resume when ready." });
+  };
+
+  const handleResumeHeldCall = async () => {
+    if (!heldCall) return;
+    const response = await fetch(`/api/voip/held-calls/${heldCall.id}/resume`, {
+      method: "POST",
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) {
+      toast({ title: "Could not resume call", description: "The caller remains on hold.", variant: "destructive" });
+      return;
+    }
+    setHeldCall(null);
+    setIsOnHold(false);
+    toast({ title: "Resuming call", description: "Answer the incoming call to reconnect." });
   };
 
   const handleParkCall = async () => {
     if (!activeCallRef.current || callState !== "in-call") return;
-    activeCallRef.current.mute(true);
+    const activeCallSid = activeCallRef.current.parameters.CallSid;
+    if (!activeCallSid) return;
     const response = await fetch("/api/voip/parked-calls", {
       method: "POST",
       headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-      body: JSON.stringify({ callerName: activeCallerName, callerNumber: dialpadNumber }),
+      body: JSON.stringify({ activeCallSid, callerName: activeCallerName, callerNumber: dialpadNumber }),
     });
     if (!response.ok) {
       toast({ title: "Could not park call", description: "Please try again.", variant: "destructive" });
@@ -492,14 +532,16 @@ export default function SoftphonePage() {
     }
     await refreshParkedCalls();
     toast({ title: "Call parked", description: "Anyone with softphone access can pick it up from Parked Calls." });
-    handleHangup();
   };
 
   const handlePickupParkedCall = async (parkedCall: ParkedCall) => {
-    await fetch(`/api/voip/parked-calls/${parkedCall.id}/pickup`, { method: "POST", headers: getAuthHeaders() });
-    setDialpadNumber(parkedCall.callerNumber);
-    setActiveCallerName(parkedCall.callerName);
+    const response = await fetch(`/api/voip/parked-calls/${parkedCall.id}/pickup`, { method: "POST", headers: getAuthHeaders() });
+    if (!response.ok) {
+      toast({ title: "Could not pick up call", description: "The caller remains parked.", variant: "destructive" });
+      return;
+    }
     await refreshParkedCalls();
+    toast({ title: "Picking up call", description: "Answer the incoming call to reconnect." });
   };
 
   const handleHangup = () => {
@@ -518,6 +560,7 @@ export default function SoftphonePage() {
   useEffect(() => {
     if (isAuthenticated) {
       refreshParkedCalls();
+      refreshHeldCall();
       const interval = setInterval(refreshParkedCalls, 10000);
       return () => clearInterval(interval);
     }
@@ -607,11 +650,9 @@ export default function SoftphonePage() {
               </Button>
             </form>
             <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 text-center">
-              <Link href="/install">
-                <a className="inline-flex items-center gap-1.5 text-sm text-blue-600 dark:text-blue-400 hover:underline">
-                  <Download className="h-3.5 w-3.5" />
-                  Install app on your phone
-                </a>
+              <Link href="/install" className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:underline dark:text-blue-400">
+                <Download className="h-3.5 w-3.5" />
+                Install app on your phone
               </Link>
             </div>
           </CardContent>
@@ -725,6 +766,15 @@ export default function SoftphonePage() {
 
               {callState === "idle" && (
                 <>
+                  {heldCall && (
+                    <div className="mb-4 rounded-xl border border-amber-500 bg-amber-950/40 p-4 text-amber-100">
+                      <p className="font-semibold">{heldCall.callerName || heldCall.callerNumber} is on hold</p>
+                      <p className="mb-3 text-sm text-amber-200">{heldCall.callerNumber}</p>
+                      <Button className="w-full bg-amber-500 text-black hover:bg-amber-400" onClick={handleResumeHeldCall}>
+                        <PhoneCall className="mr-2 h-4 w-4" /> Resume held call
+                      </Button>
+                    </div>
+                  )}
                   {/* Caller ID Mode Toggles */}
                   <div className="flex items-center justify-center gap-2 pb-2 border-b border-gray-200 dark:border-gray-700">
                     <span className="text-xs text-gray-500 mr-2">Caller ID:</span>

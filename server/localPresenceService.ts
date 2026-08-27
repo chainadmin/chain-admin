@@ -47,6 +47,7 @@ export type AreaCodeToStateResolver = (areaCode: string) => string | null | unde
 export type DialingSelectionReason =
   | 'LOCAL_PRESENCE_AREA_CODE'
   | 'LOCAL_PRESENCE_STATE'
+  | 'PRIVATE_FALLBACK'
   | 'PRIMARY_FALLBACK'
   | 'CALLER_SELECTED';
 
@@ -119,8 +120,13 @@ export function selectDialingNumber(input: SelectDialingNumberInput): DialingDec
     }
 
     if (!selected) {
-      selected = primary;
-      selectionReason = 'PRIMARY_FALLBACK';
+      // A local-presence request must never leak the office, primary, or an
+      // out-of-state DID. Twilio supports the literal `anonymous` callerId.
+      selected = {
+        tenantId: input.tenantId, phoneNumber: 'anonymous', areaCode: '',
+        numberType: 'LOCAL_PRESENCE', isActive: true,
+      };
+      selectionReason = 'PRIVATE_FALLBACK';
     }
   } else {
     const directNumbers = ownedActive.filter(number => number.numberType !== 'LOCAL_PRESENCE');

@@ -1,1 +1,2 @@
 - [Expo mobile apps](expo-mobile-apps.md) — native module versions must match the Expo SDK or the app crashes instantly; EAS lockfile + iOS privacy manifest required; run `npx expo install --fix`.
+- [Provider-retained calls](provider-retained-calls.md) — hold/park state must be durable, tenant-scoped, expiring, and atomically claimed or callers can become orphaned on music.

@@ -1151,6 +1151,33 @@ export const messagingUsageEvents = pgTable(
   })
 );
 
+// Tenant-owned inbound routing groups. Agent ids are credential ids and are
+// resolved again under tenant scope before every call.
+export const voipRoutingBuckets = pgTable("voip_routing_buckets", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  mode: text("mode", { enum: ['RING_TEAM', 'VOICEMAIL'] }).notNull().default('RING_TEAM'),
+  agentCredentialIds: text("agent_credential_ids").array().notNull().default(sql`ARRAY[]::text[]`),
+  ringTimeoutSeconds: integer("ring_timeout_seconds").notNull().default(30),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  tenantNameIdx: uniqueIndex("voip_routing_buckets_tenant_name_idx").on(table.tenantId, table.name),
+}));
+
+export const voipTenantSettings = pgTable("voip_tenant_settings", {
+  tenantId: uuid("tenant_id").primaryKey().references(() => tenants.id, { onDelete: "cascade" }),
+  inboundGreetingEnabled: boolean("inbound_greeting_enabled").notNull().default(false),
+  inboundGreetingType: text("inbound_greeting_type", { enum: ['TEXT', 'AUDIO'] }),
+  inboundGreetingText: text("inbound_greeting_text"),
+  inboundGreetingAudioUrl: text("inbound_greeting_audio_url"),
+  holdMusicKey: text("hold_music_key").notNull().default("art-gallery-museum"),
+  parkMusicKey: text("park_music_key").notNull().default("art-gallery-museum"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // VoIP Phone Numbers (per tenant)
 export const voipPhoneNumbers = pgTable("voip_phone_numbers", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1161,6 +1188,7 @@ export const voipPhoneNumbers = pgTable("voip_phone_numbers", {
   friendlyName: text("friendly_name"), // Display name for the number
   twilioPhoneSid: text("twilio_phone_sid"), // Twilio Phone Number SID
   twilioSubaccountSid: text("twilio_subaccount_sid"),
+  routingBucketId: uuid("routing_bucket_id").references(() => voipRoutingBuckets.id, { onDelete: "set null" }),
   state: text("state"),
   status: text("status").default('PENDING').notNull(),
   voiceEnabled: boolean("voice_enabled").default(true).notNull(),
@@ -1172,6 +1200,46 @@ export const voipPhoneNumbers = pgTable("voip_phone_numbers", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+export const voipVoicemails = pgTable("voip_voicemails", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  routingBucketId: uuid("routing_bucket_id").references(() => voipRoutingBuckets.id, { onDelete: "set null" }),
+  phoneNumberId: uuid("phone_number_id").references(() => voipPhoneNumbers.id, { onDelete: "set null" }),
+  callSid: text("call_sid").notNull(),
+  recordingSid: text("recording_sid"),
+  recordingUrl: text("recording_url"),
+  fromNumber: text("from_number").notNull(),
+  toNumber: text("to_number").notNull(),
+  duration: integer("duration").notNull().default(0),
+  status: text("status").notNull().default("RECORDING"),
+  isRead: boolean("is_read").notNull().default(false),
+  readAt: timestamp("read_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  tenantCreatedIdx: index("voip_voicemails_tenant_created_idx").on(table.tenantId, table.createdAt),
+  tenantCallIdx: uniqueIndex("voip_voicemails_tenant_call_idx").on(table.tenantId, table.callSid),
+}));
+
+export const voipSuspendedCalls = pgTable("voip_suspended_calls", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  kind: text("kind", { enum: ['HOLD', 'PARK'] }).notNull(),
+  status: text("status", { enum: ['ACTIVE', 'RESUMING', 'EXPIRING', 'COMPLETED', 'EXPIRED'] }).notNull().default('ACTIVE'),
+  activeCallSid: text("active_call_sid").notNull(),
+  retainedCallSid: text("retained_call_sid").notNull(),
+  createdByUserId: text("created_by_user_id").notNull(),
+  callerName: text("caller_name").notNull().default(''),
+  callerNumber: text("caller_number").notNull(),
+  parkedBy: text("parked_by"),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  retainedCallIdx: uniqueIndex("voip_suspended_calls_retained_call_idx").on(table.retainedCallSid),
+  activeTenantIdx: index("voip_suspended_calls_active_tenant_idx").on(table.tenantId, table.kind, table.status, table.expiresAt),
+}));
 
 // Local Presence is deliberately approval-gated. Package geography is JSON so
 // operations can change coverage without a deploy (or hard-coded state list).
@@ -1937,6 +2005,8 @@ export const insertCommunicationSequenceStepSchema = createInsertSchema(communic
 export const insertCommunicationSequenceEnrollmentSchema = createInsertSchema(communicationSequenceEnrollments).omit({ id: true, createdAt: true, updatedAt: true, messagesSent: true, messagesOpened: true, messagesClicked: true });
 export const insertVoipPhoneNumberSchema = createInsertSchema(voipPhoneNumbers).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertVoipCallLogSchema = createInsertSchema(voipCallLogs).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertVoipRoutingBucketSchema = createInsertSchema(voipRoutingBuckets).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertVoipVoicemailSchema = createInsertSchema(voipVoicemails).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertManualArrangementSchema = createInsertSchema(manualArrangements).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertManualPaymentSchema = createInsertSchema(manualPayments).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertCampaignLogSchema = createInsertSchema(campaignLogs).omit({ id: true, createdAt: true });
@@ -2040,6 +2110,11 @@ export type CommunicationSequenceEnrollment = typeof communicationSequenceEnroll
 export type InsertCommunicationSequenceEnrollment = z.infer<typeof insertCommunicationSequenceEnrollmentSchema>;
 export type VoipPhoneNumber = typeof voipPhoneNumbers.$inferSelect;
 export type InsertVoipPhoneNumber = z.infer<typeof insertVoipPhoneNumberSchema>;
+export type VoipRoutingBucket = typeof voipRoutingBuckets.$inferSelect;
+export type InsertVoipRoutingBucket = z.infer<typeof insertVoipRoutingBucketSchema>;
+export type VoipTenantSettings = typeof voipTenantSettings.$inferSelect;
+export type VoipVoicemail = typeof voipVoicemails.$inferSelect;
+export type InsertVoipVoicemail = z.infer<typeof insertVoipVoicemailSchema>;
 export type LocalPresencePackage = typeof localPresencePackages.$inferSelect;
 export type LocalPresenceRequest = typeof localPresenceRequests.$inferSelect;
 export type VoipCallLog = typeof voipCallLogs.$inferSelect;

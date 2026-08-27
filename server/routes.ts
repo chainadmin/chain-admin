@@ -36,6 +36,10 @@ import {
   localPresencePackages,
   localPresenceRequests,
   voiceVerificationStatuses,
+  voipRoutingBuckets,
+  voipTenantSettings,
+  voipVoicemails,
+  voipSuspendedCalls,
   tenantSmsConfigurations,
   manualArrangements,
   manualPayments,
@@ -60,6 +64,7 @@ import { smaxService } from "./smaxService";
 import { dmpService } from "./dmpService";
 import { eventService } from "./eventService";
 import { uploadLogo } from "./r2Storage";
+import { downloadVoiceGreeting, uploadVoiceGreeting } from "./voiceObjectStorage";
 import externalApiRouter from "./external-api";
 import { registerWalletRoutes } from "./walletRoutes";
 import { registerChiamoRoutes } from "./chiamoRoutes";
@@ -152,14 +157,11 @@ const upload = multer({
   }
 });
 
-const parkedVoipCalls = new Map<string, {
-  id: string;
-  tenantId: string;
-  callerName: string;
-  callerNumber: string;
-  parkedBy: string;
-  parkedAt: string;
-}>();
+const voiceGreetingUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => cb(null, ['audio/mpeg', 'audio/wav', 'audio/x-wav'].includes(file.mimetype)),
+});
 
 // Multer configuration for document uploads - accepts PDFs, images, Word docs, etc.
 const documentUpload = multer({
@@ -24927,9 +24929,324 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // VoIP Phone Routes
   // =====================================================
 
+  async function suspendLiveVoipCall(tenantId: string, userId: string, activeCallSid: string, musicKey: string) {
+    const [{ getCompanyTwilioClient, voiceWebhookBaseUrl }, { buildWaitingMusicTwiML }, { isVoiceCallOwnedByUser }] = await Promise.all([
+      import('./companyTwilioService'),
+      import('./voiceCallTreatment'),
+      import('./voiceCallAccess'),
+    ]);
+    const client = await getCompanyTwilioClient(tenantId);
+    const activeCall = await client.calls(activeCallSid).fetch();
+    if (!isVoiceCallOwnedByUser(tenantId, userId, activeCall.from, activeCall.to)) {
+      throw new Error('The active Twilio call does not belong to the authenticated softphone user');
+    }
+    let retainedCallSid = activeCall.parentCallSid || '';
+    if (!retainedCallSid) {
+      const children = await client.calls.list({ parentCallSid: activeCallSid, limit: 20 });
+      const liveChild = children.find(call => !['completed', 'canceled', 'failed', 'busy', 'no-answer'].includes(call.status));
+      retainedCallSid = liveChild?.sid || '';
+    }
+    if (!retainedCallSid) throw new Error('The live caller leg could not be located');
+    await client.calls(retainedCallSid).update({
+      twiml: buildWaitingMusicTwiML(musicKey, voiceWebhookBaseUrl()),
+    });
+    return retainedCallSid;
+  }
+
+  async function reconnectSuspendedVoipCall(
+    tenantId: string,
+    retainedCallSid: string,
+    userId: string,
+  ) {
+    const [{ getCompanyTwilioClient }, { buildReconnectClientTwiML }] = await Promise.all([
+      import('./companyTwilioService'),
+      import('./voiceCallTreatment'),
+    ]);
+    const client = await getCompanyTwilioClient(tenantId);
+    await client.calls(retainedCallSid).update({
+      twiml: buildReconnectClientTwiML(tenantId, userId),
+    });
+  }
+
+  const suspendedCallExpiryMs = 4 * 60 * 60 * 1000;
+
+  async function cleanupExpiredSuspendedCalls() {
+    const now = new Date();
+    const staleResumeCutoff = new Date(now.getTime() - 2 * 60 * 1000);
+    const { getCompanyTwilioClient } = await import('./companyTwilioService');
+    const { runSuspendedCallCleanup } = await import('./voiceSuspendedCallCleanup');
+    const result = await runSuspendedCallCleanup({
+      claimExpired: () => db.update(voipSuspendedCalls)
+        .set({ status: 'EXPIRING', updatedAt: now })
+        .where(or(
+          and(eq(voipSuspendedCalls.status, 'ACTIVE'), lte(voipSuspendedCalls.expiresAt, now)),
+          and(eq(voipSuspendedCalls.status, 'RESUMING'), lte(voipSuspendedCalls.updatedAt, staleResumeCutoff)),
+          and(eq(voipSuspendedCalls.status, 'EXPIRING'), lte(voipSuspendedCalls.updatedAt, staleResumeCutoff)),
+        ))
+        .returning({ id: voipSuspendedCalls.id, tenantId: voipSuspendedCalls.tenantId, retainedCallSid: voipSuspendedCalls.retainedCallSid }),
+      terminateProviderCall: async call => {
+        const client = await getCompanyTwilioClient(call.tenantId);
+        await client.calls(call.retainedCallSid).update({ status: 'completed' });
+      },
+      markTerminated: async call => {
+        await db.update(voipSuspendedCalls).set({ status: 'EXPIRED', updatedAt: new Date() })
+          .where(and(eq(voipSuspendedCalls.id, call.id), eq(voipSuspendedCalls.status, 'EXPIRING')));
+      },
+      releaseFailed: async call => {
+        await db.update(voipSuspendedCalls).set({ status: 'ACTIVE', expiresAt: new Date(), updatedAt: new Date() })
+          .where(and(eq(voipSuspendedCalls.id, call.id), eq(voipSuspendedCalls.status, 'EXPIRING')));
+      },
+    });
+    if (result.failed) console.error(`[Voice] Failed to terminate ${result.failed} expired suspended call(s)`);
+  }
+
+  const suspendedCallCleanupTimer = setInterval(() => {
+    cleanupExpiredSuspendedCalls().catch(error => console.error('[Voice] Suspended call cleanup failed:', error));
+  }, 60_000);
+  suspendedCallCleanupTimer.unref();
+  void cleanupExpiredSuspendedCalls().catch(error => console.error('[Voice] Initial suspended call cleanup failed:', error));
+
   // All customer Voice endpoints share one entitlement gate. Provider webhooks remain
   // below under /api/voice and continue to use provider signature/account validation.
   app.use('/api/voip', authenticateUser, requireVoiceProduct);
+  const { canUseSoftphone } = await import('./voiceCallAccess');
+
+  const voiceSettingsInput = z.object({
+    inboundGreetingEnabled: z.boolean(),
+    inboundGreetingType: z.enum(['TEXT', 'AUDIO']).nullable(),
+    inboundGreetingText: z.string().trim().min(1).max(1000).nullable().optional(),
+    inboundGreetingAudioUrl: z.string().min(1).nullable().optional(),
+    holdMusicKey: z.string(),
+    parkMusicKey: z.string(),
+  }).superRefine((value, ctx) => {
+    if (value.inboundGreetingEnabled && !value.inboundGreetingType) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['inboundGreetingType'], message: 'Greeting type is required when the greeting is enabled' });
+    }
+    if (value.inboundGreetingEnabled && value.inboundGreetingType === 'TEXT' && !value.inboundGreetingText) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['inboundGreetingText'], message: 'Text is required for a text greeting' });
+    }
+    if (value.inboundGreetingEnabled && value.inboundGreetingType === 'AUDIO' && !value.inboundGreetingAudioUrl) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['inboundGreetingAudioUrl'], message: 'An uploaded audio greeting is required' });
+    }
+  });
+
+  app.get('/api/voip/settings', async (req, res) => {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    const current = await voipStorage.getVoiceSettings(user.tenantId);
+    const { createGreetingPlaybackUrl } = await import('./voiceMediaTokens');
+    const { voiceWebhookBaseUrl } = await import('./companyTwilioService');
+    res.json(current ? {
+      ...current,
+      inboundGreetingPreviewUrl: current.inboundGreetingAudioUrl
+        ? createGreetingPlaybackUrl(process.env.JWT_SECRET!, voiceWebhookBaseUrl(), current.inboundGreetingAudioUrl)
+        : null,
+    } : {
+      tenantId: user.tenantId, inboundGreetingEnabled: false, inboundGreetingType: null,
+      inboundGreetingText: null, inboundGreetingAudioUrl: null,
+      holdMusicKey: 'art-gallery-museum', parkMusicKey: 'art-gallery-museum',
+    });
+  });
+
+  app.put('/api/voip/settings', requireOwner, async (req, res) => {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    const parsed = voiceSettingsInput.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: 'Invalid Voice settings', issues: parsed.error.issues });
+    const { getVoiceMedia } = await import('./voiceMediaCatalog');
+    if (!getVoiceMedia(parsed.data.holdMusicKey) || !getVoiceMedia(parsed.data.parkMusicKey)) {
+      return res.status(400).json({ message: 'Hold and park music must be selected from the approved catalog' });
+    }
+    if (parsed.data.inboundGreetingAudioUrl) {
+      try {
+        const { parseGreetingAudioReference } = await import('./voiceMediaTokens');
+        if (!parseGreetingAudioReference(parsed.data.inboundGreetingAudioUrl, user.tenantId)) {
+          throw new Error('Invalid greeting audio');
+        }
+      } catch {
+        return res.status(400).json({ message: 'Greeting audio must be an uploaded company audio file' });
+      }
+    }
+    const [saved] = await db.insert(voipTenantSettings).values({ tenantId: user.tenantId, ...parsed.data })
+      .onConflictDoUpdate({ target: voipTenantSettings.tenantId, set: { ...parsed.data, updatedAt: new Date() } }).returning();
+    res.json(saved);
+  });
+
+  app.post('/api/voip/settings/greeting-audio', requireOwner, voiceGreetingUpload.single('audio'), async (req, res) => {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    if (!req.file) return res.status(400).json({ message: 'An MP3 or WAV audio file up to 10 MB is required' });
+    try {
+      const objectName = await uploadVoiceGreeting(user.tenantId, req.file.buffer, req.file.mimetype);
+      const { createGreetingAudioReference, createGreetingPlaybackUrl } = await import('./voiceMediaTokens');
+      const audioRef = createGreetingAudioReference({
+        tenantId: user.tenantId,
+        objectName,
+        contentType: req.file.mimetype,
+      });
+      const { voiceWebhookBaseUrl } = await import('./companyTwilioService');
+      const publicBaseUrl = voiceWebhookBaseUrl();
+      res.status(201).json({
+        audioUrl: audioRef,
+        previewUrl: createGreetingPlaybackUrl(process.env.JWT_SECRET!, publicBaseUrl, audioRef),
+      });
+    } catch (error) {
+      console.error('Error storing Voice greeting:', error);
+      res.status(503).json({ message: 'Voice greeting storage is unavailable' });
+    }
+  });
+
+  app.get('/api/voip/media-catalog', async (_req, res) => {
+    const { VOICE_MEDIA_CATALOG, DEFAULT_VOICE_MUSIC_KEY } = await import('./voiceMediaCatalog');
+    res.json({ defaultKey: DEFAULT_VOICE_MUSIC_KEY, tracks: VOICE_MEDIA_CATALOG.map(track => ({ key: track.key, name: track.name, previewUrl: `/api/voip/media/${track.key}` })) });
+  });
+
+  app.get('/api/voip/media/:key', async (req, res) => {
+    const { getVoiceMedia } = await import('./voiceMediaCatalog');
+    const track = getVoiceMedia(req.params.key);
+    if (!track) return res.status(404).json({ message: 'Approved media not found' });
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.type('audio/mpeg').sendFile(path.resolve('public', 'approved-voice-media', track.fileName));
+  });
+
+  app.get('/api/voice/media/:key', async (req, res) => {
+    const { getVoiceMedia } = await import('./voiceMediaCatalog');
+    const track = getVoiceMedia(req.params.key);
+    if (!track) return res.status(404).send('Approved media not found');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.type('audio/mpeg').sendFile(path.resolve('public', 'approved-voice-media', track.fileName));
+  });
+
+  app.get('/api/voice/greeting-audio', async (req, res) => {
+    try {
+      const { verifyGreetingAudioToken } = await import('./voiceMediaTokens');
+      const selection = verifyGreetingAudioToken(process.env.JWT_SECRET!, String(req.query.token || ''));
+      if (!selection) {
+        return res.status(403).send('Invalid greeting audio authorization');
+      }
+      res.setHeader('Cache-Control', 'private, max-age=3600');
+      res.type(selection.contentType!);
+      const stream = downloadVoiceGreeting(selection.objectName);
+      stream.on('error', (error) => {
+        console.error('Error streaming Voice greeting:', error);
+        if (!res.headersSent) res.status(404).send('Greeting audio not found');
+        else res.destroy(error);
+      });
+      stream.pipe(res);
+    } catch {
+      res.status(403).send('Invalid greeting audio authorization');
+    }
+  });
+
+  app.get('/api/voice/voicemail-audio', async (req, res) => {
+    try {
+      const { verifyVoicemailAudioToken } = await import('./voiceMediaTokens');
+      const selection = verifyVoicemailAudioToken(process.env.JWT_SECRET!, String(req.query.token || ''));
+      if (!selection) {
+        return res.status(403).send('Invalid voicemail audio authorization');
+      }
+      const [item] = await db.select().from(voipVoicemails).where(and(
+        eq(voipVoicemails.id, selection.voicemailId),
+        eq(voipVoicemails.tenantId, selection.tenantId),
+      )).limit(1);
+      if (!item?.recordingSid) return res.status(404).send('Voicemail recording not available');
+      const { getRecordingUrl } = await import('./twilioVoiceService');
+      const providerUrl = await getRecordingUrl(selection.tenantId, item.recordingSid);
+      if (!providerUrl || !process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
+        return res.status(404).send('Voicemail recording not available');
+      }
+      const authorization = Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64');
+      const providerResponse = await fetch(providerUrl, { headers: { Authorization: `Basic ${authorization}` } });
+      if (!providerResponse.ok || !providerResponse.body) return res.status(502).send('Unable to retrieve voicemail recording');
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.type('audio/mpeg');
+      const audio = Buffer.from(await providerResponse.arrayBuffer());
+      res.send(audio);
+    } catch {
+      res.status(403).send('Invalid voicemail audio authorization');
+    }
+  });
+
+  const bucketInput = z.object({
+    name: z.string().trim().min(1).max(80),
+    mode: z.enum(['RING_TEAM', 'VOICEMAIL']),
+    agentCredentialIds: z.array(z.string().uuid()).max(100).default([]),
+    ringTimeoutSeconds: z.number().int().min(10).max(60).default(30),
+    isActive: z.boolean().default(true),
+  });
+  app.get('/api/voip/buckets', async (req, res) => {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    res.json(await voipStorage.getRoutingBuckets(user.tenantId));
+  });
+  app.post('/api/voip/buckets', requireOwner, async (req, res) => {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    const parsed = bucketInput.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: 'Invalid routing bucket', issues: parsed.error.issues });
+    if (parsed.data.agentCredentialIds.length) {
+      const owned = await db.select({ id: agencyCredentials.id }).from(agencyCredentials).where(and(
+        eq(agencyCredentials.tenantId, user.tenantId),
+        eq(agencyCredentials.isActive, true),
+        eq(agencyCredentials.voipAccess, true),
+        inArray(agencyCredentials.id, parsed.data.agentCredentialIds),
+      ));
+      if (owned.length !== new Set(parsed.data.agentCredentialIds).size) return res.status(400).json({ message: 'Every bucket member must be a company Voice user' });
+    }
+    const [created] = await db.insert(voipRoutingBuckets).values({ tenantId: user.tenantId, ...parsed.data }).returning();
+    res.status(201).json(created);
+  });
+  app.patch('/api/voip/buckets/:id', requireOwner, async (req, res) => {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    const parsed = bucketInput.partial().safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: 'Invalid routing bucket', issues: parsed.error.issues });
+    if (parsed.data.agentCredentialIds?.length) {
+      const owned = await db.select({ id: agencyCredentials.id }).from(agencyCredentials).where(and(
+        eq(agencyCredentials.tenantId, user.tenantId),
+        eq(agencyCredentials.isActive, true),
+        eq(agencyCredentials.voipAccess, true),
+        inArray(agencyCredentials.id, parsed.data.agentCredentialIds),
+      ));
+      if (owned.length !== new Set(parsed.data.agentCredentialIds).size) return res.status(400).json({ message: 'Every bucket member must be a company Voice user' });
+    }
+    const [updated] = await db.update(voipRoutingBuckets).set({ ...parsed.data, updatedAt: new Date() })
+      .where(and(eq(voipRoutingBuckets.id, req.params.id), eq(voipRoutingBuckets.tenantId, user.tenantId))).returning();
+    if (!updated) return res.status(404).json({ message: 'Routing bucket not found' });
+    res.json(updated);
+  });
+  app.delete('/api/voip/buckets/:id', requireOwner, async (req, res) => {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    const deleted = await db.delete(voipRoutingBuckets).where(and(eq(voipRoutingBuckets.id, req.params.id), eq(voipRoutingBuckets.tenantId, user.tenantId))).returning({ id: voipRoutingBuckets.id });
+    if (!deleted.length) return res.status(404).json({ message: 'Routing bucket not found' });
+    res.sendStatus(204);
+  });
+
+  const { registerVoiceVoicemailRoutes } = await import('./voiceVoicemailRoutes');
+  const { signVoicemailAudioToken } = await import('./voiceMediaTokens');
+  registerVoiceVoicemailRoutes(app, {
+    requireOwner,
+    getCurrentUser,
+    list: tenantId => voipStorage.getVoicemails(tenantId),
+    markRead: async (id, tenantId, isRead) => {
+      const [updated] = await db.update(voipVoicemails).set({ isRead, readAt: isRead ? new Date() : null, updatedAt: new Date() })
+        .where(and(eq(voipVoicemails.id, id), eq(voipVoicemails.tenantId, tenantId))).returning();
+      return updated || null;
+    },
+    remove: async (id, tenantId) => {
+      const deleted = await db.delete(voipVoicemails).where(and(eq(voipVoicemails.id, id), eq(voipVoicemails.tenantId, tenantId))).returning({ id: voipVoicemails.id });
+      return deleted.length > 0;
+    },
+    find: async (id, tenantId) => {
+      const [item] = await db.select().from(voipVoicemails).where(and(eq(voipVoicemails.id, id), eq(voipVoicemails.tenantId, tenantId))).limit(1);
+      return item || null;
+    },
+    createListenUrl: (tenantId, voicemailId) => {
+      const token = signVoicemailAudioToken(process.env.JWT_SECRET!, { tenantId, voicemailId });
+      return `/api/voice/voicemail-audio?token=${encodeURIComponent(token)}`;
+    },
+  });
 
   // Local Presence customer requests never call Twilio. Purchasing is only
   // reachable through the separately authorized Global Admin provision action.
@@ -24941,6 +25258,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       db.select().from(localPresenceRequests).where(eq(localPresenceRequests.tenantId, user.tenantId)).orderBy(desc(localPresenceRequests.requestedAt)),
     ]);
     res.json({ packages, request: requests[0] || null });
+  });
+
+  app.get('/api/voip/global-admin-status', async (req, res) => {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    const [request] = await db.select({
+      id: localPresenceRequests.id,
+      status: localPresenceRequests.status,
+      approvedAt: localPresenceRequests.approvedAt,
+      completedAt: localPresenceRequests.completedAt,
+    }).from(localPresenceRequests)
+      .where(eq(localPresenceRequests.tenantId, user.tenantId))
+      .orderBy(desc(localPresenceRequests.requestedAt)).limit(1);
+    res.json({
+      localPresence: request || null,
+      provisioningManagedByGlobalAdmin: true,
+      customerCanProvisionLocalPresence: false,
+    });
   });
 
   app.post('/api/voip/local-presence/requests', requireOwner, async (req, res) => {
@@ -24959,14 +25294,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get('/api/admin/communications', isPlatformAdmin, async (_req, res) => {
-    const [companies, requests, packages, numbers, verification] = await Promise.all([
+    const [companies, requests, packages, numbers, verification, buckets, settings, voicemails] = await Promise.all([
       db.select({ id: tenants.id, name: tenants.name, twilioAccountSid: tenants.twilioAccountSid, twilioSubaccountStatus: tenants.twilioSubaccountStatus, twilioPhoneNumber: tenants.twilioPhoneNumber }).from(tenants),
       db.select().from(localPresenceRequests).orderBy(desc(localPresenceRequests.requestedAt)),
       db.select().from(localPresencePackages).orderBy(localPresencePackages.name),
       db.select().from(voipPhoneNumbers), db.select().from(voiceVerificationStatuses),
+      db.select().from(voipRoutingBuckets),
+      db.select().from(voipTenantSettings),
+      db.select({
+        tenantId: voipVoicemails.tenantId,
+        total: sql<number>`count(*)::int`,
+        unread: sql<number>`count(*) filter (where ${voipVoicemails.isRead} = false)::int`,
+        recording: sql<number>`count(*) filter (where ${voipVoicemails.status} = 'RECORDING')::int`,
+      }).from(voipVoicemails).groupBy(voipVoicemails.tenantId),
     ]);
     const duplicateSids = companies.filter(c => c.twilioAccountSid).filter((c, i, all) => all.findIndex(x => x.twilioAccountSid === c.twilioAccountSid) !== i).map(c => c.twilioAccountSid);
-    res.json({ companies, requests, packages, numbers, verification, ownershipAudit: { ambiguous: companies.filter(c => duplicateSids.includes(c.twilioAccountSid)), duplicateSids } });
+    res.json({ companies, requests, packages, numbers, verification, buckets, settings, voicemailStatus: voicemails, ownershipAudit: { ambiguous: companies.filter(c => duplicateSids.includes(c.twilioAccountSid)), duplicateSids } });
   });
 
   app.post('/api/admin/communications/packages', isPlatformAdmin, async (req, res) => {
@@ -25500,7 +25843,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { id } = req.params;
-      const { friendlyName, isPrimary, isActive } = req.body;
+      const { friendlyName, isPrimary, isActive, routingBucketId } = req.body;
+      if (routingBucketId !== undefined && routingBucketId !== null && !(await voipStorage.getRoutingBucket(routingBucketId, user.tenantId))) {
+        return res.status(400).json({ message: 'Routing bucket does not belong to this company' });
+      }
 
       // If setting as primary, unset existing primary
       if (isPrimary) {
@@ -25514,6 +25860,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         friendlyName,
         isPrimary,
         isActive,
+        ...(routingBucketId !== undefined ? { routingBucketId } : {}),
       });
 
       res.json(updated);
@@ -25612,6 +25959,93 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get('/api/voip/held-calls', authenticateUser, async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) return res.status(401).json({ message: 'Unauthorized' });
+      if (!canUseSoftphone(user)) return res.status(403).json({ message: 'VoIP access not enabled for this user' });
+      await cleanupExpiredSuspendedCalls();
+      const [heldCall] = await db.select().from(voipSuspendedCalls).where(and(
+        eq(voipSuspendedCalls.tenantId, user.tenantId),
+        eq(voipSuspendedCalls.kind, 'HOLD'),
+        eq(voipSuspendedCalls.status, 'ACTIVE'),
+        eq(voipSuspendedCalls.createdByUserId, user.id),
+        gt(voipSuspendedCalls.expiresAt, new Date()),
+      )).orderBy(desc(voipSuspendedCalls.createdAt)).limit(1);
+      res.json(heldCall ? {
+        id: heldCall.id,
+        callerName: heldCall.callerName,
+        callerNumber: heldCall.callerNumber,
+        heldAt: heldCall.createdAt,
+      } : null);
+    } catch (error) {
+      console.error('Error getting held call:', error);
+      res.status(500).json({ message: 'Failed to get held call' });
+    }
+  });
+
+  app.post('/api/voip/held-calls', authenticateUser, async (req, res) => {
+    let retainedCallSid = '';
+    let recovery: { tenantId: string; userId: string } | null = null;
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) return res.status(401).json({ message: 'Unauthorized' });
+      if (!canUseSoftphone(user)) return res.status(403).json({ message: 'VoIP access not enabled for this user' });
+      const { activeCallSid, callerName, callerNumber } = req.body;
+      if (!activeCallSid || !callerNumber) return res.status(400).json({ message: 'Active call and caller number are required' });
+      await cleanupExpiredSuspendedCalls();
+      const settings = await voipStorage.getVoiceSettings(user.tenantId);
+      retainedCallSid = await suspendLiveVoipCall(user.tenantId, user.id, activeCallSid, settings?.holdMusicKey || 'art-gallery-museum');
+      recovery = { tenantId: user.tenantId, userId: user.id };
+      const [heldCall] = await db.insert(voipSuspendedCalls).values({
+        tenantId: user.tenantId,
+        kind: 'HOLD',
+        activeCallSid,
+        retainedCallSid,
+        createdByUserId: user.id,
+        callerName: callerName || '',
+        callerNumber,
+        expiresAt: new Date(Date.now() + suspendedCallExpiryMs),
+      }).returning();
+      res.json({ id: heldCall.id, callerName: heldCall.callerName, callerNumber, heldAt: heldCall.createdAt });
+    } catch (error) {
+      console.error('Error placing call on hold:', error);
+      if (retainedCallSid && recovery) {
+        await reconnectSuspendedVoipCall(recovery.tenantId, retainedCallSid, recovery.userId).catch(() => undefined);
+      }
+      res.status(502).json({ message: 'The live call could not be placed on hold' });
+    }
+  });
+
+  app.post('/api/voip/held-calls/:id/resume', authenticateUser, async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) return res.status(401).json({ message: 'Unauthorized' });
+      if (!canUseSoftphone(user)) return res.status(403).json({ message: 'VoIP access not enabled for this user' });
+      await cleanupExpiredSuspendedCalls();
+      const [heldCall] = await db.update(voipSuspendedCalls).set({ status: 'RESUMING', updatedAt: new Date() }).where(and(
+        eq(voipSuspendedCalls.id, req.params.id),
+        eq(voipSuspendedCalls.tenantId, user.tenantId),
+        eq(voipSuspendedCalls.kind, 'HOLD'),
+        eq(voipSuspendedCalls.status, 'ACTIVE'),
+        eq(voipSuspendedCalls.createdByUserId, user.id),
+        gt(voipSuspendedCalls.expiresAt, new Date()),
+      )).returning();
+      if (!heldCall) return res.status(404).json({ message: 'Held call not found' });
+      try {
+        await reconnectSuspendedVoipCall(user.tenantId, heldCall.retainedCallSid, user.id);
+        await db.update(voipSuspendedCalls).set({ status: 'COMPLETED', updatedAt: new Date() }).where(eq(voipSuspendedCalls.id, heldCall.id));
+      } catch (error) {
+        await db.update(voipSuspendedCalls).set({ status: 'ACTIVE', updatedAt: new Date() }).where(eq(voipSuspendedCalls.id, heldCall.id));
+        throw error;
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error resuming held call:', error);
+      res.status(502).json({ message: 'The held call could not be resumed' });
+    }
+  });
+
   // Shared parked call list for softphone users. This exposes parked calls to every
   // VoIP-enabled user in the tenant so any person can pick one up from the phone UI.
   app.get('/api/voip/parked-calls', authenticateUser, async (req, res) => {
@@ -25620,12 +26054,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!user) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-
-      const tenantParkedCalls = Array.from(parkedVoipCalls.values())
-        .filter((call) => call.tenantId === user.tenantId)
-        .sort((a, b) => new Date(a.parkedAt).getTime() - new Date(b.parkedAt).getTime());
-
-      res.json(tenantParkedCalls);
+      if (!canUseSoftphone(user)) return res.status(403).json({ message: 'VoIP access not enabled for this user' });
+      await cleanupExpiredSuspendedCalls();
+      const tenantParkedCalls = await db.select().from(voipSuspendedCalls).where(and(
+        eq(voipSuspendedCalls.tenantId, user.tenantId),
+        eq(voipSuspendedCalls.kind, 'PARK'),
+        eq(voipSuspendedCalls.status, 'ACTIVE'),
+        gt(voipSuspendedCalls.expiresAt, new Date()),
+      )).orderBy(voipSuspendedCalls.createdAt);
+      res.json(tenantParkedCalls.map(call => ({
+        id: call.id,
+        callerName: call.callerName,
+        callerNumber: call.callerNumber,
+        parkedBy: call.parkedBy,
+        parkedAt: call.createdAt,
+      })));
     } catch (error) {
       console.error("Error getting parked calls:", error);
       res.status(500).json({ message: "Failed to get parked calls" });
@@ -25633,35 +26076,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post('/api/voip/parked-calls', authenticateUser, async (req, res) => {
+    let retainedCallSid = '';
+    let recovery: { tenantId: string; userId: string } | null = null;
     try {
       const user = await getCurrentUser(req);
       if (!user) {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const isOwner = (user as any).role === 'owner' || (user as any).role === 'manager';
-      if (!isOwner && !(user as any).voipAccess) {
+      if (!canUseSoftphone(user)) {
         return res.status(403).json({ message: "VoIP access not enabled for this user" });
       }
 
-      const { callerName, callerNumber } = req.body;
-      if (!callerNumber) {
-        return res.status(400).json({ message: "Caller number is required" });
+      const { activeCallSid, callerName, callerNumber } = req.body;
+      if (!activeCallSid || !callerNumber) {
+        return res.status(400).json({ message: "Active call and caller number are required" });
       }
 
-      const parkedCall = {
-        id: nanoid(),
+      await cleanupExpiredSuspendedCalls();
+      const settings = await voipStorage.getVoiceSettings(user.tenantId);
+      retainedCallSid = await suspendLiveVoipCall(user.tenantId, user.id, activeCallSid, settings?.parkMusicKey || 'art-gallery-museum');
+      recovery = { tenantId: user.tenantId, userId: user.id };
+      const [parkedCall] = await db.insert(voipSuspendedCalls).values({
         tenantId: user.tenantId,
+        kind: 'PARK',
+        activeCallSid,
+        retainedCallSid,
+        createdByUserId: user.id,
         callerName: callerName || '',
         callerNumber,
         parkedBy: (user as any).name || (user as any).username || 'Another agent',
-        parkedAt: new Date().toISOString(),
-      };
-
-      parkedVoipCalls.set(parkedCall.id, parkedCall);
-      res.json(parkedCall);
+        expiresAt: new Date(Date.now() + suspendedCallExpiryMs),
+      }).returning();
+      res.json({
+        id: parkedCall.id,
+        callerName: parkedCall.callerName,
+        callerNumber: parkedCall.callerNumber,
+        parkedBy: parkedCall.parkedBy,
+        parkedAt: parkedCall.createdAt,
+      });
     } catch (error) {
       console.error("Error parking call:", error);
+      if (retainedCallSid && recovery) {
+        await reconnectSuspendedVoipCall(recovery.tenantId, retainedCallSid, recovery.userId).catch(() => undefined);
+      }
       res.status(500).json({ message: "Failed to park call" });
     }
   });
@@ -25672,14 +26130,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!user) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-
-      const parkedCall = parkedVoipCalls.get(req.params.id);
-      if (!parkedCall || parkedCall.tenantId !== user.tenantId) {
-        return res.status(404).json({ message: "Parked call not found" });
+      if (!canUseSoftphone(user)) return res.status(403).json({ message: 'VoIP access not enabled for this user' });
+      await cleanupExpiredSuspendedCalls();
+      const [parkedCall] = await db.update(voipSuspendedCalls).set({ status: 'RESUMING', updatedAt: new Date() }).where(and(
+        eq(voipSuspendedCalls.id, req.params.id),
+        eq(voipSuspendedCalls.tenantId, user.tenantId),
+        eq(voipSuspendedCalls.kind, 'PARK'),
+        eq(voipSuspendedCalls.status, 'ACTIVE'),
+        gt(voipSuspendedCalls.expiresAt, new Date()),
+      )).returning();
+      if (!parkedCall) return res.status(404).json({ message: "Parked call not found" });
+      try {
+        await reconnectSuspendedVoipCall(user.tenantId, parkedCall.retainedCallSid, user.id);
+        await db.update(voipSuspendedCalls).set({ status: 'COMPLETED', updatedAt: new Date() }).where(eq(voipSuspendedCalls.id, parkedCall.id));
+      } catch (error) {
+        await db.update(voipSuspendedCalls).set({ status: 'ACTIVE', updatedAt: new Date() }).where(eq(voipSuspendedCalls.id, parkedCall.id));
+        throw error;
       }
-
-      parkedVoipCalls.delete(req.params.id);
-      res.json(parkedCall);
+      res.json({ success: true });
     } catch (error) {
       console.error("Error picking up parked call:", error);
       res.status(500).json({ message: "Failed to pick up parked call" });
@@ -25729,6 +26197,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         areaCodeToState: areaCode => areaStates.get(areaCode),
       });
       const fromPhoneNumber = decision.selectedNumber;
+      const privateCallerId = decision.selectionReason === 'PRIVATE_FALLBACK' || callerIdMode === 'PRIVATE' || callerIdMode === 'private';
 
       // Create call log entry
       const callLog = await voipStorage.createVoipCallLog({
@@ -25737,7 +26206,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         accountId: accountId || null,
         agentCredentialId: user.credentialId || null,
         direction: 'outbound',
-        fromNumber: fromPhoneNumber.phoneNumber,
+        fromNumber: privateCallerId ? 'anonymous' : fromPhoneNumber.phoneNumber,
         toNumber: decision.destination,
         status: 'initiated',
         startedAt: new Date(),
@@ -25748,19 +26217,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         tenantId: user.tenantId,
         callLogId: callLog.id,
         destination: decision.destination,
-        callerId: fromPhoneNumber.phoneNumber,
+        callerId: privateCallerId ? 'anonymous' : fromPhoneNumber.phoneNumber,
+        callerIdMode: privateCallerId ? 'PRIVATE' : 'NUMBER',
       }, process.env.JWT_SECRET!, { expiresIn: '5m' });
 
       res.json({
         callLogId: callLog.id,
         selectionToken,
-        fromNumber: fromPhoneNumber.phoneNumber,
-        actualFromNumber: fromPhoneNumber.phoneNumber,
+        fromNumber: privateCallerId ? 'anonymous' : fromPhoneNumber.phoneNumber,
+        actualFromNumber: privateCallerId ? 'anonymous' : fromPhoneNumber.phoneNumber,
         toNumber: decision.destination,
         status: 'initiated',
         localPresenceRequested: decision.localPresenceRequested,
         selectionReason: decision.selectionReason,
-        isPrivate: callerIdMode === 'private',
+        isPrivate: privateCallerId,
         message: 'Call initiated. Use the Twilio Voice SDK to handle the call.'
       });
     } catch (error) {
@@ -25801,18 +26271,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // TwiML endpoint for outbound calls (called by Twilio)
   const validateTwilioVoiceSignature = async (req: any, res: any, next: any) => {
     const signature = req.header('x-twilio-signature');
-    if (!signature) return res.status(403).send('Invalid Twilio signature');
     const accountSid = req.body?.AccountSid;
-    const [company] = accountSid ? await db.select({ id: tenants.id, authToken: tenants.twilioAuthToken }).from(tenants).where(eq(tenants.twilioAccountSid, accountSid)).limit(1) : [];
-    if (!company?.authToken) return res.status(403).send('Unknown Twilio account');
     const forwardedProto = String(req.header('x-forwarded-proto') || req.protocol).split(',')[0].trim();
     const forwardedHost = String(req.header('x-forwarded-host') || req.header('host') || '').split(',')[0].trim();
     const configuredOrigin = process.env.TWILIO_VOICE_WEBHOOK_BASE_URL || process.env.PUBLIC_APP_URL || process.env.APP_URL;
     const publicUrl = configuredOrigin ? `${configuredOrigin.replace(/\/$/, '')}${req.originalUrl}` : `${forwardedProto}://${forwardedHost}${req.originalUrl}`;
-    const { default: twilioSdk } = await import('twilio');
     const { decryptCredential } = await import('./credentialCrypto');
-    if (!twilioSdk.validateRequest(decryptCredential(company.authToken), signature, publicUrl, req.body || {})) return res.status(403).send('Invalid Twilio signature');
-    req.twilioTenantId = company.id;
+    const { verifyTwilioVoiceWebhook } = await import('./voiceWebhookSecurity');
+    const tenantId = await verifyTwilioVoiceWebhook({
+      signature,
+      publicUrl,
+      params: req.body || {},
+      accountSid,
+      resolveCredential: async sid => {
+        const [company] = await db.select({ id: tenants.id, authToken: tenants.twilioAuthToken })
+          .from(tenants).where(eq(tenants.twilioAccountSid, sid)).limit(1);
+        return company?.authToken
+          ? { tenantId: company.id, authToken: decryptCredential(company.authToken) }
+          : null;
+      },
+    });
+    if (!tenantId) return res.status(403).send('Invalid Twilio signature or account');
+    req.twilioTenantId = tenantId;
     next();
   };
 
@@ -25846,8 +26326,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).send('<Response><Say>Invalid call authorization.</Say><Hangup/></Response>');
       }
       const allNumbers = await voipStorage.getVoipPhoneNumbersByTenant(clientTenantId);
-      const callerId = allNumbers.find(number => number.phoneNumber === selection.callerId && number.isActive);
-      if (!callerId) {
+       const isPrivate = selection.callerIdMode === 'PRIVATE' && selection.callerId === 'anonymous';
+       const callerId = isPrivate ? null : allNumbers.find(number => number.phoneNumber === selection.callerId && number.isActive);
+       if (!isPrivate && !callerId) {
         res.type('text/xml');
         return res.status(409).send('<Response><Say>No active company caller ID is configured.</Say><Hangup/></Response>');
       }
@@ -25860,7 +26341,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const twiml = generateTwiML({
         action: 'dial',
         to: selection.destination,
-        from: callerId.phoneNumber,
+         from: isPrivate ? 'anonymous' : callerId!.phoneNumber,
         record: true,
       });
 
@@ -25901,9 +26382,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.send('<Response><Say>This phone system is not currently active.</Say><Hangup/></Response>');
       }
 
-      // Get all agents with VoIP access for this tenant
       const credentials = await storage.getAgencyCredentialsByTenant(tenantId);
-      const voipAgents = credentials.filter(c => c.voipAccess === true);
+      const configuredBucket = ownedNumber.routingBucketId
+        ? await voipStorage.getRoutingBucket(ownedNumber.routingBucketId, tenantId)
+        : undefined;
+      const bucket = configuredBucket?.isActive ? configuredBucket : undefined;
+      const allowedAgentIds = bucket?.agentCredentialIds?.length
+        ? new Set(bucket.agentCredentialIds)
+        : null;
+      const voipAgents = credentials.filter(c => c.voipAccess === true && c.isActive === true && (!allowedAgentIds || allowedAgentIds.has(c.id)));
       
       // Create call log for this inbound call
       const { formatPhoneE164 } = await import('./twilioVoiceService');
@@ -25917,39 +26404,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: 'ringing',
       });
 
-      // Generate TwiML to ring all agents from this tenant
-      // Using Twilio Client, we dial all agents with the tenant ID in their identity
-      const VoiceResponse = (await import('twilio')).twiml.VoiceResponse;
-      const twiml = new VoiceResponse();
-      
-      if (voipAgents.length === 0) {
-        twiml.say('No agents are available to take your call. Please try again later.');
-      } else {
-        twiml.say({ voice: 'alice' }, 'Please hold while we connect you to the next available agent.');
-        
-        // Create a dial with simultaneous ring to all tenant's agents
-        const dial = twiml.dial({
-          timeout: 30,
-          callerId: formatPhoneE164(From),
-          action: '/api/voice/dial-status',
-          method: 'POST',
-        });
-        
-        // Ring all agents with VoIP access for this tenant simultaneously
-        // Agent identity format: tenantId_agentId (allows routing to specific tenant's agents)
-        const { buildTenantVoiceIdentity } = await import('./twilioVoiceService');
-        voipAgents.forEach(agent => {
-          dial.client(buildTenantVoiceIdentity(tenantId, agent.id));
-        });
-      }
+      const settings = await voipStorage.getVoiceSettings(tenantId);
+      const { voiceWebhookBaseUrl } = await import('./companyTwilioService');
+      const { createGreetingPlaybackUrl } = await import('./voiceMediaTokens');
+      const { buildInboundTwiML } = await import('./voiceInboundRouting');
+      const callbackBase = voiceWebhookBaseUrl();
+      const twiml = buildInboundTwiML({
+        tenantId,
+        callSid: CallSid,
+        bucketId: bucket?.id,
+        mode: bucket?.mode === 'VOICEMAIL' ? 'VOICEMAIL' : 'RING_TEAM',
+        agentIds: voipAgents.map(agent => agent.id),
+        timeoutSeconds: bucket?.ringTimeoutSeconds || 30,
+        greeting: {
+          enabled: settings?.inboundGreetingEnabled === true,
+          type: settings?.inboundGreetingType || null,
+          text: settings?.inboundGreetingText,
+          audioUrl: settings?.inboundGreetingAudioUrl
+            ? createGreetingPlaybackUrl(process.env.JWT_SECRET!, callbackBase, settings.inboundGreetingAudioUrl)
+            : null,
+        },
+        callbackBase,
+      });
 
       res.type('text/xml');
-      res.send(twiml.toString());
+      res.send(twiml);
     } catch (error) {
       console.error("Error handling inbound call:", error);
       res.type('text/xml');
       res.send('<Response><Say>An error occurred. Please try again later.</Say></Response>');
     }
+  });
+
+  app.post('/api/voice/inbound-voicemail', validateTwilioVoiceSignature, async (req, res) => {
+    const tenantId = (req as any).twilioTenantId as string;
+    const requestedBucket = typeof req.query.bucketId === 'string'
+      ? await voipStorage.getRoutingBucket(req.query.bucketId, tenantId)
+      : undefined;
+    const { voiceWebhookBaseUrl } = await import('./companyTwilioService');
+    const { buildVoicemailTwiML } = await import('./voiceInboundRouting');
+    res.type('text/xml').send(buildVoicemailTwiML({ bucketId: requestedBucket?.id, callbackBase: voiceWebhookBaseUrl() }));
+  });
+
+  app.post('/api/voice/voicemail-complete', validateTwilioVoiceSignature, async (_req, res) => {
+    const { buildVoicemailCompleteTwiML } = await import('./voiceInboundRouting');
+    res.type('text/xml').send(buildVoicemailCompleteTwiML());
+  });
+
+  app.post('/api/voice/voicemail-recording', validateTwilioVoiceSignature, async (req, res) => {
+    const tenantId = (req as any).twilioTenantId as string;
+    const { CallSid, RecordingSid, RecordingUrl, RecordingStatus, RecordingDuration, From, To } = req.body;
+    const requestedBucket = typeof req.query.bucketId === 'string'
+      ? await voipStorage.getRoutingBucket(req.query.bucketId, tenantId)
+      : undefined;
+    const ownedNumbers = await voipStorage.getVoipPhoneNumbersByTenant(tenantId);
+    const normalizedTo = String(To || '').startsWith('+') ? String(To) : `+1${String(To || '').replace(/\D/g, '')}`;
+    const phone = ownedNumbers.find(number => number.phoneNumber === normalizedTo);
+    if (!phone || !CallSid || !RecordingSid) return res.status(400).send('Invalid voicemail callback');
+    await db.insert(voipVoicemails).values({
+      tenantId,
+      routingBucketId: requestedBucket?.id || phone.routingBucketId || null,
+      phoneNumberId: phone.id,
+      callSid: CallSid,
+      recordingSid: RecordingSid,
+      recordingUrl: RecordingUrl ? `${RecordingUrl}.mp3` : null,
+      fromNumber: String(From || 'anonymous'),
+      toNumber: phone.phoneNumber,
+      duration: Number.parseInt(RecordingDuration, 10) || 0,
+      status: RecordingStatus === 'completed' ? 'READY' : String(RecordingStatus || 'PROCESSING').toUpperCase(),
+    }).onConflictDoUpdate({
+      target: [voipVoicemails.tenantId, voipVoicemails.callSid],
+      set: {
+        recordingSid: RecordingSid, recordingUrl: RecordingUrl ? `${RecordingUrl}.mp3` : null,
+        duration: Number.parseInt(RecordingDuration, 10) || 0,
+        status: RecordingStatus === 'completed' ? 'READY' : String(RecordingStatus || 'PROCESSING').toUpperCase(),
+        updatedAt: new Date(),
+      },
+    });
+    res.sendStatus(204);
   });
 
   // Dial status callback (called by Twilio when dial attempt completes)
@@ -25969,7 +26501,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
       
-      res.sendStatus(200);
+      res.type('text/xml');
+      if (['no-answer', 'busy', 'failed', 'canceled'].includes(DialCallStatus)) {
+        const requestedBucket = typeof req.query.bucketId === 'string'
+          ? await voipStorage.getRoutingBucket(req.query.bucketId, tenantId)
+          : undefined;
+        const { voiceWebhookBaseUrl } = await import('./companyTwilioService');
+        const { buildVoicemailTwiML } = await import('./voiceInboundRouting');
+        return res.send(buildVoicemailTwiML({ bucketId: requestedBucket?.id, callbackBase: voiceWebhookBaseUrl() }));
+      }
+      res.send('<Response/>');
     } catch (error) {
       console.error("Error handling dial status callback:", error);
       res.sendStatus(500);

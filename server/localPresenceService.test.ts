@@ -87,14 +87,14 @@ test('state matching works outside California and falls back for an uncovered st
   assert.equal(ny.selectionReason, 'LOCAL_PRESENCE_STATE');
 
   const fl = selectDialingNumber({ tenantId: 'a', dialString: '813055551212', numbers, areaCodeToState: resolveState });
-  assert.equal(fl.callerId, '+17165550100');
-  assert.equal(fl.selectionReason, 'PRIMARY_FALLBACK');
+  assert.equal(fl.callerId, 'anonymous');
+  assert.equal(fl.selectionReason, 'PRIVATE_FALLBACK');
 });
 
 test('inactive, direct-use, and foreign-tenant numbers cannot satisfy bucket matches', () => {
   const decision = selectDialingNumber({ tenantId: 'a', dialString: '815105551212', numbers });
-  assert.equal(decision.callerId, '+17165550100');
-  assert.equal(decision.selectionReason, 'PRIMARY_FALLBACK');
+  assert.equal(decision.callerId, 'anonymous');
+  assert.equal(decision.selectionReason, 'PRIVATE_FALLBACK');
 });
 
 test('ordinary dialing honors an active selected direct or toll-free number', () => {

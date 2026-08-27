@@ -3,10 +3,16 @@ import { eq, and, desc, or, isNull } from "drizzle-orm";
 import {
   voipPhoneNumbers,
   voipCallLogs,
+  voipRoutingBuckets,
+  voipTenantSettings,
+  voipVoicemails,
   type VoipPhoneNumber,
   type InsertVoipPhoneNumber,
   type VoipCallLog,
   type InsertVoipCallLog,
+  type VoipRoutingBucket,
+  type VoipTenantSettings,
+  type VoipVoicemail,
 } from "@shared/schema";
 
 export interface IVoipStorage {
@@ -31,6 +37,10 @@ export interface IVoipStorage {
   updateVoipCallLogByCallSid(callSid: string, tenantId: string, updates: Partial<VoipCallLog>): Promise<VoipCallLog | undefined>;
   bindVoipCallSid(id: string, tenantId: string, callSid: string): Promise<boolean>;
   getTenantByPhoneNumber(phoneNumber: string): Promise<string | null>;
+  getRoutingBuckets(tenantId: string): Promise<VoipRoutingBucket[]>;
+  getRoutingBucket(id: string, tenantId: string): Promise<VoipRoutingBucket | undefined>;
+  getVoiceSettings(tenantId: string): Promise<VoipTenantSettings | undefined>;
+  getVoicemails(tenantId: string): Promise<VoipVoicemail[]>;
 }
 
 export class VoipStorage implements IVoipStorage {
@@ -247,6 +257,30 @@ export class VoipStorage implements IVoipStorage {
       return result[0].tenantId;
     }
     return null;
+  }
+
+  async getRoutingBuckets(tenantId: string) {
+    return db.select().from(voipRoutingBuckets)
+      .where(eq(voipRoutingBuckets.tenantId, tenantId))
+      .orderBy(voipRoutingBuckets.name);
+  }
+
+  async getRoutingBucket(id: string, tenantId: string) {
+    const [row] = await db.select().from(voipRoutingBuckets)
+      .where(and(eq(voipRoutingBuckets.id, id), eq(voipRoutingBuckets.tenantId, tenantId))).limit(1);
+    return row;
+  }
+
+  async getVoiceSettings(tenantId: string) {
+    const [row] = await db.select().from(voipTenantSettings)
+      .where(eq(voipTenantSettings.tenantId, tenantId)).limit(1);
+    return row;
+  }
+
+  async getVoicemails(tenantId: string) {
+    return db.select().from(voipVoicemails)
+      .where(eq(voipVoicemails.tenantId, tenantId))
+      .orderBy(desc(voipVoicemails.createdAt));
   }
 }
 

@@ -7,7 +7,7 @@ import { db } from "./db";
 import { emailService } from "./emailService";
 import { storage } from "./storage";
 import { authenticateUser } from "./authMiddleware";
-import { agencyCredentials, tenants, voipCallLogs, voipPhoneNumbers } from "@shared/schema";
+import { agencyCredentials, tenants, voipCallLogs, voipPhoneNumbers, voipRoutingBuckets, voipTenantSettings, voipVoicemails } from "@shared/schema";
 import { chiamoLeads, chiamoServiceConfigurations, chiamoSubscriptions, chiamoUsageSettings } from "@shared/chiamo-schema";
 import { calculateChiamoMonthlyService, CHIAMO_SUPPORT_EMAIL, chiamoBillingStatuses, chiamoLeadStatuses, chiamoPlans, chiamoSmsStatuses, chiamoTestStatuses } from "@shared/chiamo";
 
@@ -139,10 +139,32 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
   app.get("/api/admin/chiamo/customers", isPlatformAdmin, async (_req, res) => {
     const rows = await db.select({ tenant: tenants, subscription: chiamoSubscriptions, service: chiamoServiceConfigurations }).from(tenants).leftJoin(chiamoSubscriptions, eq(chiamoSubscriptions.tenantId, tenants.id)).leftJoin(chiamoServiceConfigurations, eq(chiamoServiceConfigurations.tenantId, tenants.id)).where(eq(tenants.chiamoConnectEnabled, true)).orderBy(desc(tenants.createdAt));
     const enriched = await Promise.all(rows.map(async row => {
-      const [{ users }] = await db.select({ users: sql<number>`count(*)::int` }).from(agencyCredentials).where(and(eq(agencyCredentials.tenantId,row.tenant.id),eq(agencyCredentials.isActive,true)));
-      const [{ numbers }] = await db.select({ numbers: sql<number>`count(*)::int` }).from(voipPhoneNumbers).where(and(eq(voipPhoneNumbers.tenantId,row.tenant.id),eq(voipPhoneNumbers.isActive,true)));
+      const [[{ users }], [{ numbers }], [{ buckets }], [voiceSettings], [{ voicemailTotal, voicemailUnread }]] = await Promise.all([
+        db.select({ users: sql<number>`count(*)::int` }).from(agencyCredentials).where(and(eq(agencyCredentials.tenantId,row.tenant.id),eq(agencyCredentials.isActive,true))),
+        db.select({ numbers: sql<number>`count(*)::int` }).from(voipPhoneNumbers).where(and(eq(voipPhoneNumbers.tenantId,row.tenant.id),eq(voipPhoneNumbers.isActive,true))),
+        db.select({ buckets: sql<number>`count(*)::int` }).from(voipRoutingBuckets).where(eq(voipRoutingBuckets.tenantId,row.tenant.id)),
+        db.select().from(voipTenantSettings).where(eq(voipTenantSettings.tenantId,row.tenant.id)).limit(1),
+        db.select({
+          voicemailTotal: sql<number>`count(*)::int`,
+          voicemailUnread: sql<number>`count(*) filter (where ${voipVoicemails.isRead} = false)::int`,
+        }).from(voipVoicemails).where(eq(voipVoicemails.tenantId,row.tenant.id)),
+      ]);
       const calc = row.subscription ? calculateChiamoMonthlyService(row.subscription.planId, users, row.subscription.smsAddonEnabled, row.subscription) : null;
-      return { ...row, users, numbers, estimatedMonthlyCents: calc?.totalCents || 0 };
+      return {
+        ...row,
+        users,
+        numbers,
+        estimatedMonthlyCents: calc?.totalCents || 0,
+        voiceRouting: {
+          buckets,
+          greetingEnabled: voiceSettings?.inboundGreetingEnabled || false,
+          greetingType: voiceSettings?.inboundGreetingType || null,
+          holdMusicKey: voiceSettings?.holdMusicKey || 'art-gallery-museum',
+          parkMusicKey: voiceSettings?.parkMusicKey || 'art-gallery-museum',
+          voicemailTotal,
+          voicemailUnread,
+        },
+      };
     }));
     res.json(enriched);
   });

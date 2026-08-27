@@ -26,6 +26,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { VoipControlCenter } from "@/components/voip-control-center";
 import {
   Phone,
   Users,
@@ -411,7 +412,7 @@ export default function PhonesPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid h-auto w-full grid-cols-2 gap-1 p-1 sm:grid-cols-6 lg:w-[820px]">
+          <TabsList className="grid h-auto w-full grid-cols-2 gap-1 p-1 sm:grid-cols-4 lg:w-[960px]">
             <TabsTrigger value="dashboard" className="flex items-center gap-2">
               <BarChart3 className="h-4 w-4" /> Dashboard
             </TabsTrigger>
@@ -429,6 +430,9 @@ export default function PhonesPage() {
             </TabsTrigger>
             <TabsTrigger value="local-presence" className="flex items-center gap-2">
               <Phone className="h-4 w-4" /> Local Presence
+            </TabsTrigger>
+            <TabsTrigger value="call-control" className="flex items-center gap-2">
+              <Settings className="h-4 w-4" /> Call Control
             </TabsTrigger>
           </TabsList>
 
@@ -521,6 +525,10 @@ export default function PhonesPage() {
                 </Card>
               </>
             )}
+          </TabsContent>
+
+          <TabsContent value="call-control" className="mt-6">
+            <VoipControlCenter tone="chain" />
           </TabsContent>
 
           {/* Settings Tab */}
