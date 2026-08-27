@@ -76,6 +76,31 @@ export async function uploadLogo(
   }
 }
 
+export async function uploadVoiceAudio(
+  fileBuffer: Buffer,
+  tenantId: string,
+  kind: 'intro' | 'voicemail' | 'hold' | 'park',
+  mimeType: string
+): Promise<{ url: string; path: string } | null> {
+  const client = getR2Client();
+  if (!client || !R2_PUBLIC_URL) return null;
+  const extension = mimeType.includes('mpeg') ? 'mp3' : mimeType.includes('wav') ? 'wav' : 'webm';
+  const key = `voice/${tenantId}/${kind}-${Date.now()}.${extension}`;
+  try {
+    await client.send(new PutObjectCommand({
+      Bucket: R2_BUCKET_NAME,
+      Key: key,
+      Body: fileBuffer,
+      ContentType: mimeType,
+      CacheControl: 'private, max-age=0',
+    }));
+    return { url: `${R2_PUBLIC_URL}/${key}`, path: key };
+  } catch (error) {
+    console.error('Error uploading voice audio:', error);
+    return null;
+  }
+}
+
 export async function deleteLogo(logoPath: string): Promise<boolean> {
   const client = getR2Client();
   if (!client) {

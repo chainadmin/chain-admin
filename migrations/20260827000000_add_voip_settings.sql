@@ -1,0 +1,22 @@
+CREATE TABLE IF NOT EXISTS "voip_settings" (
+  "tenant_id" uuid PRIMARY KEY REFERENCES "tenants"("id") ON DELETE CASCADE,
+  "intro_enabled" boolean NOT NULL DEFAULT false,
+  "intro_mode" text NOT NULL DEFAULT 'TEXT',
+  "intro_text" text NOT NULL DEFAULT 'Thank you for calling. Please hold while we connect your call.',
+  "intro_audio_url" text,
+  "hold_music" text NOT NULL DEFAULT 'CLASSIC',
+  "hold_music_url" text,
+  "park_music" text NOT NULL DEFAULT 'SAME_AS_HOLD',
+  "park_music_url" text,
+  "voicemail_enabled" boolean NOT NULL DEFAULT true,
+  "voicemail_greeting_mode" text NOT NULL DEFAULT 'TEXT',
+  "voicemail_greeting_text" text NOT NULL DEFAULT 'We are unable to answer your call. Please leave a message after the tone.',
+  "voicemail_greeting_audio_url" text,
+  "voicemail_max_seconds" integer NOT NULL DEFAULT 120,
+  "voicemail_transcription" boolean NOT NULL DEFAULT false,
+  "voicemail_notification_email" text,
+  "updated_at" timestamp DEFAULT now(),
+  CONSTRAINT "voip_settings_intro_mode_check" CHECK ("intro_mode" IN ('TEXT', 'RECORDING')),
+  CONSTRAINT "voip_settings_voicemail_mode_check" CHECK ("voicemail_greeting_mode" IN ('TEXT', 'RECORDING')),
+  CONSTRAINT "voip_settings_voicemail_duration_check" CHECK ("voicemail_max_seconds" BETWEEN 15 AND 300)
+);

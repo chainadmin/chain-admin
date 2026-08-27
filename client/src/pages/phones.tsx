@@ -48,6 +48,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { VoiceSettings } from "@/chiamo/chiamo";
 
 interface VoipPhoneNumber {
   id: string;
@@ -557,7 +558,7 @@ export default function PhonesPage() {
             </Card>
 
             {billingSummary?.voipEnabled && (
-              <Card className={`mt-6 ${cardBaseClasses}`}>
+              <><Card className={`mt-6 ${cardBaseClasses}`}>
                 <CardHeader>
                   <CardTitle className="text-white">Quick Stats</CardTitle>
                 </CardHeader>
@@ -581,7 +582,7 @@ export default function PhonesPage() {
                     </div>
                   </div>
                 </CardContent>
-              </Card>
+              </Card><div className="mt-6 rounded-2xl bg-slate-50 p-4 text-slate-900 sm:p-6"><VoiceSettings/></div></>
             )}
           </TabsContent>
 

@@ -1150,6 +1150,27 @@ export const voipPhoneNumbers = pgTable("voip_phone_numbers", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Tenant-level prompts and audio behavior for the business phone system.
+export const voipSettings = pgTable("voip_settings", {
+  tenantId: uuid("tenant_id").primaryKey().references(() => tenants.id, { onDelete: "cascade" }),
+  introEnabled: boolean("intro_enabled").notNull().default(false),
+  introMode: text("intro_mode", { enum: ['TEXT', 'RECORDING'] }).notNull().default('TEXT'),
+  introText: text("intro_text").notNull().default('Thank you for calling. Please hold while we connect your call.'),
+  introAudioUrl: text("intro_audio_url"),
+  holdMusic: text("hold_music").notNull().default('CLASSIC'),
+  holdMusicUrl: text("hold_music_url"),
+  parkMusic: text("park_music").notNull().default('SAME_AS_HOLD'),
+  parkMusicUrl: text("park_music_url"),
+  voicemailEnabled: boolean("voicemail_enabled").notNull().default(true),
+  voicemailGreetingMode: text("voicemail_greeting_mode", { enum: ['TEXT', 'RECORDING'] }).notNull().default('TEXT'),
+  voicemailGreetingText: text("voicemail_greeting_text").notNull().default('We are unable to answer your call. Please leave a message after the tone.'),
+  voicemailGreetingAudioUrl: text("voicemail_greeting_audio_url"),
+  voicemailMaxSeconds: integer("voicemail_max_seconds").notNull().default(120),
+  voicemailTranscription: boolean("voicemail_transcription").notNull().default(false),
+  voicemailNotificationEmail: text("voicemail_notification_email"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Local Presence is deliberately approval-gated. Package geography is JSON so
 // operations can change coverage without a deploy (or hard-coded state list).
 export const localPresencePackages = pgTable("local_presence_packages", {
@@ -1913,6 +1934,7 @@ export const insertCommunicationSequenceSchema = createInsertSchema(communicatio
 export const insertCommunicationSequenceStepSchema = createInsertSchema(communicationSequenceSteps).omit({ id: true, createdAt: true });
 export const insertCommunicationSequenceEnrollmentSchema = createInsertSchema(communicationSequenceEnrollments).omit({ id: true, createdAt: true, updatedAt: true, messagesSent: true, messagesOpened: true, messagesClicked: true });
 export const insertVoipPhoneNumberSchema = createInsertSchema(voipPhoneNumbers).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertVoipSettingsSchema = createInsertSchema(voipSettings).omit({ updatedAt: true });
 export const insertVoipCallLogSchema = createInsertSchema(voipCallLogs).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertManualArrangementSchema = createInsertSchema(manualArrangements).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertManualPaymentSchema = createInsertSchema(manualPayments).omit({ id: true, createdAt: true, updatedAt: true });
@@ -2016,6 +2038,7 @@ export type CommunicationSequenceEnrollment = typeof communicationSequenceEnroll
 export type InsertCommunicationSequenceEnrollment = z.infer<typeof insertCommunicationSequenceEnrollmentSchema>;
 export type VoipPhoneNumber = typeof voipPhoneNumbers.$inferSelect;
 export type InsertVoipPhoneNumber = z.infer<typeof insertVoipPhoneNumberSchema>;
+export type VoipSettings = typeof voipSettings.$inferSelect;
 export type LocalPresencePackage = typeof localPresencePackages.$inferSelect;
 export type LocalPresenceRequest = typeof localPresenceRequests.$inferSelect;
 export type VoipCallLog = typeof voipCallLogs.$inferSelect;
