@@ -33,6 +33,7 @@ import {
   autoResponseUsage,
   messagingUsageEvents,
   voipPhoneNumbers,
+  voipSettings,
   localPresencePackages,
   localPresenceRequests,
   voiceVerificationStatuses,
@@ -58,7 +59,7 @@ import { smsService } from "./smsService";
 import { smaxService } from "./smaxService";
 import { dmpService } from "./dmpService";
 import { eventService } from "./eventService";
-import { uploadLogo } from "./r2Storage";
+import { uploadLogo, uploadVoiceAudio } from "./r2Storage";
 import externalApiRouter from "./external-api";
 import { registerWalletRoutes } from "./walletRoutes";
 import { registerChiamoRoutes } from "./chiamoRoutes";
@@ -159,6 +160,12 @@ const parkedVoipCalls = new Map<string, {
   parkedBy: string;
   parkedAt: string;
 }>();
+
+const voiceAudioUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => cb(null, ['audio/webm', 'audio/wav', 'audio/x-wav', 'audio/mpeg', 'audio/mp4'].includes(file.mimetype)),
+});
 
 // Multer configuration for document uploads - accepts PDFs, images, Word docs, etc.
 const documentUpload = multer({
@@ -24879,6 +24886,54 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // below under /api/voice and continue to use provider signature/account validation.
   app.use('/api/voip', authenticateUser, requireVoiceProduct);
 
+  const voiceSettingsUpdateSchema = z.object({
+    introEnabled: z.boolean().optional(),
+    introMode: z.enum(['TEXT', 'RECORDING']).optional(),
+    introText: z.string().trim().max(1000).optional(),
+    introAudioUrl: z.string().url().nullable().optional(),
+    holdMusic: z.enum(['CLASSIC', 'ACOUSTIC', 'AMBIENT', 'NONE', 'CUSTOM']).optional(),
+    holdMusicUrl: z.string().url().nullable().optional(),
+    parkMusic: z.enum(['SAME_AS_HOLD', 'CLASSIC', 'ACOUSTIC', 'AMBIENT', 'NONE', 'CUSTOM']).optional(),
+    parkMusicUrl: z.string().url().nullable().optional(),
+    voicemailEnabled: z.boolean().optional(),
+    voicemailGreetingMode: z.enum(['TEXT', 'RECORDING']).optional(),
+    voicemailGreetingText: z.string().trim().max(1000).optional(),
+    voicemailGreetingAudioUrl: z.string().url().nullable().optional(),
+    voicemailMaxSeconds: z.number().int().min(15).max(300).optional(),
+    voicemailTranscription: z.boolean().optional(),
+    voicemailNotificationEmail: z.string().email().or(z.literal('')).nullable().optional(),
+  });
+
+  app.get('/api/voip/settings', async (req, res) => {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    const [existing] = await db.select().from(voipSettings).where(eq(voipSettings.tenantId, user.tenantId));
+    if (existing) return res.json(existing);
+    const [created] = await db.insert(voipSettings).values({ tenantId: user.tenantId }).returning();
+    res.json(created);
+  });
+
+  app.patch('/api/voip/settings', requireOwner, async (req, res) => {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    const parsed = voiceSettingsUpdateSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: 'Invalid phone settings', errors: parsed.error.flatten() });
+    const [updated] = await db.insert(voipSettings).values({ tenantId: user.tenantId, ...parsed.data })
+      .onConflictDoUpdate({ target: voipSettings.tenantId, set: { ...parsed.data, updatedAt: new Date() } }).returning();
+    res.json(updated);
+  });
+
+  app.post('/api/voip/settings/audio/:kind', requireOwner, voiceAudioUpload.single('audio'), async (req, res) => {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    const kind = req.params.kind as 'intro' | 'voicemail' | 'hold' | 'park';
+    if (!['intro', 'voicemail', 'hold', 'park'].includes(kind)) return res.status(400).json({ message: 'Invalid audio type' });
+    if (!req.file) return res.status(400).json({ message: 'An MP3, WAV, M4A, or WebM audio file is required' });
+    const uploaded = await uploadVoiceAudio(req.file.buffer, user.tenantId, kind, req.file.mimetype);
+    if (!uploaded) return res.status(503).json({ message: 'Audio storage is not configured' });
+    res.status(201).json(uploaded);
+  });
+
   // Local Presence customer requests never call Twilio. Purchasing is only
   // reachable through the separately authorized Global Admin provision action.
   app.get('/api/voip/local-presence', async (req, res) => {
@@ -25868,11 +25923,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Using Twilio Client, we dial all agents with the tenant ID in their identity
       const VoiceResponse = (await import('twilio')).twiml.VoiceResponse;
       const twiml = new VoiceResponse();
+      const [phoneSettings] = await db.select().from(voipSettings).where(eq(voipSettings.tenantId, tenantId));
+
+      if (phoneSettings?.introEnabled) {
+        if (phoneSettings.introMode === 'RECORDING' && phoneSettings.introAudioUrl) twiml.play(phoneSettings.introAudioUrl);
+        else if (phoneSettings.introText) twiml.say({ voice: 'alice' }, phoneSettings.introText);
+      }
       
       if (voipAgents.length === 0) {
-        twiml.say('No agents are available to take your call. Please try again later.');
+        if (phoneSettings?.voicemailEnabled) {
+          if (phoneSettings.voicemailGreetingMode === 'RECORDING' && phoneSettings.voicemailGreetingAudioUrl) twiml.play(phoneSettings.voicemailGreetingAudioUrl);
+          else twiml.say({ voice: 'alice' }, phoneSettings.voicemailGreetingText);
+          twiml.record({ maxLength: phoneSettings.voicemailMaxSeconds, playBeep: true, recordingStatusCallback: '/api/voice/recording-status', transcribe: phoneSettings.voicemailTranscription });
+        } else {
+          twiml.say('No agents are available to take your call. Please try again later.');
+        }
       } else {
-        twiml.say({ voice: 'alice' }, 'Please hold while we connect you to the next available agent.');
+        if (!phoneSettings?.introEnabled) twiml.say({ voice: 'alice' }, 'Please hold while we connect you to the next available agent.');
         
         // Create a dial with simultaneous ring to all tenant's agents
         const dial = twiml.dial({
@@ -25913,8 +25980,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await voipStorage.updateVoipCallLog(callLog.id, { status: DialCallStatus, endedAt: new Date() });
         }
       }
-      
-      res.sendStatus(200);
+      const VoiceResponse = (await import('twilio')).twiml.VoiceResponse;
+      const response = new VoiceResponse();
+      if (callLog && ['no-answer', 'busy', 'failed'].includes(DialCallStatus)) {
+        const [settings] = await db.select().from(voipSettings).where(eq(voipSettings.tenantId, callLog.tenantId));
+        if (settings?.voicemailEnabled) {
+          if (settings.voicemailGreetingMode === 'RECORDING' && settings.voicemailGreetingAudioUrl) response.play(settings.voicemailGreetingAudioUrl);
+          else response.say({ voice: 'alice' }, settings?.voicemailGreetingText || 'We are unable to answer your call. Please leave a message after the tone.');
+          response.record({
+            maxLength: settings?.voicemailMaxSeconds || 120,
+            playBeep: true,
+            recordingStatusCallback: '/api/voice/recording-status',
+            transcribe: settings?.voicemailTranscription || false,
+          });
+        }
+      }
+      res.type('text/xml');
+      return res.send(response.toString());
     } catch (error) {
       console.error("Error handling dial status callback:", error);
       res.sendStatus(500);
