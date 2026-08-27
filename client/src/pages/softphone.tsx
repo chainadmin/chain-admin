@@ -76,7 +76,7 @@ export default function SoftphonePage() {
   const [isMuted, setIsMuted] = useState(false);
   const [isSpeakerOn, setIsSpeakerOn] = useState(true);
   const [agentStatus, setAgentStatus] = useState<"available" | "busy" | "away">("available");
-  const [callerIdMode, setCallerIdMode] = useState<"auto" | "private" | "office">("auto");
+  const [callerIdMode, setCallerIdMode] = useState<"auto" | "private" | "office" | "local_did">("auto");
   const [isOnHold, setIsOnHold] = useState(false);
   const [parkedCalls, setParkedCalls] = useState<ParkedCall[]>([]);
   const [activeCallerName, setActiveCallerName] = useState("");
@@ -84,6 +84,10 @@ export default function SoftphonePage() {
   const [inboundCall, setInboundCall] = useState<Call | null>(null);
   const [inboundCallerNumber, setInboundCallerNumber] = useState<string>("");
   const [inboundCallerName, setInboundCallerName] = useState<string>("");
+  const { data: voiceSettings } = useQuery<{ localPresenceEnabled: boolean }>({
+    queryKey: ["/api/voip/settings"],
+    enabled: isAuthenticated,
+  });
 
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
   const deviceRef = useRef<Device | null>(null);
@@ -364,10 +368,11 @@ export default function SoftphonePage() {
         const data = await response.json();
         throw new Error(data.message || "Failed to initiate call");
       }
-      const callInfo: { actualFromNumber: string; toNumber: string; isPrivate: boolean } = await response.json();
+      const callInfo: { actualFromNumber: string; toNumber: string; isPrivate: boolean; callerIdMode: "auto" | "private" | "office" | "local_did" } = await response.json();
 
       const connectParams: Record<string, string> = {
         To: callInfo.toNumber,
+        CallerIdMode: callInfo.callerIdMode,
       };
       if (!callInfo.isPrivate && callInfo.actualFromNumber) {
         connectParams.From = callInfo.actualFromNumber;
@@ -727,6 +732,15 @@ export default function SoftphonePage() {
                   {/* Caller ID Mode Toggles */}
                   <div className="flex items-center justify-center gap-2 pb-2 border-b border-gray-200 dark:border-gray-700">
                     <span className="text-xs text-gray-500 mr-2">Caller ID:</span>
+                    {voiceSettings?.localPresenceEnabled && <Button
+                      size="sm"
+                      variant={callerIdMode === "local_did" ? "default" : "outline"}
+                      onClick={() => setCallerIdMode(callerIdMode === "local_did" ? "auto" : "local_did")}
+                      className={`h-8 px-3 ${callerIdMode === "local_did" ? "bg-emerald-600 hover:bg-emerald-500" : ""}`}
+                    >
+                      <Phone className="h-3 w-3 mr-1" />
+                      Local DID
+                    </Button>}
                     <Button
                       size="sm"
                       variant={callerIdMode === "private" ? "default" : "outline"}
@@ -747,7 +761,7 @@ export default function SoftphonePage() {
                     </Button>
                     {callerIdMode !== "auto" && (
                       <span className="text-xs text-gray-400 ml-1">
-                        {callerIdMode === "private" ? "(Anonymous)" : "(Toll-Free)"}
+                        {callerIdMode === "private" ? "(Anonymous)" : callerIdMode === "office" ? "(Toll-Free)" : "(Matches destination area code)"}
                       </span>
                     )}
                   </div>

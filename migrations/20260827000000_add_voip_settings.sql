@@ -15,8 +15,11 @@ CREATE TABLE IF NOT EXISTS "voip_settings" (
   "voicemail_max_seconds" integer NOT NULL DEFAULT 120,
   "voicemail_transcription" boolean NOT NULL DEFAULT false,
   "voicemail_notification_email" text,
+  "local_presence_enabled" boolean NOT NULL DEFAULT false,
+  "local_presence_inbound_behavior" text NOT NULL DEFAULT 'VOICEMAIL',
   "updated_at" timestamp DEFAULT now(),
   CONSTRAINT "voip_settings_intro_mode_check" CHECK ("intro_mode" IN ('TEXT', 'RECORDING')),
   CONSTRAINT "voip_settings_voicemail_mode_check" CHECK ("voicemail_greeting_mode" IN ('TEXT', 'RECORDING')),
+  CONSTRAINT "voip_settings_local_presence_inbound_check" CHECK ("local_presence_inbound_behavior" IN ('RING', 'VOICEMAIL')),
   CONSTRAINT "voip_settings_voicemail_duration_check" CHECK ("voicemail_max_seconds" BETWEEN 15 AND 300)
 );

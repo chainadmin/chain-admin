@@ -24902,6 +24902,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     voicemailMaxSeconds: z.number().int().min(15).max(300).optional(),
     voicemailTranscription: z.boolean().optional(),
     voicemailNotificationEmail: z.string().email().or(z.literal('')).nullable().optional(),
+    localPresenceEnabled: z.boolean().optional(),
+    localPresenceInboundBehavior: z.enum(['RING', 'VOICEMAIL']).optional(),
   });
 
   app.get('/api/voip/settings', async (req, res) => {
@@ -25095,7 +25097,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Extract area code from phone number
-      const { extractAreaCode, formatPhoneE164 } = await import('./twilioVoiceService');
+      const { formatPhoneE164 } = await import('./twilioVoiceService');
       const formattedNumber = formatPhoneE164(phoneNumber);
       const areaCode = extractAreaCode(phoneNumber);
 
@@ -25711,7 +25713,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Validate callerIdMode - default to 'auto' if invalid
-      const validModes = ['auto', 'private', 'office'];
+      const validModes = ['auto', 'private', 'office', 'local_did'];
       const callerIdMode = validModes.includes(rawCallerIdMode) ? rawCallerIdMode : 'auto';
 
       const { extractAreaCode, formatPhoneE164 } = await import('./twilioVoiceService');
@@ -25731,15 +25733,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!fromPhoneNumber) {
           return res.status(400).json({ message: "No toll-free number configured. Add a toll-free number to use Office caller ID." });
         }
-      } else {
-        // Auto mode - find the best outbound caller ID based on the destination area code
-        const destinationAreaCode = extractAreaCode(toNumber);
-        fromPhoneNumber = await voipStorage.getVoipPhoneNumberByAreaCode(destinationAreaCode, user.tenantId);
-        
+      } else if (callerIdMode === 'local_did') {
+        const [settings] = await db.select().from(voipSettings).where(eq(voipSettings.tenantId, user.tenantId));
+        if (!settings?.localPresenceEnabled) return res.status(400).json({ message: 'Local DID caller ID is not enabled in phone settings.' });
+        const packages = await db.select({ geographies: localPresencePackages.geographies }).from(localPresencePackages);
+        const { selectLocalDidCallerId } = await import('./companyCallerId');
+        fromPhoneNumber = selectLocalDidCallerId(toNumber, allNumbers, packages.flatMap(pkg => pkg.geographies));
         if (!fromPhoneNumber) {
-          // Fall back to primary number
-          fromPhoneNumber = await voipStorage.getPrimaryVoipPhoneNumber(user.tenantId);
+          // No number exists anywhere in the destination state bucket. Continue
+          // with the established private-caller-ID path instead of showing an
+          // out-of-state local number.
+          isPrivate = true;
+          fromPhoneNumber = await voipStorage.getPrimaryVoipPhoneNumber(user.tenantId) || allNumbers.find(n => n.isActive);
         }
+      } else {
+        // Regular outbound calls use the primary company number.
+        fromPhoneNumber = await voipStorage.getPrimaryVoipPhoneNumber(user.tenantId);
 
         if (!fromPhoneNumber) {
           // Get any active number
@@ -25774,7 +25783,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         toNumber: formatPhoneE164(toNumber),
         status: 'initiated',
         isPrivate,
-        callerIdMode: callerIdMode || 'auto',
+        callerIdMode: isPrivate ? 'private' : callerIdMode || 'auto',
         message: isPrivate ? 'Call initiated with blocked caller ID.' : 'Call initiated. Use the Twilio Voice SDK to handle the call.'
       });
     } catch (error) {
@@ -25830,7 +25839,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/voice/outbound', validateTwilioVoiceSignature, async (req, res) => {
     try {
-      const { To, From, CallSid } = req.body;
+      const { To, From, CallSid, CallerIdMode } = req.body;
       // Twilio Client identities are tenantId_userId. Enforce Chiamo billing and
       // the single bundled phone-system switch again at the provider boundary.
       const clientTenantId = typeof From === 'string' && From.startsWith('client:') ? From.slice(7).split('_')[0] : null;
@@ -25849,9 +25858,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Never trust a client-supplied From as caller ID. Select only from this
       // authenticated identity's tenant inventory.
-      const destinationAreaCode = (await import('./twilioVoiceService')).extractAreaCode(To || '');
-      const callerId = await voipStorage.getVoipPhoneNumberByAreaCode(destinationAreaCode, clientTenantId)
-        || await voipStorage.getPrimaryVoipPhoneNumber(clientTenantId);
+      const numbers = await voipStorage.getVoipPhoneNumbersByTenant(clientTenantId);
+      const [settings] = await db.select().from(voipSettings).where(eq(voipSettings.tenantId, clientTenantId));
+      const packages = CallerIdMode === 'local_did' ? await db.select({ geographies: localPresencePackages.geographies }).from(localPresencePackages) : [];
+      const { selectLocalDidCallerId } = await import('./companyCallerId');
+      const callerId = CallerIdMode === 'local_did' && settings?.localPresenceEnabled
+        ? selectLocalDidCallerId(To || '', numbers, packages.flatMap(pkg => pkg.geographies))
+        : CallerIdMode === 'office'
+          ? numbers.find(number => number.numberType === 'TOLL_FREE' && number.isActive === true)
+          : await voipStorage.getPrimaryVoipPhoneNumber(clientTenantId);
       if (!callerId) {
         res.type('text/xml');
         return res.status(409).send('<Response><Say>No active company caller ID is configured.</Say><Hangup/></Response>');
@@ -25909,7 +25924,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Create call log for this inbound call
       const { formatPhoneE164 } = await import('./twilioVoiceService');
-      await voipStorage.createVoipCallLog({
+      const callLog = await voipStorage.createVoipCallLog({
         tenantId,
         agentCredentialId: null, // Will be updated when agent answers
         callSid: CallSid,
@@ -25930,8 +25945,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         else if (phoneSettings.introText) twiml.say({ voice: 'alice' }, phoneSettings.introText);
       }
       
-      if (voipAgents.length === 0) {
+      const inboundBehavior = ownedNumber.numberType === 'LOCAL_PRESENCE'
+        ? phoneSettings?.localPresenceInboundBehavior || 'VOICEMAIL'
+        : 'RING';
+      if (voipAgents.length === 0 || inboundBehavior === 'VOICEMAIL') {
         if (phoneSettings?.voicemailEnabled) {
+          await voipStorage.updateVoipCallLog(callLog.id, { metadata: { voicemail: true, inboundBehavior } });
           if (phoneSettings.voicemailGreetingMode === 'RECORDING' && phoneSettings.voicemailGreetingAudioUrl) twiml.play(phoneSettings.voicemailGreetingAudioUrl);
           else twiml.say({ voice: 'alice' }, phoneSettings.voicemailGreetingText);
           twiml.record({ maxLength: phoneSettings.voicemailMaxSeconds, playBeep: true, recordingStatusCallback: '/api/voice/recording-status', transcribe: phoneSettings.voicemailTranscription });
@@ -25985,6 +26004,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (callLog && ['no-answer', 'busy', 'failed'].includes(DialCallStatus)) {
         const [settings] = await db.select().from(voipSettings).where(eq(voipSettings.tenantId, callLog.tenantId));
         if (settings?.voicemailEnabled) {
+          await voipStorage.updateVoipCallLog(callLog.id, { metadata: { ...((callLog.metadata as any) || {}), voicemail: true } });
           if (settings.voicemailGreetingMode === 'RECORDING' && settings.voicemailGreetingAudioUrl) response.play(settings.voicemailGreetingAudioUrl);
           else response.say({ voice: 'alice' }, settings?.voicemailGreetingText || 'We are unable to answer your call. Please leave a message after the tone.');
           response.record({
@@ -26092,6 +26112,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error getting recording:", error);
       res.status(500).json({ message: "Failed to get recording" });
     }
+  });
+
+  // Voicemail is backed by the same tenant-isolated call log and protected
+  // recording endpoint used by Chain. Only administrators may browse the inbox.
+  app.get('/api/voip/voicemails', authenticateUser, requireOwner, async (req, res) => {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    const callLogs = await voipStorage.getVoipCallLogsByTenant(user.tenantId, 500, 0);
+    res.json(callLogs.filter(log =>
+      log.direction === 'inbound' &&
+      Boolean(log.recordingSid) &&
+      (log.metadata as any)?.voicemail === true
+    ));
   });
 
   // End an active call
