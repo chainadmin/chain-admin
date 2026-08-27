@@ -1168,6 +1168,8 @@ export const voipSettings = pgTable("voip_settings", {
   voicemailMaxSeconds: integer("voicemail_max_seconds").notNull().default(120),
   voicemailTranscription: boolean("voicemail_transcription").notNull().default(false),
   voicemailNotificationEmail: text("voicemail_notification_email"),
+  localPresenceEnabled: boolean("local_presence_enabled").notNull().default(false),
+  localPresenceInboundBehavior: text("local_presence_inbound_behavior", { enum: ['RING', 'VOICEMAIL'] }).notNull().default('VOICEMAIL'),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 

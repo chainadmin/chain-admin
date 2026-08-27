@@ -45,16 +45,20 @@ import {
   Headphones,
   PhoneMissed,
   BarChart3,
+  Voicemail,
 } from "lucide-react";
 import { format } from "date-fns";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { VoiceSettings } from "@/chiamo/chiamo";
+import { CustomerVoicemailInbox, VoipNumberRouting } from "@/components/voip-customer-features";
 
 interface VoipPhoneNumber {
   id: string;
   tenantId: string;
   phoneNumber: string;
   areaCode: string;
+  state: string | null;
+  routingConfiguration: { inboundBehavior?: 'RING' | 'VOICEMAIL' } | null;
   numberType: 'PRIMARY' | 'LOCAL_PRESENCE' | 'PORTED' | 'TOLL_FREE';
   friendlyName: string;
   twilioPhoneSid: string | null;
@@ -412,7 +416,7 @@ export default function PhonesPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid h-auto w-full grid-cols-2 gap-1 p-1 sm:grid-cols-6 lg:w-[820px]">
+          <TabsList className="grid h-auto w-full grid-cols-2 gap-1 p-1 sm:grid-cols-7 lg:w-[820px]">
             <TabsTrigger value="dashboard" className="flex items-center gap-2">
               <BarChart3 className="h-4 w-4" /> Dashboard
             </TabsTrigger>
@@ -430,6 +434,9 @@ export default function PhonesPage() {
             </TabsTrigger>
             <TabsTrigger value="local-presence" className="flex items-center gap-2">
               <Phone className="h-4 w-4" /> Local Presence
+            </TabsTrigger>
+            <TabsTrigger value="voicemail" className="flex items-center gap-2">
+              <Voicemail className="h-4 w-4" /> Voicemail
             </TabsTrigger>
           </TabsList>
 
@@ -708,6 +715,11 @@ export default function PhonesPage() {
                 )}
               </CardContent>
             </Card>
+            <div className="mt-6"><VoipNumberRouting numbers={phoneNumbers} /></div>
+          </TabsContent>
+
+          <TabsContent value="voicemail" className="mt-6">
+            <CustomerVoicemailInbox />
           </TabsContent>
 
           {/* Users Tab */}
