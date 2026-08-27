@@ -25080,6 +25080,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // A business can use local-presence numbers for outbound caller ID without
+  // making every number ring the team. The setting remains tenant-scoped and
+  // does not alter the shared provider/backend architecture.
+  app.patch('/api/voip/phone-numbers/:id/inbound-routing', authenticateUser, requireOwner, async (req, res) => {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    const parsed = z.object({ behavior: z.enum(['RING', 'VOICEMAIL']) }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: 'Inbound behavior must be RING or VOICEMAIL' });
+    const number = await voipStorage.getVoipPhoneNumberById(req.params.id, user.tenantId);
+    if (!number) return res.status(404).json({ message: 'Phone number not found' });
+    const routing = typeof number.routingConfiguration === 'object' && number.routingConfiguration
+      ? number.routingConfiguration as Record<string, unknown> : {};
+    const updated = await voipStorage.updateVoipPhoneNumber(number.id, user.tenantId, {
+      routingConfiguration: { ...routing, inboundBehavior: parsed.data.behavior },
+    });
+    res.json(updated);
+  });
+
   // Add a new VoIP phone number
   app.post('/api/voip/phone-numbers', authenticateUser, requireOwner, async (req, res) => {
     try {
@@ -25909,7 +25927,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Create call log for this inbound call
       const { formatPhoneE164 } = await import('./twilioVoiceService');
-      await voipStorage.createVoipCallLog({
+      const callLog = await voipStorage.createVoipCallLog({
         tenantId,
         agentCredentialId: null, // Will be updated when agent answers
         callSid: CallSid,
@@ -25930,8 +25948,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         else if (phoneSettings.introText) twiml.say({ voice: 'alice' }, phoneSettings.introText);
       }
       
-      if (voipAgents.length === 0) {
+      const inboundBehavior = (ownedNumber.routingConfiguration as any)?.inboundBehavior || 'RING';
+      if (voipAgents.length === 0 || inboundBehavior === 'VOICEMAIL') {
         if (phoneSettings?.voicemailEnabled) {
+          await voipStorage.updateVoipCallLog(callLog.id, { metadata: { voicemail: true, inboundBehavior } });
           if (phoneSettings.voicemailGreetingMode === 'RECORDING' && phoneSettings.voicemailGreetingAudioUrl) twiml.play(phoneSettings.voicemailGreetingAudioUrl);
           else twiml.say({ voice: 'alice' }, phoneSettings.voicemailGreetingText);
           twiml.record({ maxLength: phoneSettings.voicemailMaxSeconds, playBeep: true, recordingStatusCallback: '/api/voice/recording-status', transcribe: phoneSettings.voicemailTranscription });
@@ -25985,6 +26005,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (callLog && ['no-answer', 'busy', 'failed'].includes(DialCallStatus)) {
         const [settings] = await db.select().from(voipSettings).where(eq(voipSettings.tenantId, callLog.tenantId));
         if (settings?.voicemailEnabled) {
+          await voipStorage.updateVoipCallLog(callLog.id, { metadata: { ...((callLog.metadata as any) || {}), voicemail: true } });
           if (settings.voicemailGreetingMode === 'RECORDING' && settings.voicemailGreetingAudioUrl) response.play(settings.voicemailGreetingAudioUrl);
           else response.say({ voice: 'alice' }, settings?.voicemailGreetingText || 'We are unable to answer your call. Please leave a message after the tone.');
           response.record({
@@ -26092,6 +26113,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.error("Error getting recording:", error);
       res.status(500).json({ message: "Failed to get recording" });
     }
+  });
+
+  // Voicemail is backed by the same tenant-isolated call log and protected
+  // recording endpoint used by Chain. Only administrators may browse the inbox.
+  app.get('/api/voip/voicemails', authenticateUser, requireOwner, async (req, res) => {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    const callLogs = await voipStorage.getVoipCallLogsByTenant(user.tenantId, 500, 0);
+    res.json(callLogs.filter(log =>
+      log.direction === 'inbound' &&
+      Boolean(log.recordingSid) &&
+      (log.metadata as any)?.voicemail === true
+    ));
   });
 
   // End an active call
