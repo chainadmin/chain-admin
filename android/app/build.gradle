@@ -1,5 +1,12 @@
 apply plugin: 'com.android.application'
 
+if (rootProject.ext.targetSdkVersion < rootProject.ext.minimumTargetSdkVersion) {
+    throw new GradleException(
+        "Customer app target SDK ${rootProject.ext.targetSdkVersion} is below the required API " +
+        "${rootProject.ext.minimumTargetSdkVersion}."
+    )
+}
+
 android {
     namespace "com.chainsoftware.platform"
     compileSdk rootProject.ext.compileSdkVersion
