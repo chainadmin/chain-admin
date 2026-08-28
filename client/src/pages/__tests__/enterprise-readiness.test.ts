@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { activeSeatUsage, canActivateUser, processCursorBatches } from '../../../../shared/enterpriseCapacity';
 import { buildConsumersPageUrl } from '../../hooks/use-paginated-consumers';
@@ -68,4 +69,14 @@ test('consumer list requests always opt into the paginated response contract', (
   assert.equal(parsed.searchParams.get('cursor'), '00000000-0000-0000-0000-000000000100');
   assert.equal(parsed.searchParams.get('search'), 'Jane@example.com');
   assert.equal(parsed.searchParams.get('registration'), 'registered');
+});
+
+test('SMS sending fails closed instead of using global Twilio configuration', () => {
+  const smsServiceSource = readFileSync(
+    new URL('../../../../server/smsService.ts', import.meta.url),
+    'utf8',
+  );
+
+  assert.doesNotMatch(smsServiceSource, /process\.env\.TWILIO_(?:ACCOUNT_SID|AUTH_TOKEN|PHONE_NUMBER)/);
+  assert.doesNotMatch(smsServiceSource, /clients\.get\(['"]default['"]\)/);
 });

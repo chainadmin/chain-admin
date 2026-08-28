@@ -18,7 +18,7 @@ Accounts, Payments, Billing, payment plans, merchant settings, payment arrangeme
 
 The owner is presented as the **Primary Administrator**. Municipal user roles are mapped onto the existing permission-compatible roles: Administrator (`manager`), Communications Staff (`agent`), Viewer, and Contact Importer (`uploader`). Password reset initiation emails a one-hour reset link; passwords remain hashed and are never returned to administrators.
 
-Each user email is used for account identification, administrative display, and password-reset delivery. It does not have to belong to a particular municipal domain. SMS is available only after the municipality saves its own Twilio account SID, auth token, and sending number; municipal SMS never falls back to the platform or another tenant's Twilio configuration.
+Each user email is used for account identification, administrative display, and password-reset delivery. It does not have to belong to a particular municipal domain. SMS is available only after the tenant saves its own Twilio account SID, auth token, and sending number. This isolation applies to every company and tenant: SMS never falls back to the platform or another tenant's Twilio configuration.
 
 ## Public experience
 
