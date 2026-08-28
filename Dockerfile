@@ -12,6 +12,14 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
+# Replit writes internal tarball URLs with an extra /npm/ path into the
+# lockfile. Normalize those URLs only inside the image so public builders can
+# install the same locked versions without changing the repository lockfile.
+RUN sed -i \
+    's#http://package-firewall.replit.local/npm/#https://registry.npmjs.org/#g' \
+    package-lock.json \
+    && ! grep -q 'package-firewall.replit.local' package-lock.json
+
 # Railway may inject production-mode npm settings during image builds. Vite,
 # esbuild, and TypeScript are build-time dev dependencies, so force npm into
 # build mode and verify the required executables exist before continuing.
@@ -19,7 +27,6 @@ ENV NODE_ENV=development
 ENV NPM_CONFIG_PRODUCTION=false
 ENV NPM_CONFIG_OMIT=
 RUN npm_config_registry=https://registry.npmjs.org \
-    npm_config_replace_registry_host=always \
     npm ci --include=dev \
     && test -x node_modules/.bin/vite \
     && test -x node_modules/.bin/esbuild
