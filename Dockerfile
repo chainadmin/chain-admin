@@ -12,8 +12,10 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install all dependencies (including dev dependencies needed for build)
-RUN npm ci
+# Railway may inject production-mode npm settings during image builds. Vite,
+# esbuild, and TypeScript are build-time dev dependencies, so include them
+# explicitly before compiling the production bundle.
+RUN npm ci --include=dev
 
 # Copy all application files
 COPY . .
