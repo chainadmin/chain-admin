@@ -284,7 +284,7 @@ function Router() {
         <Route path="/:rest*" component={ChiamoLanding} />
       </Switch>;
     }
-    const chiamoRoutes = ["/dashboard","/phone","/messages","/calls","/call-logs","/voicemail","/recordings","/numbers","/users","/settings","/plan-billing","/more-services"];
+    const chiamoRoutes = ["/dashboard","/phone","/messages","/calls","/call-logs","/voicemail","/recordings","/numbers","/users","/settings","/plan-billing","/help","/more-services"];
     return <Switch>
       <Route path="/softphone" component={Softphone} />
       {chiamoRoutes.map(path => <Route key={path} path={path}>{() => <ChiamoShell page={path} />}</Route>)}
