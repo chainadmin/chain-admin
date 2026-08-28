@@ -18,7 +18,9 @@ COPY package*.json ./
 ENV NODE_ENV=development
 ENV NPM_CONFIG_PRODUCTION=false
 ENV NPM_CONFIG_OMIT=
-RUN npm ci --include=dev \
+RUN npm_config_registry=https://registry.npmjs.org \
+    npm_config_replace_registry_host=always \
+    npm ci --include=dev \
     && test -x node_modules/.bin/vite \
     && test -x node_modules/.bin/esbuild
 
