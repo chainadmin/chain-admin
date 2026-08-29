@@ -1205,7 +1205,14 @@ export default function GlobalAdmin() {
 
   // Show admin authentication form if not authenticated
   if (!isAdminAuthenticated) {
-    return <AdminAuth onAuthenticated={() => setIsAdminAuthenticated(true)} />;
+    return (
+      <AdminAuth
+        onAuthenticated={() => {
+          queryClient.removeQueries({ queryKey: ['/api/admin/tenants'] });
+          setIsAdminAuthenticated(true);
+        }}
+      />
+    );
   }
 
   return (
@@ -3134,7 +3141,7 @@ export default function GlobalAdmin() {
               {[['paid','Paid'],['trial','Trial'],['unpaid','Unpaid'],['past_due','Past Due'],['suspended','Suspended'],['all','All']].map(([value,label]) => <Button key={value} role="tab" aria-selected={companyStatus === value} variant={companyStatus === value ? "default" : "outline"} size="sm" className="shrink-0" onClick={() => { setCompanyStatus(value); setCompanyPage(1); }}>{label} ({companyCounts[value as keyof typeof companyCounts]})</Button>)}
             </div>
           </div>
-          <div className="max-h-[68vh] overflow-y-auto p-6">
+          <div className="p-6">
             {tenantsLoading ? (
               <div className="space-y-4">
                 {[...Array(3)].map((_, i) => (
@@ -3171,7 +3178,8 @@ export default function GlobalAdmin() {
               </div>
             ) : (
               <div className="space-y-4">
-                {pagedCompanies.map((tenant: any) => (
+                <div className="max-h-[68vh] space-y-4 overflow-y-auto pr-2">
+                  {pagedCompanies.map((tenant: any) => (
                   <div key={tenant.id} className="border border-white/10 rounded-lg p-4 bg-white/[0.02]" data-testid={`card-tenant-${tenant.id}`}>
                     {/* Header Section */}
                     <div className="flex items-start justify-between mb-3">
@@ -3579,15 +3587,16 @@ export default function GlobalAdmin() {
                       </div>
                     </div>
                   </div>
-                ))}
+                  ))}
                 
-                {pagedCompanies.length === 0 && (
-                  <div className="text-center py-8">
-                    <Building2 className="h-12 w-12 text-blue-300/40 mx-auto mb-4" />
-                    <p className="text-blue-100/60">No agencies registered yet</p>
-                  </div>
-                )}
-                <div className="sticky bottom-0 flex items-center justify-between border-t border-white/10 bg-[#111a30]/95 px-2 py-3 text-sm text-blue-100/70 backdrop-blur">
+                  {pagedCompanies.length === 0 && (
+                    <div className="text-center py-8">
+                      <Building2 className="h-12 w-12 text-blue-300/40 mx-auto mb-4" />
+                      <p className="text-blue-100/60">No agencies registered yet</p>
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center justify-between border-t border-white/10 px-2 pt-3 text-sm text-blue-100/70">
                   <span>{filteredCompanies.length} companies · Page {companyPage} of {companyPageCount}</span>
                   <div className="flex gap-2"><Button variant="outline" size="sm" disabled={companyPage === 1} onClick={() => setCompanyPage(page => Math.max(1, page - 1))}><ChevronLeft className="h-4 w-4"/>Previous</Button><Button variant="outline" size="sm" disabled={companyPage === companyPageCount} onClick={() => setCompanyPage(page => Math.min(companyPageCount, page + 1))}>Next<ChevronRight className="h-4 w-4"/></Button></div>
                 </div>
