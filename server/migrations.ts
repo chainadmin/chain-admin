@@ -2295,6 +2295,214 @@ export async function runMigrations() {
     `);
     await client.query(`CREATE INDEX IF NOT EXISTS voip_voicemails_tenant_created_idx ON voip_voicemails(tenant_id, created_at DESC)`);
     await client.query(`CREATE INDEX IF NOT EXISTS voip_suspended_calls_active_tenant_idx ON voip_suspended_calls(tenant_id, kind, status, expires_at)`);
+
+    // Railway runs this startup migrator independently of the timestamped SQL
+    // migrations. Keep the Chiamo commercial and communications tables
+    // available on both new and existing databases without replacing any data.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS chiamo_leads (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        first_name TEXT NOT NULL,
+        last_name TEXT NOT NULL,
+        business_name TEXT NOT NULL,
+        business_email TEXT NOT NULL,
+        business_phone TEXT NOT NULL,
+        employee_count TEXT,
+        phone_users_needed INTEGER NOT NULL,
+        current_phone_provider TEXT,
+        new_numbers_needed INTEGER,
+        existing_numbers_to_port TEXT,
+        features_needed TEXT,
+        plan_interest TEXT NOT NULL,
+        texting_interest BOOLEAN NOT NULL DEFAULT FALSE,
+        contact_preference TEXT,
+        best_contact_time TEXT,
+        additional_information TEXT,
+        status TEXT NOT NULL DEFAULT 'NEW',
+        assigned_to TEXT,
+        internal_notes TEXT,
+        contact_history JSONB NOT NULL DEFAULT '[]'::jsonb,
+        last_contact_date TIMESTAMP,
+        next_follow_up_date DATE,
+        notification_status TEXT NOT NULL DEFAULT 'PENDING',
+        notification_error TEXT,
+        notification_sent_at TIMESTAMP,
+        converted_tenant_id UUID REFERENCES tenants(id)
+      )
+    `);
+    await client.query(`
+      ALTER TABLE chiamo_leads
+        ADD COLUMN IF NOT EXISTS last_contact_date TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS next_follow_up_date DATE,
+        ADD COLUMN IF NOT EXISTS notification_status TEXT NOT NULL DEFAULT 'PENDING',
+        ADD COLUMN IF NOT EXISTS notification_error TEXT,
+        ADD COLUMN IF NOT EXISTS notification_sent_at TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS converted_tenant_id UUID REFERENCES tenants(id)
+    `);
+    await client.query(`
+      UPDATE chiamo_leads
+      SET status = REPLACE(status, ' ', '_')
+      WHERE status IN ('SETUP IN PROGRESS', 'NOT INTERESTED')
+    `);
+    await client.query(`
+      ALTER TABLE chiamo_leads DROP CONSTRAINT IF EXISTS chiamo_lead_status;
+      ALTER TABLE chiamo_leads ADD CONSTRAINT chiamo_lead_status
+        CHECK (status IN ('NEW','CONTACTED','QUALIFIED','SETUP_IN_PROGRESS','CONVERTED','NOT_INTERESTED','CLOSED'));
+      ALTER TABLE chiamo_leads ALTER COLUMN status SET DEFAULT 'NEW'
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS chiamo_leads_status_idx ON chiamo_leads(status)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS chiamo_leads_follow_up_idx ON chiamo_leads(next_follow_up_date)`);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS chiamo_subscriptions (
+        tenant_id UUID PRIMARY KEY REFERENCES tenants(id),
+        plan_id TEXT NOT NULL,
+        custom_base_price_cents INTEGER,
+        included_users INTEGER,
+        additional_user_price_cents INTEGER,
+        additional_number_price_cents INTEGER NOT NULL DEFAULT 0,
+        sms_addon_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+        sms_allowance INTEGER NOT NULL DEFAULT 3500,
+        sms_overage_micros INTEGER NOT NULL DEFAULT 0,
+        custom_charges JSONB NOT NULL DEFAULT '[]'::jsonb,
+        discounts JSONB NOT NULL DEFAULT '[]'::jsonb,
+        billing_status TEXT NOT NULL DEFAULT 'PENDING_SETUP',
+        start_date DATE,
+        next_billing_date DATE,
+        notes TEXT,
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      ALTER TABLE chiamo_subscriptions
+        ADD COLUMN IF NOT EXISTS start_date DATE
+    `);
+    await client.query(`
+      UPDATE chiamo_subscriptions
+      SET billing_status = UPPER(REPLACE(billing_status, ' ', '_'))
+      WHERE UPPER(REPLACE(billing_status, ' ', '_'))
+        IN ('PENDING','PENDING_SETUP','ACTIVE','PAST_DUE','SUSPENDED','CANCELLED')
+    `);
+    await client.query(`
+      UPDATE chiamo_subscriptions
+      SET billing_status = 'PENDING_SETUP'
+      WHERE billing_status = 'PENDING'
+    `);
+    await client.query(`
+      ALTER TABLE chiamo_subscriptions ALTER COLUMN billing_status SET DEFAULT 'PENDING_SETUP'
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS chiamo_service_configurations (
+        tenant_id UUID PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+        account_active BOOLEAN NOT NULL DEFAULT FALSE,
+        customer_login_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+        voice_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+        inbound_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+        outbound_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+        recording_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+        voicemail_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+        routing_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+        ivr_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+        sms_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+        sms_status TEXT NOT NULL DEFAULT 'NOT_REQUESTED',
+        setup_status TEXT NOT NULL DEFAULT 'NOT_STARTED',
+        setup_checklist JSONB NOT NULL DEFAULT '{}'::jsonb,
+        test_statuses JSONB NOT NULL DEFAULT '{"outbound":"NOT_TESTED","inbound":"NOT_TESTED","recording":"NOT_TESTED","voicemail":"NOT_TESTED","smsSending":"NOT_TESTED","smsReceiving":"NOT_TESTED"}'::jsonb,
+        provider_notes TEXT,
+        internal_notes TEXT,
+        invitation_sent_at TIMESTAMP,
+        login_confirmed_at TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS chiamo_usage_settings (
+        id INTEGER PRIMARY KEY DEFAULT 1,
+        elevated_minutes INTEGER NOT NULL DEFAULT 3000,
+        high_minutes INTEGER NOT NULL DEFAULT 6000,
+        review_minutes INTEGER NOT NULL DEFAULT 10000,
+        voice_cost_per_minute_micros INTEGER NOT NULL DEFAULT 14000,
+        number_cost_cents INTEGER NOT NULL DEFAULT 115,
+        recording_cost_per_minute_micros INTEGER NOT NULL DEFAULT 2500,
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      ALTER TABLE chiamo_service_configurations DROP CONSTRAINT IF EXISTS chiamo_sms_status;
+      ALTER TABLE chiamo_service_configurations ADD CONSTRAINT chiamo_sms_status
+        CHECK (sms_status IN ('NOT_REQUESTED','REQUESTED','REGISTRATION_REQUIRED','REGISTRATION_PENDING','ACTIVE','FAILED','SUSPENDED'))
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS chiamo_service_setup_idx ON chiamo_service_configurations(setup_status)`);
+    await client.query(`
+      INSERT INTO chiamo_usage_settings (id)
+      VALUES (1)
+      ON CONFLICT (id) DO NOTHING
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS local_presence_packages (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        code TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL,
+        customer_monthly_price_cents INTEGER NOT NULL,
+        geographies JSONB NOT NULL,
+        status TEXT NOT NULL DEFAULT 'ACTIVE',
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS local_presence_requests (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+        product TEXT NOT NULL,
+        requested_package_id UUID NOT NULL REFERENCES local_presence_packages(id),
+        requested_at TIMESTAMP DEFAULT NOW(),
+        requested_by TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'REQUESTED',
+        coverage_required JSONB,
+        estimated_did_count INTEGER,
+        estimated_provider_cost_cents INTEGER,
+        customer_price_cents INTEGER,
+        approved_by TEXT,
+        approved_at TIMESTAMP,
+        provisioning_started_at TIMESTAMP,
+        completed_at TIMESTAMP,
+        notes TEXT,
+        release_review_required BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS local_presence_requests_tenant_status_idx
+      ON local_presence_requests (tenant_id, status)
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS voice_verification_statuses (
+        tenant_id UUID PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+        subaccount TEXT NOT NULL DEFAULT 'NOT VERIFIED',
+        primary_did TEXT NOT NULL DEFAULT 'NOT VERIFIED',
+        outbound_call TEXT NOT NULL DEFAULT 'NOT TESTED',
+        inbound_call TEXT NOT NULL DEFAULT 'NOT TESTED',
+        webhook_signature_validation TEXT NOT NULL DEFAULT 'NOT TESTED',
+        callback_routing TEXT NOT NULL DEFAULT 'NOT TESTED',
+        local_presence_caller_id TEXT NOT NULL DEFAULT 'NOT TESTED',
+        sms_regression TEXT NOT NULL DEFAULT 'NOT TESTED',
+        tenant_isolation TEXT NOT NULL DEFAULT 'NOT TESTED',
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      INSERT INTO local_presence_packages
+        (code, name, description, customer_monthly_price_cents, geographies, status)
+      VALUES
+        ('REGIONAL', 'Regional', 'Configured regional local-number coverage', 0, '[]'::jsonb, 'DRAFT'),
+        ('NATIONAL', 'National', 'Configured national local-number coverage', 0, '[]'::jsonb, 'DRAFT'),
+        ('NATIONAL_PLUS', 'National Plus', 'Configured enhanced national local-number coverage', 0, '[]'::jsonb, 'DRAFT')
+      ON CONFLICT (code) DO NOTHING
+    `);
     console.log('✅ Database migrations completed successfully');
   } catch (error: any) {
     if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {

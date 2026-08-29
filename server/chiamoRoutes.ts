@@ -1,4 +1,4 @@
-import type { Express, RequestHandler } from "express";
+import type { Express, RequestHandler, Response } from "express";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
@@ -26,6 +26,13 @@ async function sendLeadNotification(lead: typeof chiamoLeads.$inferSelect) {
 }
 
 export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandler) {
+  const sendAdminLoadError = (res: Response, area: string, error: unknown) => {
+    console.error(`Failed to load Chiamo ${area}:`, error);
+    return res.status(500).json({
+      message: `Chiamo ${area} could not be loaded. Your Global Admin session is still valid.`,
+      code: "CHIAMO_DATA_UNAVAILABLE",
+    });
+  };
   app.get("/api/chiamo/plans", (_req, res) => res.json(chiamoPlans));
   app.post("/api/chiamo/leads", async (req, res) => {
     const parsed = leadInput.safeParse(req.body);
@@ -74,7 +81,13 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
     res.status(202).json({ message: "Request received. Texting will not be activated until setup and compliance review are complete." });
   });
 
-  app.get("/api/admin/chiamo/leads", isPlatformAdmin, async (_req, res) => res.json(await db.select().from(chiamoLeads).orderBy(desc(chiamoLeads.createdAt))));
+  app.get("/api/admin/chiamo/leads", isPlatformAdmin, async (_req, res) => {
+    try {
+      res.json(await db.select().from(chiamoLeads).orderBy(desc(chiamoLeads.createdAt)));
+    } catch (error) {
+      sendAdminLoadError(res, "leads", error);
+    }
+  });
   app.patch("/api/admin/chiamo/leads/:id", isPlatformAdmin, async (req, res) => {
     const update = z.object({ status: z.enum(chiamoLeadStatuses).optional(), assignedTo: z.string().max(200).nullable().optional(), internalNotes: z.string().max(10000).nullable().optional(), contactHistory: z.array(z.object({ at: z.string(), note: z.string().max(2000) })).optional(), lastContactDate: z.coerce.date().nullable().optional(), nextFollowUpDate: z.string().nullable().optional() }).parse(req.body);
     const [lead] = await db.update(chiamoLeads).set(update).where(eq(chiamoLeads.id, req.params.id)).returning();
@@ -137,8 +150,9 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
     res.status(result.success ? 200 : 502).json(updated);
   });
   app.get("/api/admin/chiamo/customers", isPlatformAdmin, async (_req, res) => {
-    const rows = await db.select({ tenant: tenants, subscription: chiamoSubscriptions, service: chiamoServiceConfigurations }).from(tenants).leftJoin(chiamoSubscriptions, eq(chiamoSubscriptions.tenantId, tenants.id)).leftJoin(chiamoServiceConfigurations, eq(chiamoServiceConfigurations.tenantId, tenants.id)).where(eq(tenants.chiamoConnectEnabled, true)).orderBy(desc(tenants.createdAt));
-    const enriched = await Promise.all(rows.map(async row => {
+    try {
+      const rows = await db.select({ tenant: tenants, subscription: chiamoSubscriptions, service: chiamoServiceConfigurations }).from(tenants).leftJoin(chiamoSubscriptions, eq(chiamoSubscriptions.tenantId, tenants.id)).leftJoin(chiamoServiceConfigurations, eq(chiamoServiceConfigurations.tenantId, tenants.id)).where(eq(tenants.chiamoConnectEnabled, true)).orderBy(desc(tenants.createdAt));
+      const enriched = await Promise.all(rows.map(async row => {
       const [[{ users }], [{ numbers }], [{ buckets }], [voiceSettings], [{ voicemailTotal, voicemailUnread }]] = await Promise.all([
         db.select({ users: sql<number>`count(*)::int` }).from(agencyCredentials).where(and(eq(agencyCredentials.tenantId,row.tenant.id),eq(agencyCredentials.isActive,true))),
         db.select({ numbers: sql<number>`count(*)::int` }).from(voipPhoneNumbers).where(and(eq(voipPhoneNumbers.tenantId,row.tenant.id),eq(voipPhoneNumbers.isActive,true))),
@@ -165,13 +179,20 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
           voicemailUnread,
         },
       };
-    }));
-    res.json(enriched);
+      }));
+      res.json(enriched);
+    } catch (error) {
+      sendAdminLoadError(res, "customers", error);
+    }
   });
   app.get("/api/admin/chiamo/dashboard", isPlatformAdmin, async (_req, res) => {
-    const leads = await db.select().from(chiamoLeads).orderBy(desc(chiamoLeads.createdAt));
-    const customers = await db.select({ tenant: tenants, service: chiamoServiceConfigurations, subscription: chiamoSubscriptions }).from(tenants).leftJoin(chiamoServiceConfigurations,eq(chiamoServiceConfigurations.tenantId,tenants.id)).leftJoin(chiamoSubscriptions,eq(chiamoSubscriptions.tenantId,tenants.id)).where(eq(tenants.chiamoConnectEnabled,true));
-    res.json({ counts: { newLeads: leads.filter(x=>x.status==='NEW').length, awaitingContact: leads.filter(x=>['NEW','CONTACTED'].includes(x.status)).length, qualified: leads.filter(x=>x.status==='QUALIFIED').length, setupInProgress: customers.filter(x=>x.service?.setupStatus!=='COMPLETE').length, activeCustomers: customers.filter(x=>x.service?.accountActive).length, awaitingNumber: customers.filter(x=>!x.service?.setupChecklist?.phoneNumberAssigned).length, awaitingSms: customers.filter(x=>x.subscription?.smsAddonEnabled&&!x.service?.smsEnabled).length, billingIssues: customers.filter(x=>['PAST_DUE','SUSPENDED'].includes(x.subscription?.billingStatus||'')).length }, recentActivity: leads.slice(0,10) });
+    try {
+      const leads = await db.select().from(chiamoLeads).orderBy(desc(chiamoLeads.createdAt));
+      const customers = await db.select({ tenant: tenants, service: chiamoServiceConfigurations, subscription: chiamoSubscriptions }).from(tenants).leftJoin(chiamoServiceConfigurations,eq(chiamoServiceConfigurations.tenantId,tenants.id)).leftJoin(chiamoSubscriptions,eq(chiamoSubscriptions.tenantId,tenants.id)).where(eq(tenants.chiamoConnectEnabled,true));
+      res.json({ counts: { newLeads: leads.filter(x=>x.status==='NEW').length, awaitingContact: leads.filter(x=>['NEW','CONTACTED'].includes(x.status)).length, qualified: leads.filter(x=>x.status==='QUALIFIED').length, setupInProgress: customers.filter(x=>x.service?.setupStatus!=='COMPLETE').length, activeCustomers: customers.filter(x=>x.service?.accountActive).length, awaitingNumber: customers.filter(x=>!x.service?.setupChecklist?.phoneNumberAssigned).length, awaitingSms: customers.filter(x=>x.subscription?.smsAddonEnabled&&!x.service?.smsEnabled).length, billingIssues: customers.filter(x=>['PAST_DUE','SUSPENDED'].includes(x.subscription?.billingStatus||'')).length }, recentActivity: leads.slice(0,10) });
+    } catch (error) {
+      sendAdminLoadError(res, "dashboard", error);
+    }
   });
   app.put("/api/admin/chiamo/customers/:tenantId/services", isPlatformAdmin, async (req, res) => {
     const value = z.object({ accountActive:z.boolean().optional(), customerLoginEnabled:z.boolean().optional(), voiceEnabled:z.boolean().optional(), smsEnabled:z.boolean().optional(), smsStatus:z.enum(chiamoSmsStatuses).optional(), setupStatus:z.enum(['NOT_STARTED','IN_PROGRESS','COMPLETE']).optional(), setupChecklist:z.record(z.boolean()).optional(), testStatuses:z.record(z.enum(chiamoTestStatuses)).optional(), providerNotes:z.string().max(10000).nullable().optional(), internalNotes:z.string().max(10000).nullable().optional() }).parse(req.body);
@@ -187,13 +208,18 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
     res.json(config);
   });
   app.get("/api/admin/chiamo/usage", isPlatformAdmin, async (_req, res) => {
-    const [settings] = await db.select().from(chiamoUsageSettings).where(eq(chiamoUsageSettings.id, 1));
-    const monthStart = new Date(); monthStart.setUTCDate(1); monthStart.setUTCHours(0, 0, 0, 0);
-    const rows = await db.select({ tenantId: tenants.id, organization: tenants.name, plan: chiamoSubscriptions.planId, revenue: chiamoSubscriptions.customBasePriceCents,
+    try {
+      const [settings] = await db.select().from(chiamoUsageSettings).where(eq(chiamoUsageSettings.id, 1));
+      if (!settings) throw new Error("Chiamo usage settings are not initialized");
+      const monthStart = new Date(); monthStart.setUTCDate(1); monthStart.setUTCHours(0, 0, 0, 0);
+      const rows = await db.select({ tenantId: tenants.id, organization: tenants.name, plan: chiamoSubscriptions.planId, revenue: chiamoSubscriptions.customBasePriceCents,
       users: sql<number>`count(distinct ${agencyCredentials.id})::int`, phoneNumbers: sql<number>`count(distinct ${voipPhoneNumbers.id})::int`,
       inboundSeconds: sql<number>`coalesce(sum(case when ${voipCallLogs.direction} = 'inbound' then ${voipCallLogs.duration} else 0 end),0)::int`, outboundSeconds: sql<number>`coalesce(sum(case when ${voipCallLogs.direction} = 'outbound' then ${voipCallLogs.duration} else 0 end),0)::int`,
       recordingSeconds: sql<number>`coalesce(sum(case when ${voipCallLogs.recordingSid} is not null then ${voipCallLogs.duration} else 0 end),0)::int` })
       .from(tenants).leftJoin(chiamoSubscriptions, eq(chiamoSubscriptions.tenantId, tenants.id)).leftJoin(agencyCredentials, eq(agencyCredentials.tenantId, tenants.id)).leftJoin(voipPhoneNumbers, eq(voipPhoneNumbers.tenantId, tenants.id)).leftJoin(voipCallLogs, and(eq(voipCallLogs.tenantId, tenants.id), gte(voipCallLogs.createdAt, monthStart))).where(eq(tenants.chiamoConnectEnabled, true)).groupBy(tenants.id, chiamoSubscriptions.planId, chiamoSubscriptions.customBasePriceCents);
-    res.json({ settings, organizations: rows.map(row => { const minutes = Math.ceil((row.inboundSeconds + row.outboundSeconds) / 60); const level = minutes >= settings.reviewMinutes ? "REVIEW REQUIRED" : minutes >= settings.highMinutes ? "HIGH" : minutes >= settings.elevatedMinutes ? "ELEVATED" : "NORMAL"; const providerCostCents = Math.ceil(minutes * settings.voiceCostPerMinuteMicros / 10000); const numberCostCents = row.phoneNumbers * settings.numberCostCents; const recordingCostCents = Math.ceil(row.recordingSeconds / 60 * settings.recordingCostPerMinuteMicros / 10000); return { ...row, totalMinutes: minutes, usageLevel: level, estimatedVoiceProviderCostCents: providerCostCents, estimatedPhoneNumberCostCents: numberCostCents, estimatedRecordingCostCents: recordingCostCents, estimatedGrossMarginCents: (row.revenue || 0) - providerCostCents - numberCostCents - recordingCostCents }; }) });
+      res.json({ settings, organizations: rows.map(row => { const minutes = Math.ceil((row.inboundSeconds + row.outboundSeconds) / 60); const level = minutes >= settings.reviewMinutes ? "REVIEW REQUIRED" : minutes >= settings.highMinutes ? "HIGH" : minutes >= settings.elevatedMinutes ? "ELEVATED" : "NORMAL"; const providerCostCents = Math.ceil(minutes * settings.voiceCostPerMinuteMicros / 10000); const numberCostCents = row.phoneNumbers * settings.numberCostCents; const recordingCostCents = Math.ceil(row.recordingSeconds / 60 * settings.recordingCostPerMinuteMicros / 10000); return { ...row, totalMinutes: minutes, usageLevel: level, estimatedVoiceProviderCostCents: providerCostCents, estimatedPhoneNumberCostCents: numberCostCents, estimatedRecordingCostCents: recordingCostCents, estimatedGrossMarginCents: (row.revenue || 0) - providerCostCents - numberCostCents - recordingCostCents }; }) });
+    } catch (error) {
+      sendAdminLoadError(res, "usage", error);
+    }
   });
 }

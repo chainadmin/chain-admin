@@ -68,6 +68,8 @@ import { downloadVoiceGreeting, uploadVoiceGreeting } from "./voiceObjectStorage
 import externalApiRouter from "./external-api";
 import { registerWalletRoutes } from "./walletRoutes";
 import { registerChiamoRoutes } from "./chiamoRoutes";
+import { getAdminCommunicationsInventory } from "./adminCommunicationsService";
+import { createGlobalAdminToken, verifyGlobalAdminToken } from "./globalAdminAuth";
 import { walletService, InsufficientFundsError } from "./walletService";
 import { AuthnetService } from "./authnetService";
 import bcrypt from "bcryptjs";
@@ -20399,14 +20401,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         
         // Create admin token
-        const adminToken = jwt.sign(
-          {
-            isAdmin: true,
-            type: 'global_admin'
-          },
-          process.env.JWT_SECRET,
-          { expiresIn: '24h' }
-        );
+        const adminToken = createGlobalAdminToken(process.env.JWT_SECRET);
         
         res.json({ 
           success: true,
@@ -20428,19 +20423,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const isPlatformAdmin = async (req: any, res: any, next: any) => {
     // Check for admin token first
     const authHeader = req.headers.authorization;
-    console.log('🔐 isPlatformAdmin middleware - Auth header:', authHeader ? `Bearer ${authHeader.slice(7, 20)}...` : 'NO AUTH HEADER');
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.slice(7);
-      try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
-        console.log('✅ Token decoded:', decoded);
-        if (decoded.isAdmin && decoded.type === 'global_admin') {
-          req.user = { isGlobalAdmin: true };
-          return next();
-        }
-      } catch (error) {
-        console.log('❌ Token verification failed:', error);
-        // Token invalid, fall through to normal auth check
+      const jwtSecret = process.env.JWT_SECRET;
+      if (!jwtSecret) {
+        return res.status(503).json({ message: "Global Admin authentication is unavailable" });
+      }
+      if (verifyGlobalAdminToken(token, jwtSecret)) {
+        req.user = { isGlobalAdmin: true };
+        return next();
       }
     }
     
@@ -25294,22 +25285,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get('/api/admin/communications', isPlatformAdmin, async (_req, res) => {
-    const [companies, requests, packages, numbers, verification, buckets, settings, voicemails] = await Promise.all([
-      db.select({ id: tenants.id, name: tenants.name, twilioAccountSid: tenants.twilioAccountSid, twilioSubaccountStatus: tenants.twilioSubaccountStatus, twilioPhoneNumber: tenants.twilioPhoneNumber }).from(tenants),
-      db.select().from(localPresenceRequests).orderBy(desc(localPresenceRequests.requestedAt)),
-      db.select().from(localPresencePackages).orderBy(localPresencePackages.name),
-      db.select().from(voipPhoneNumbers), db.select().from(voiceVerificationStatuses),
-      db.select().from(voipRoutingBuckets),
-      db.select().from(voipTenantSettings),
-      db.select({
-        tenantId: voipVoicemails.tenantId,
-        total: sql<number>`count(*)::int`,
-        unread: sql<number>`count(*) filter (where ${voipVoicemails.isRead} = false)::int`,
-        recording: sql<number>`count(*) filter (where ${voipVoicemails.status} = 'RECORDING')::int`,
-      }).from(voipVoicemails).groupBy(voipVoicemails.tenantId),
-    ]);
-    const duplicateSids = companies.filter(c => c.twilioAccountSid).filter((c, i, all) => all.findIndex(x => x.twilioAccountSid === c.twilioAccountSid) !== i).map(c => c.twilioAccountSid);
-    res.json({ companies, requests, packages, numbers, verification, buckets, settings, voicemailStatus: voicemails, ownershipAudit: { ambiguous: companies.filter(c => duplicateSids.includes(c.twilioAccountSid)), duplicateSids } });
+    try {
+      const [
+        companies,
+        requests,
+        packages,
+        numbers,
+        verification,
+        buckets,
+        settings,
+        voicemails,
+        communicationsInventory,
+      ] = await Promise.all([
+        db.select({ id: tenants.id, name: tenants.name, twilioAccountSid: tenants.twilioAccountSid, twilioSubaccountStatus: tenants.twilioSubaccountStatus, twilioPhoneNumber: tenants.twilioPhoneNumber }).from(tenants),
+        db.select().from(localPresenceRequests).orderBy(desc(localPresenceRequests.requestedAt)),
+        db.select().from(localPresencePackages).orderBy(localPresencePackages.name),
+        db.select().from(voipPhoneNumbers),
+        db.select().from(voiceVerificationStatuses),
+        db.select().from(voipRoutingBuckets),
+        db.select().from(voipTenantSettings),
+        db.select({
+          tenantId: voipVoicemails.tenantId,
+          total: sql<number>`count(*)::int`,
+          unread: sql<number>`count(*) filter (where ${voipVoicemails.isRead} = false)::int`,
+          recording: sql<number>`count(*) filter (where ${voipVoicemails.status} = 'RECORDING')::int`,
+        }).from(voipVoicemails).groupBy(voipVoicemails.tenantId),
+        getAdminCommunicationsInventory(),
+      ]);
+      const duplicateSids = companies.filter(c => c.twilioAccountSid).filter((c, i, all) => all.findIndex(x => x.twilioAccountSid === c.twilioAccountSid) !== i).map(c => c.twilioAccountSid);
+      const providerNumbers = communicationsInventory.provider.accounts.flatMap(account =>
+        account.incomingNumbers.items.map(number => ({
+          ...number,
+          subaccountSid: account.sid,
+          subaccountName: account.friendlyName,
+        })),
+      );
+      res.json({
+        companies,
+        requests,
+        packages,
+        numbers,
+        verification,
+        buckets,
+        settings,
+        voicemailStatus: voicemails,
+        providerInventory: {
+          status: communicationsInventory.provider.status,
+          error: communicationsInventory.provider.error,
+          subaccounts: communicationsInventory.provider.accounts,
+          numbers: providerNumbers,
+        },
+        reconciliation: {
+          subaccounts: communicationsInventory.provider.accounts,
+          numbers: providerNumbers,
+        },
+        databaseInventory: communicationsInventory.database,
+        ownershipAudit: {
+          ambiguous: companies.filter(c => duplicateSids.includes(c.twilioAccountSid)),
+          duplicateSids,
+        },
+      });
+    } catch (error) {
+      console.error('Failed to load Global Admin communications data:', error);
+      res.status(500).json({
+        message: 'Communications data could not be loaded. Existing provider and company records were not changed.',
+        code: 'COMMUNICATIONS_DATA_UNAVAILABLE',
+      });
+    }
   });
 
   app.post('/api/admin/communications/packages', isPlatformAdmin, async (req, res) => {
