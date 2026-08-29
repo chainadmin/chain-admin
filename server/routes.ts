@@ -7349,6 +7349,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         landingPageHeadline: customBranding?.landingPageHeadline || null,
         landingPageSubheadline: customBranding?.landingPageSubheadline || null,
         customLandingPageUrl: customBranding?.customLandingPageUrl || null,
+        donationUrl: customBranding?.donationUrl || null,
       };
 
       res.status(200).json(branding);
@@ -7814,7 +7815,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const registrationWithCredentialsSchema = agencyTrialRegistrationSchema.extend({
         username: z.string().min(3).max(50),
         password: z.string().min(8).max(100),
-        businessType: z.enum(['call_center', 'billing_service', 'subscription_provider', 'freelancer_consultant', 'property_management']).optional().default('call_center'),
+        businessType: z.enum(['call_center', 'billing_service', 'subscription_provider', 'freelancer_consultant', 'property_management', 'nonprofit_organization']).optional().default('call_center'),
         billingMode: z.enum(['subscription', 'wallet']).optional().default('subscription'),
       });
       
@@ -9847,15 +9848,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         showDocuments: z.boolean().optional(),
         allowSettlementRequests: z.boolean().optional(),
         customBranding: z.any().optional().refine((val) => {
-          // If customBranding has customLandingPageUrl, validate it
-          if (val && val.customLandingPageUrl) {
-            const url = val.customLandingPageUrl;
-            // Only allow http:// or https:// URLs
-            return typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'));
-          }
-          return true;
+          const isSafeExternalUrl = (url: unknown) =>
+            !url || (typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://')));
+
+          return isSafeExternalUrl(val?.customLandingPageUrl) && isSafeExternalUrl(val?.donationUrl);
         }, {
-          message: "Custom landing page URL must start with http:// or https://"
+          message: "Custom landing page and donation URLs must start with http:// or https://"
         }),
         consumerPortalSettings: z.any().optional(),
         smsThrottleLimit: z.number().min(1).max(1000).optional(),
@@ -22179,7 +22177,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const creation = z.object({
         name: z.string().trim().min(1).max(100),
         email: z.string().trim().email(),
-        businessType: z.enum(['collection_agency', 'call_center', 'law_firm', 'municipality']).default('collection_agency'),
+        businessType: z.enum(['collection_agency', 'call_center', 'law_firm', 'municipality', 'nonprofit_organization']).default('collection_agency'),
       }).safeParse(req.body);
       if (!creation.success) {
         return res.status(400).json({ message: "Organization name, type, and a valid email are required", errors: creation.error.errors });
@@ -22786,7 +22784,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Validate input with known module IDs only
       const businessConfigSchema = z.object({
-        businessType: z.enum(['call_center', 'billing_service', 'subscription_provider', 'freelancer_consultant', 'property_management']),
+        businessType: z.enum(['call_center', 'billing_service', 'subscription_provider', 'freelancer_consultant', 'property_management', 'nonprofit_organization']),
         enabledModules: z.array(z.enum(['billing', 'subscriptions', 'work_orders', 'client_crm', 'messaging_center']))
       });
       

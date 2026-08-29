@@ -26,10 +26,12 @@ import {
 import chainLogo from "@/assets/chain-logo.png";
 import { getAgencySlugFromRequest } from "@shared/utils/subdomain";
 import { resolvePolicyContent } from "./agency-policy-utils";
+import { getCustomLandingPage } from "./custom-landing-pages";
 
-interface AgencyBranding {
+export interface AgencyBranding {
   agencyName: string;
   agencySlug: string;
+  businessType: string;
   logoUrl: string | null;
   primaryColor: string;
   secondaryColor: string;
@@ -42,6 +44,7 @@ interface AgencyBranding {
   landingPageHeadline?: string | null;
   landingPageSubheadline?: string | null;
   customLandingPageUrl?: string | null;
+  donationUrl?: string | null;
 }
 
 export default function AgencyLanding() {
@@ -72,6 +75,7 @@ export default function AgencyLanding() {
     return {
       agencyName: fallbackName,
       agencySlug: resolvedSlug,
+      businessType: "call_center",
       logoUrl: null,
       primaryColor: "#2563eb",
       secondaryColor: "#4f46e5",
@@ -176,6 +180,20 @@ export default function AgencyLanding() {
     background: `linear-gradient(135deg, ${accentColor}, ${accentSecondary})`,
   };
 
+  const CustomLandingPage = getCustomLandingPage(resolvedBranding.agencySlug);
+  if (CustomLandingPage) {
+    return (
+      <CustomLandingPage
+        branding={resolvedBranding}
+        onSignIn={handleFindBalance}
+        onCreateAccount={() => setLocation(`/consumer-register/${resolvedBranding.agencySlug}`)}
+        onDonate={resolvedBranding.donationUrl
+          ? () => window.location.assign(resolvedBranding.donationUrl!)
+          : undefined}
+      />
+    );
+  }
+
   const featureCards = [
     {
       icon: CreditCard,
@@ -212,6 +230,9 @@ export default function AgencyLanding() {
     },
   ];
 
+  const isDonationPortal = resolvedBranding.businessType === "nonprofit_organization";
+  const donationUrl = resolvedBranding.donationUrl;
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-950 text-white">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -245,7 +266,8 @@ export default function AgencyLanding() {
                 Sign in
               </Button>
               <Button
-                className="rounded-full bg-blue-500 px-6 text-white hover:bg-blue-400"
+                className="rounded-full px-6 text-white brightness-100 transition hover:brightness-110"
+                style={{ backgroundColor: accentColor }}
                 onClick={() => setLocation(`/consumer-register/${resolvedBranding.agencySlug}`)}
                 data-testid="button-register"
               >
@@ -260,7 +282,8 @@ export default function AgencyLanding() {
             <div>
               <Badge
                 variant="outline"
-                className="border-blue-400/50 bg-blue-500/10 text-blue-100"
+                className="text-blue-50"
+                style={{ borderColor: `${accentColor}80`, backgroundColor: `${accentColor}20` }}
               >
                 Powered by Chain Software Group
               </Badge>
@@ -273,11 +296,14 @@ export default function AgencyLanding() {
               <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center">
                 <Button
                   size="lg"
-                  className="h-12 rounded-full bg-blue-500 px-8 text-base font-medium hover:bg-blue-400"
-                  onClick={handleFindBalance}
+                  className="h-12 rounded-full px-8 text-base font-medium text-white brightness-100 transition hover:brightness-110"
+                  style={{ backgroundColor: accentColor }}
+                  onClick={isDonationPortal && donationUrl
+                    ? () => window.location.assign(donationUrl)
+                    : handleFindBalance}
                   data-testid="button-find-balance"
                 >
-                  Find my balance
+                  {isDonationPortal && donationUrl ? "Donate now" : "Find my balance"}
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
                 <Button
