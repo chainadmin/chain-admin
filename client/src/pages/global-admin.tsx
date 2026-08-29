@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { ApiError, apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -169,10 +169,19 @@ export default function GlobalAdmin() {
   };
 
   // Fetch all tenants
-  const { data: tenants, isLoading: tenantsLoading } = useQuery({
+  const {
+    data: tenants,
+    error: tenantsError,
+    isFetching: tenantsFetching,
+    isLoading: tenantsLoading,
+    refetch: refetchTenants,
+  } = useQuery({
     queryKey: ['/api/admin/tenants'],
-    enabled: isPlatformAdmin
+    enabled: isPlatformAdmin,
+    staleTime: 0,
+    refetchOnMount: "always",
   });
+  const tenantAdminSessionExpired = tenantsError instanceof ApiError && tenantsError.status === 401;
 
   // Fetch platform stats
   const { data: stats, isLoading: statsLoading } = useQuery({
@@ -3106,6 +3115,17 @@ export default function GlobalAdmin() {
             <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
               <div><h2 className="text-xl font-semibold text-blue-50">Companies</h2><p className="mt-1 text-sm text-blue-100/60">Find an organization, then use its focused quick actions.</p></div>
               <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => void refetchTenants()}
+                  disabled={tenantsFetching}
+                  aria-label="Refresh companies"
+                  title="Refresh companies"
+                >
+                  <RefreshCw className={`h-4 w-4 ${tenantsFetching ? "animate-spin" : ""}`} />
+                </Button>
                 <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-blue-100/40"/><Input value={companySearch} onChange={(event) => { setCompanySearch(event.target.value); setCompanyPage(1); }} placeholder="Search companies…" className="w-full pl-9 md:w-64" data-testid="input-company-search"/></div>
                 <Select value={companySort} onValueChange={setCompanySort}><SelectTrigger className="w-36"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="name">Name</SelectItem><SelectItem value="activity">Last activity</SelectItem></SelectContent></Select>
               </div>
@@ -3122,6 +3142,32 @@ export default function GlobalAdmin() {
                     <div className="h-16 bg-white/10 rounded"></div>
                   </div>
                 ))}
+              </div>
+            ) : tenantsError ? (
+              <div className="rounded-lg border border-red-400/30 bg-red-500/10 p-6 text-center">
+                <AlertTriangle className="mx-auto mb-3 h-10 w-10 text-red-300" />
+                <p className="font-medium text-red-100">
+                  {tenantAdminSessionExpired ? "Your Global Admin session expired" : "Companies could not be loaded"}
+                </p>
+                <p className="mt-1 text-sm text-red-100/70">
+                  No company data was deleted. {tenantAdminSessionExpired ? "Sign in again to reload the company list." : "Retry the request to reload the company list."}
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-4"
+                  onClick={() => {
+                    if (tenantAdminSessionExpired) {
+                      sessionStorage.removeItem("admin_authenticated");
+                      sessionStorage.removeItem("admin_token");
+                      setIsAdminAuthenticated(false);
+                      return;
+                    }
+                    void refetchTenants();
+                  }}
+                >
+                  {tenantAdminSessionExpired ? "Sign in again" : "Retry"}
+                </Button>
               </div>
             ) : (
               <div className="space-y-4">
