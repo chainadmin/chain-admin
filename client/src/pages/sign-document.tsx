@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -21,6 +21,7 @@ export default function SignDocumentPage() {
   const [consentGiven, setConsentGiven] = useState(false);
   const [signatureDataUrl, setSignatureDataUrl] = useState<string>('');
   const [initialsDataUrl, setInitialsDataUrl] = useState<string>('');
+  const [signedDocumentId, setSignedDocumentId] = useState<string | null>(null);
 
   const { data: request, isLoading } = useQuery<any>({
     queryKey: [`/api/signature-requests/${requestId}`],
@@ -36,12 +37,12 @@ export default function SignDocumentPage() {
         });
       return await response.json();
     },
-    onSuccess: () => {
+    onSuccess: (result: any) => {
+      setSignedDocumentId(result?.signedDocument?.id || null);
       toast({ 
         title: "Document signed successfully!",
-        description: "Your signature has been recorded."
+        description: "Your signed copy is ready to download and has been saved in Documents."
       });
-      queryClient.invalidateQueries({ queryKey: [`/api/signature-requests/${requestId}`] });
     },
     onError: (error: any) => {
       toast({
@@ -295,6 +296,29 @@ export default function SignDocumentPage() {
           </CardHeader>
           <CardContent className="pt-6">
             <p data-testid="text-not-found">This signature request does not exist or has been removed.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (signedDocumentId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <Card className="max-w-lg shadow-lg">
+          <CardHeader className="bg-green-50 border-b border-green-100">
+            <CardTitle className="flex items-center text-green-700">
+              <CheckCircle className="w-6 h-6 mr-2" />
+              Signed and saved
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-6 space-y-4">
+            <p>Your signed paperwork has been saved in the Documents section of your payment portal.</p>
+            <Button asChild className="w-full">
+              <a href={`/api/consumer/signed-documents/${signedDocumentId}`} download>
+                Download signed document
+              </a>
+            </Button>
           </CardContent>
         </Card>
       </div>

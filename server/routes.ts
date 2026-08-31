@@ -4080,7 +4080,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { id } = req.params;
-      const { consumerId, accountId, expiresInDays = 7, message } = req.body;
+      const {
+        consumerId,
+        accountId,
+        expiresInDays = 7,
+        message,
+        paymentAmount,
+        paymentFrequency,
+        numberOfPayments,
+        arrangementStartDate,
+      } = req.body;
 
       if (!consumerId) {
         return res.status(400).json({ message: "Consumer ID is required" });
@@ -4123,9 +4132,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log('- Template preview:', template.content.substring(0, 300).replace(/\s+/g, ' '));
       }
 
-      // Replace variables in template content using existing shared function
-      const processedContent = replaceTemplateVariables(template.content, consumer, account, { ...tenant, ...settings }, undefined);
-      const processedTitle = replaceTemplateVariables(template.title, consumer, account, { ...tenant, ...settings }, undefined);
+      // Allow the sender to choose among arrangement options for this document
+      // without changing the account's actual payment schedule.
+      const arrangementOverride = paymentAmount || paymentFrequency || numberOfPayments || arrangementStartDate
+        ? {
+            monthlyPaymentCents: paymentAmount ? Math.round(Number(paymentAmount) * 100) : undefined,
+            frequency: paymentFrequency || undefined,
+            numberOfPayments: numberOfPayments ? Number(numberOfPayments) : undefined,
+            startDate: arrangementStartDate || undefined,
+          }
+        : undefined;
+      const renderAccount = account
+        ? { ...account, activeArrangement: arrangementOverride || (account as any).activeArrangement }
+        : arrangementOverride
+          ? { activeArrangement: arrangementOverride }
+          : null;
+
+      // Replace variables in template content using the selected consumer,
+      // account, and optional arrangement values.
+      const processedContent = replaceTemplateVariables(template.content, consumer, renderAccount, { ...tenant, ...settings }, undefined);
+      const processedTitle = replaceTemplateVariables(template.title, consumer, renderAccount, { ...tenant, ...settings }, undefined);
       
       // Check if any replacement happened
       const replacementOccurred = processedContent !== template.content;
@@ -4165,6 +4191,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         expiresAt,
         consentText: template.consentText,
       });
+
+      // Keep DMP's notes timeline in sync with Chain. This is deliberately
+      // non-blocking so a DMP outage never prevents delivery to the consumer.
+      if (account?.filenumber) {
+        void dmpService.insertNote(tenantId, {
+          filenumber: account.filenumber,
+          collectorname: req.user?.email || 'Chain',
+          logmessage: `Chain sent "${processedTitle}" for electronic signature (request ${signatureRequest.id}).`,
+        }).catch(error => console.error('Error logging signature request to DMP:', error));
+      }
 
       // Send email notification
       const customBranding = settings?.customBranding as any;
@@ -11488,6 +11524,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
           isPendingSignature: true,
           type: 'signature_request',
         }));
+
+      // Account-less signature requests still belong to this consumer. Surface
+      // their completed receipt explicitly because private tenant documents are
+      // otherwise intentionally hidden when they have no account association.
+      const signedDocumentsForTenant = await storage.getSignedDocumentsByTenant(tenant.id);
+      const signedByRequestId = new Map(
+        signedDocumentsForTenant.map(signed => [signed.signatureRequestId, signed]),
+      );
+      const completedReceipts = signatureRequests
+        .filter(request => (request.status === 'completed' || request.status === 'signed') && !request.accountId)
+        .flatMap(request => {
+          const signed = signedByRequestId.get(request.id);
+          return signed ? [{
+            id: `signed-${signed.id}`,
+            title: `Signed: ${request.title}`,
+            description: `Electronically signed ${signed.signedAt ? new Date(signed.signedAt).toLocaleDateString() : ''}`,
+            fileUrl: `/api/consumer/signed-documents/${signed.id}`,
+            type: 'signed_document',
+            createdAt: signed.signedAt,
+          }] : [];
+        });
       
       // Get document IDs that are associated with pending signature requests
       const pendingDocumentIds = new Set(pendingRequests.map(req => req.documentId).filter(Boolean));
@@ -11519,7 +11576,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       // Combine documents and pending signature requests
-      const combinedResults = [...visibleDocuments, ...pendingRequests];
+      const combinedResults = [...visibleDocuments, ...completedReceipts, ...pendingRequests];
 
       res.json(combinedResults);
     } catch (error) {
@@ -24126,8 +24183,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { consumerId, accountId, documentId, title, description, expiresAt } = req.body;
 
-      if (!consumerId || !documentId || !title) {
-        return res.status(400).json({ message: "Consumer ID, document ID, and title are required" });
+      if (!consumerId || !documentId) {
+        return res.status(400).json({ message: "Consumer ID and document ID are required" });
       }
 
       // Verify consumer belongs to this tenant
@@ -24156,7 +24213,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         consumerId,
         accountId: accountId || null,
         documentId,
-        title,
+        title: title || document.title || document.fileName,
         description: description || null,
         expiresAt: expiresAt ? new Date(expiresAt) : null,
         consentText: `By signing this document, I agree that this electronic signature is the legal equivalent of my manual signature. I consent to be legally bound by this document's terms and conditions.`,
@@ -24178,14 +24235,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await emailService.sendEmail({
             to: consumer.email,
             from: tenantSettings?.contactEmail || `noreply@${tenant.slug}.replit.app`,
-            subject: `Action Required: Sign ${title}`,
+            subject: `Action Required: Sign ${signatureRequest.title}`,
             html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <h2 style="color: #1e40af;">Signature Requested</h2>
                 <p>Hello ${consumer.firstName || consumer.email},</p>
                 <p>You have a new document that requires your electronic signature:</p>
                 <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; margin: 20px 0;">
-                  <h3 style="margin-top: 0; color: #92400e;">${title}</h3>
+                  <h3 style="margin-top: 0; color: #92400e;">${signatureRequest.title}</h3>
                   ${description ? `<p style="color: #78350f; margin-bottom: 0;">${description}</p>` : ''}
                 </div>
                 <p>To review and sign this document:</p>
@@ -24212,7 +24269,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               
               You have a new document that requires your electronic signature:
               
-              ${title}
+              ${signatureRequest.title}
               ${description ? description : ''}
               
               To review and sign this document:
@@ -24342,6 +24399,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         consentText: request.consentText || 'I agree to sign this document electronically.',
       });
 
+      if (request.accountId) {
+        const account = await storage.getAccount(request.accountId);
+        if (account?.filenumber) {
+          void dmpService.insertNote(request.tenantId, {
+            filenumber: account.filenumber,
+            collectorname: consumer.email || 'Chain consumer',
+            logmessage: `Consumer electronically signed "${request.title}" (request ${request.id}) on ${new Date(result.signedDocument.signedAt).toISOString()}.`,
+          }).catch(error => console.error('Error logging completed signature to DMP:', error));
+        }
+      }
+
       const signedHtml = request.document?.fileUrl
         ? renderSignedDocumentHtml(request.document.fileUrl, signatureData, initialsData)
         : null;
@@ -24424,6 +24492,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error declining signature:", error);
       res.status(500).json({ message: "Failed to decline signature" });
+    }
+  });
+
+  // Consumer receipt download. Authorization is tied to the original request,
+  // rather than the tenant-wide document collection.
+  app.get('/api/consumer/signed-documents/:id', authenticateConsumer, async (req: any, res) => {
+    try {
+      const signedDoc = await storage.getSignedDocumentById(req.params.id);
+      if (!signedDoc) return res.status(404).json({ message: 'Signed document not found' });
+
+      const signatureRequest = await storage.getSignatureRequestById(signedDoc.signatureRequestId);
+      if (!signatureRequest || signatureRequest.consumerId !== req.consumer?.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
+      const signedHtml = signatureRequest.document?.fileUrl
+        ? renderSignedDocumentHtml(signatureRequest.document.fileUrl, signedDoc.signatureData, signedDoc.initialsData)
+        : null;
+      if (!signedHtml) return res.status(404).json({ message: 'Signed document content not found' });
+
+      const safeName = (signatureRequest.title || 'signed-document').replace(/[^a-z0-9._-]+/gi, '-');
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${safeName}.html"`);
+      res.send(signedHtml);
+    } catch (error) {
+      console.error('Error downloading consumer signed document:', error);
+      res.status(500).json({ message: 'Failed to download signed document' });
     }
   });
 
