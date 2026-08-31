@@ -1,6 +1,6 @@
 import { and, eq, gt, ilike, inArray, or, sql } from 'drizzle-orm';
 import type { PgDatabase } from 'drizzle-orm/pg-core';
-import { accounts, consumers, folders, type Consumer } from '../schema.js';
+import { accounts, consumers, folders, signedDocuments, type Consumer } from '../schema.js';
 
 export interface DeleteConsumersResult {
   success: true;
@@ -14,6 +14,15 @@ export class ConsumerNotFoundError extends Error {
   constructor(message = 'Consumer not found') {
     super(message);
     this.name = 'ConsumerNotFoundError';
+  }
+}
+
+export class ConsumerHasSignedDocumentsError extends Error {
+  status = 409;
+
+  constructor(message = 'A consumer with completed signed documents cannot be deleted') {
+    super(message);
+    this.name = 'ConsumerHasSignedDocumentsError';
   }
 }
 
@@ -211,6 +220,20 @@ export async function deleteConsumers(
   }
 
   const validConsumerIds = existingConsumers.map(consumer => consumer.id);
+
+  const [protectedConsumer] = await db
+    .select({ id: signedDocuments.consumerId })
+    .from(signedDocuments)
+    .where(
+      and(
+        eq(signedDocuments.tenantId, tenantId),
+        inArray(signedDocuments.consumerId, validConsumerIds),
+      ),
+    )
+    .limit(1);
+  if (protectedConsumer) {
+    throw new ConsumerHasSignedDocumentsError();
+  }
 
   await db
     .delete(accounts)

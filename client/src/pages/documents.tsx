@@ -19,12 +19,18 @@ import { usePaginatedConsumers } from "@/hooks/use-paginated-consumers";
 
 const signatureRequestSchema = z.object({
   consumerId: z.string().min(1, "Consumer is required"),
-  documentId: z.string().min(1, "Document is required"),
+  templateId: z.string().min(1, "Document type is required"),
   accountId: z.string().optional(),
-  paymentAmount: z.string().optional(),
-  paymentFrequency: z.string().optional(),
-  numberOfPayments: z.string().optional(),
-  arrangementStartDate: z.string().optional(),
+  paymentAmount: z.string()
+    .refine(value => !value || (Number.isFinite(Number(value)) && Number(value) > 0), "Payment amount must be greater than zero")
+    .optional(),
+  paymentFrequency: z.enum(["", "weekly", "biweekly", "monthly"]).optional(),
+  numberOfPayments: z.string()
+    .refine(value => !value || (Number.isInteger(Number(value)) && Number(value) > 0), "Number of payments must be a positive whole number")
+    .optional(),
+  arrangementStartDate: z.string()
+    .refine(value => !value || (/^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(new Date(`${value}T00:00:00Z`).getTime())), "Arrangement start date is invalid")
+    .optional(),
   expiresInDays: z.coerce.number().min(1).max(90),
   message: z.string().optional(),
 });
@@ -42,7 +48,7 @@ export default function DocumentsPage() {
     resolver: zodResolver(signatureRequestSchema),
     defaultValues: {
       consumerId: "",
-      documentId: "",
+      templateId: "",
       accountId: "",
       paymentAmount: "",
       paymentFrequency: "",
@@ -56,8 +62,8 @@ export default function DocumentsPage() {
   const { consumers, fetchNextPage: fetchNextConsumers, hasNextPage: hasNextConsumers, isFetchingNextPage: isFetchingNextConsumers } =
     usePaginatedConsumers({ search: consumerSearch, enabled: isDialogOpen });
 
-  const { data: documents = [] } = useQuery<any[]>({
-    queryKey: ["/api/documents"],
+  const { data: documentTemplates = [] } = useQuery<any[]>({
+    queryKey: ["/api/document-templates"],
   });
 
   const { data: accounts = [] } = useQuery<any[]>({
@@ -92,13 +98,18 @@ export default function DocumentsPage() {
 
   const createRequestMutation = useMutation({
     mutationFn: async (data: SignatureRequestForm) => {
-      const response = await fetch("/api/signature-requests", {
+      const response = await fetch(`/api/document-templates/${data.templateId}/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...data,
-          accountId: data.accountId || undefined,
+          consumerId: data.consumerId,
+          accountId: data.accountId && data.accountId !== "none" ? data.accountId : undefined,
+          expiresInDays: data.expiresInDays,
           message: data.message || undefined,
+          paymentAmount: data.paymentAmount || undefined,
+          paymentFrequency: data.paymentFrequency || undefined,
+          numberOfPayments: data.numberOfPayments || undefined,
+          arrangementStartDate: data.arrangementStartDate || undefined,
         }),
       });
       if (!response.ok) {
@@ -224,20 +235,20 @@ export default function DocumentsPage() {
 
                 <FormField
                   control={form.control}
-                  name="documentId"
+                  name="templateId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Document *</FormLabel>
+                      <FormLabel>Document Type *</FormLabel>
                       <Select onValueChange={field.onChange} value={field.value}>
                         <FormControl>
                           <SelectTrigger data-testid="select-document">
-                            <SelectValue placeholder="Select document" />
+                            <SelectValue placeholder="Select document type" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {documents.map((doc: any) => (
-                            <SelectItem key={doc.id} value={doc.id}>
-                              {doc.fileName}
+                          {documentTemplates.map((template: any) => (
+                            <SelectItem key={template.id} value={template.id}>
+                              {template.name} — {template.title}
                             </SelectItem>
                           ))}
                         </SelectContent>

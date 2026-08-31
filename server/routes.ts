@@ -1,6 +1,6 @@
 import type { Express, Response } from "express";
 import { createServer, type Server } from "http";
-import { storage, type IStorage } from "./storage";
+import { SignedDocumentRetentionError, storage, type IStorage } from "./storage";
 import { ACCOUNT_STATUSES, isAccountStatus } from "../shared/constants";
 import { ANDROID_APP_URL, IOS_APP_URL } from "../shared/constants/appStoreLinks";
 import { voipStorage } from "./voipStorage";
@@ -75,6 +75,11 @@ import { AuthnetService } from "./authnetService";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
+import {
+  buildArrangementOverride,
+  documentTemplateSendSchema,
+  mergeArrangementOverride,
+} from "@shared/documentSigning";
 import { subdomainMiddleware } from "./middleware/subdomain";
 import {
   messagingPlanList,
@@ -95,7 +100,14 @@ import { generateInvoicePdf } from "./invoicePdf";
 import { canActivateUser } from "@shared/enterpriseCapacity";
 import { findMatchingDmpPayment, isPostedDmpPayment, normalizeDmpPayment } from "./dmpPaymentReconciliation";
 
-import { listConsumers, paginateConsumers, updateConsumer, deleteConsumers, ConsumerNotFoundError } from "@shared/server/consumers";
+import {
+  listConsumers,
+  paginateConsumers,
+  updateConsumer,
+  deleteConsumers,
+  ConsumerHasSignedDocumentsError,
+  ConsumerNotFoundError,
+} from "@shared/server/consumers";
 import { resolveConsumerPortalUrl } from "@shared/utils/consumerPortal";
 import { finalizeEmailHtml } from "@shared/utils/emailTemplate";
 import { ensureBaseUrl, getKnownDomainOrigins } from "@shared/utils/baseUrl";
@@ -226,22 +238,26 @@ const VALIDATION_NOTICE = `Unless you notify this office within 30 days after re
 
 const ESIGN_CONSENT = `By clicking "I Agree" and signing this document electronically, you consent to conduct this transaction by electronic means. You acknowledge that your electronic signature is the legal equivalent of your manual signature and that you intend to be legally bound by the terms of this agreement. You have the right to request a paper copy of this document.`;
 
-function renderSignedDocumentHtml(fileUrl: string, signatureData: string, initialsData?: string | null): string | null {
+function decodeHtmlDataUrl(fileUrl: string): string | null {
   const urlEncodedMatch = fileUrl.match(/^data:text\/html(?:;charset=utf-8)?,(.+)$/i);
   const base64Match = fileUrl.match(/^data:text\/html;base64,(.+)$/i);
-  let htmlContent: string;
 
   try {
     if (urlEncodedMatch) {
-      htmlContent = decodeURIComponent(urlEncodedMatch[1]);
-    } else if (base64Match) {
-      htmlContent = Buffer.from(base64Match[1], 'base64').toString('utf-8');
-    } else {
-      return null;
+      return decodeURIComponent(urlEncodedMatch[1]);
     }
+    if (base64Match) {
+      return Buffer.from(base64Match[1], 'base64').toString('utf-8');
+    }
+    return null;
   } catch {
     return null;
   }
+}
+
+function renderSignedDocumentHtml(fileUrl: string, signatureData: string, initialsData?: string | null): string | null {
+  const htmlContent = decodeHtmlDataUrl(fileUrl);
+  if (!htmlContent) return null;
 
   const signatureHtml = `<span style="display:inline-block;border-bottom:1px solid #000;padding:2px 5px"><img src="${signatureData}" alt="Signature" style="max-width:150px;max-height:40px;height:auto;display:inline-block;vertical-align:middle" /></span>`;
   let signedHtml = htmlContent
@@ -2770,6 +2786,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (error instanceof ConsumerNotFoundError) {
           return res.status(404).json({ message: error.message });
         }
+        if (error instanceof ConsumerHasSignedDocumentsError) {
+          return res.status(409).json({ message: error.message });
+        }
         throw error;
       }
     } catch (error) {
@@ -3416,6 +3435,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         deletedCount,
       });
     } catch (error) {
+      if (error instanceof SignedDocumentRetentionError) {
+        return res.status(409).json({ message: error.message });
+      }
       console.error("Error bulk deleting accounts:", error);
       return res.status(500).json({ message: "Failed to delete accounts" });
     }
@@ -3487,6 +3509,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       res.status(204).send();
     } catch (error) {
+      if (error instanceof SignedDocumentRetentionError) {
+        return res.status(409).json({ message: error.message });
+      }
       console.error("Error deleting account:", error);
       res.status(500).json({ message: "Failed to delete account" });
     }
@@ -4079,12 +4104,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const { id } = req.params;
-      const { consumerId, accountId, expiresInDays = 7, message } = req.body;
-
-      if (!consumerId) {
-        return res.status(400).json({ message: "Consumer ID is required" });
+      const validationResult = documentTemplateSendSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ message: validationResult.error.errors[0]?.message || "Invalid signature request" });
       }
+
+      const { id } = req.params;
+      const {
+        consumerId,
+        accountId,
+        expiresInDays,
+        message,
+      } = validationResult.data;
 
       // Get the template
       const template = await storage.getDocumentTemplateById(id, tenantId);
@@ -4123,9 +4154,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log('- Template preview:', template.content.substring(0, 300).replace(/\s+/g, ' '));
       }
 
-      // Replace variables in template content using existing shared function
-      const processedContent = replaceTemplateVariables(template.content, consumer, account, { ...tenant, ...settings }, undefined);
-      const processedTitle = replaceTemplateVariables(template.title, consumer, account, { ...tenant, ...settings }, undefined);
+      // Allow the sender to choose among arrangement options for this document
+      // without changing the account's actual payment schedule.
+      const arrangementOverride = buildArrangementOverride(validationResult.data);
+      const activeArrangement = mergeArrangementOverride(
+        (account as any)?.activeArrangement,
+        arrangementOverride,
+      );
+      const renderAccount = account
+        ? { ...account, activeArrangement }
+        : arrangementOverride
+          ? { activeArrangement: arrangementOverride }
+          : null;
+
+      // Replace variables in template content using the selected consumer,
+      // account, and optional arrangement values.
+      const processedContent = replaceTemplateVariables(template.content, consumer, renderAccount, { ...tenant, ...settings }, undefined);
+      const processedTitle = replaceTemplateVariables(template.title, consumer, renderAccount, { ...tenant, ...settings }, undefined);
       
       // Check if any replacement happened
       const replacementOccurred = processedContent !== template.content;
@@ -4136,35 +4181,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.log('⚠️ WARNING: No variables were replaced! Template might not contain valid variable placeholders.');
       }
 
-      // Create a document record (HTML content stored as data URL)
+      // Store the generated document, signature request, and audit event as one
+      // transaction so a partial failure cannot leave an orphaned document.
       const htmlContent = `data:text/html;charset=utf-8,${encodeURIComponent(processedContent)}`;
-      const document = await storage.createDocument({
-        tenantId,
-        accountId: accountId || null,
-        title: processedTitle,
-        description: template.description || `Generated from template: ${template.name}`,
-        fileName: `${processedTitle}.html`,
-        fileUrl: htmlContent,
-        fileSize: processedContent.length,
-        mimeType: 'text/html',
-        isPublic: false,
-      });
-
-      // Create signature request
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + expiresInDays);
 
-      const signatureRequest = await storage.createSignatureRequest({
-        tenantId,
-        consumerId,
-        accountId: accountId || null,
-        documentId: document.id,
-        title: processedTitle,
-        description: message || null,
-        status: 'pending',
-        expiresAt,
-        consentText: template.consentText,
-      });
+      const { signatureRequest } = await storage.createSignatureRequestWithDocument(
+        {
+          tenantId,
+          accountId: accountId || null,
+          title: processedTitle,
+          description: template.description || `Generated from template: ${template.name}`,
+          fileName: `${processedTitle}.html`,
+          fileUrl: htmlContent,
+          fileSize: processedContent.length,
+          mimeType: 'text/html',
+          isPublic: false,
+        },
+        {
+          tenantId,
+          consumerId,
+          accountId: accountId || null,
+          title: processedTitle,
+          description: message || null,
+          status: 'pending',
+          expiresAt,
+          consentText: template.consentText,
+        },
+      );
+
+      // Record creation of the request, not email delivery. This remains true
+      // even when the consumer opens the request from their dashboard.
+      if (account?.filenumber) {
+        await dmpService.insertNote(tenantId, {
+          filenumber: account.filenumber,
+          collectorname: req.user?.email || 'Chain',
+          logmessage: `${template.name || processedTitle} signature request`,
+        }).catch(error => console.error('Error logging signature request to DMP:', error));
+      }
 
       // Send email notification
       const customBranding = settings?.customBranding as any;
@@ -4181,32 +4236,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       console.log(`🔍 Portal URL (with /consumer-login): ${portalUrl}`);
       
-      // Remove /consumer-login suffix and add /sign path
-      const basePortalUrl = portalUrl.replace(/\/consumer-login$/, '');
-      const signUrl = `${basePortalUrl}/sign/${signatureRequest.id}`;
+      // Email recipients may open this on a new browser or device. Authenticate
+      // them first, then return only to this validated local signing path.
+      const signPath = `/sign/${signatureRequest.id}`;
+      const signUrl = `${portalUrl}${portalUrl.includes('?') ? '&' : '?'}returnTo=${encodeURIComponent(signPath)}`;
       
       console.log(`✅ Final sign URL: ${signUrl}`);
       
       // Use safe name handling
       const consumerFirstName = consumer.firstName || 'there';
       const companyName = customBranding?.companyName || 'Our Company';
+      const emailFirstName = escapeHtml(consumerFirstName);
+      const emailDocumentType = escapeHtml(template.name || processedTitle);
+      const emailDocumentTitle = escapeHtml(processedTitle);
+      const emailMessage = message ? escapeHtml(message) : '';
+      const emailCompanyName = escapeHtml(companyName);
       
       try {
         console.log(`📧 Sending signature request email to ${consumer.email} for request ${signatureRequest.id}`);
         await emailService.sendEmail({
           to: consumer.email!,
-          subject: `Document Signature Request - ${processedTitle}`,
+          subject: `Signature requested: ${template.name || processedTitle}`,
           html: `
-            <h2>Document Signature Request</h2>
-            <p>Hi ${consumerFirstName},</p>
-            <p>You have a document that requires your signature.</p>
-            <p><strong>Document:</strong> ${processedTitle}</p>
-            ${message ? `<p><strong>Message:</strong> ${message}</p>` : ''}
-            <p><strong>Expires:</strong> ${expiresAt.toLocaleDateString()}</p>
-            <p><a href="${signUrl}" style="display: inline-block; background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 16px 0;">Sign Document</a></p>
-            <p>Or copy this link: ${signUrl}</p>
-            <p>Best regards,<br/>${companyName}</p>
+            <div style="background:#f8fafc;padding:32px 16px;font-family:Arial,sans-serif;color:#0f172a;">
+              <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:32px;">
+                <h2 style="margin:0 0 24px;color:#1e3a8a;">Signature requested</h2>
+                <p style="font-size:16px;line-height:1.6;">Hello ${emailFirstName},</p>
+                <p style="font-size:16px;line-height:1.6;">
+                  The following document is requesting a signature from you:
+                </p>
+                <div style="background:#eff6ff;border-left:4px solid #2563eb;padding:16px;margin:20px 0;">
+                  <p style="margin:0 0 6px;"><strong>Document type:</strong> ${emailDocumentType}</p>
+                  <p style="margin:0;"><strong>Document:</strong> ${emailDocumentTitle}</p>
+                </div>
+                ${emailMessage ? `<p style="font-size:15px;line-height:1.6;"><strong>Message:</strong> ${emailMessage}</p>` : ''}
+                <p style="font-size:14px;color:#475569;">This request expires ${expiresAt.toLocaleDateString()}.</p>
+                <p style="margin:28px 0;text-align:center;">
+                  <a href="${signUrl}" style="display:inline-block;background:#2563eb;color:#ffffff;padding:14px 28px;text-decoration:none;border-radius:7px;font-weight:bold;">Click here to review and sign</a>
+                </p>
+                <p style="font-size:13px;color:#64748b;line-height:1.5;">After clicking, the document will open in a secure, PDF-style viewer where you can read it before electronically signing.</p>
+                <p style="font-size:12px;color:#64748b;word-break:break-all;">If the button does not work, copy and paste this link: ${signUrl}</p>
+                <p style="margin-top:28px;">Best regards,<br/>${emailCompanyName}</p>
+              </div>
+            </div>
           `,
+          text: `Hello ${consumerFirstName},\n\nThe following document is requesting a signature from you.\n\nDocument type: ${template.name || processedTitle}\nDocument: ${processedTitle}\n${message ? `Message: ${message}\n` : ''}Expires: ${expiresAt.toLocaleDateString()}\n\nClick here to review and sign: ${signUrl}\n\nThe document will open in a secure viewer where you can read it before electronically signing.\n\nBest regards,\n${companyName}`,
           tenantId,
         });
         console.log(`✅ Email sent successfully to ${consumer.email}`);
@@ -11488,14 +11562,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
           isPendingSignature: true,
           type: 'signature_request',
         }));
+
+      // Every completed signature is represented by the authenticated,
+      // hash-verified receipt endpoint. Never expose the raw artifact data URL.
+      const signedDocumentsForTenant = await storage.getSignedDocumentsByTenant(tenant.id);
+      const signedByRequestId = new Map(
+        signedDocumentsForTenant.map(signed => [signed.signatureRequestId, signed]),
+      );
+      const completedReceipts = signatureRequests
+        .filter(request =>
+          (request.status === 'completed' || request.status === 'signed') &&
+          (!requestedAccountId || request.accountId === requestedAccountId),
+        )
+        .flatMap(request => {
+          const signed = signedByRequestId.get(request.id);
+          return signed ? [{
+            id: `signed-${signed.id}`,
+            title: `Signed: ${request.title}`,
+            description: `Electronically signed ${signed.signedAt ? new Date(signed.signedAt).toLocaleDateString() : ''}`,
+            fileUrl: `/api/consumer/signed-documents/${signed.id}`,
+            type: 'signed_document',
+            accountId: request.accountId,
+            createdAt: signed.signedAt,
+          }] : [];
+        });
       
-      // Get document IDs that are associated with pending signature requests
-      const pendingDocumentIds = new Set(pendingRequests.map(req => req.documentId).filter(Boolean));
+      const signatureDocumentIds = new Set(signatureRequests.map(request => request.documentId).filter(Boolean));
+      const signedArtifactIds = new Set(signedDocumentsForTenant.map(signed => signed.documentId));
       
-      // Filter out documents that are part of pending signature requests to avoid duplicates
+      // Hide both generated source documents and finalized artifact rows. Their
+      // pending request or verified completed receipt is surfaced instead.
       const visibleDocuments = documents.filter(doc => {
-        // Skip documents that are part of pending signature requests
-        if (pendingDocumentIds.has(doc.id)) {
+        if (signatureDocumentIds.has(doc.id) || signedArtifactIds.has(doc.id)) {
           return false;
         }
         
@@ -11519,7 +11617,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       // Combine documents and pending signature requests
-      const combinedResults = [...visibleDocuments, ...pendingRequests];
+      const combinedResults = [...visibleDocuments, ...completedReceipts, ...pendingRequests];
 
       res.json(combinedResults);
     } catch (error) {
@@ -22478,6 +22576,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await deleteConsumers(db, tenantId, [consumerId]);
       res.json(result);
     } catch (error) {
+      if (error instanceof ConsumerHasSignedDocumentsError) {
+        return res.status(409).json({ message: error.message });
+      }
       console.error("Error deleting consumer:", error);
       res.status(500).json({ message: "Failed to delete consumer" });
     }
@@ -24126,8 +24227,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const { consumerId, accountId, documentId, title, description, expiresAt } = req.body;
 
-      if (!consumerId || !documentId || !title) {
-        return res.status(400).json({ message: "Consumer ID, document ID, and title are required" });
+      if (!consumerId || !documentId) {
+        return res.status(400).json({ message: "Consumer ID and document ID are required" });
       }
 
       // Verify consumer belongs to this tenant
@@ -24156,7 +24257,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         consumerId,
         accountId: accountId || null,
         documentId,
-        title,
+        title: title || document.title || document.fileName,
         description: description || null,
         expiresAt: expiresAt ? new Date(expiresAt) : null,
         consentText: `By signing this document, I agree that this electronic signature is the legal equivalent of my manual signature. I consent to be legally bound by this document's terms and conditions.`,
@@ -24178,14 +24279,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await emailService.sendEmail({
             to: consumer.email,
             from: tenantSettings?.contactEmail || `noreply@${tenant.slug}.replit.app`,
-            subject: `Action Required: Sign ${title}`,
+            subject: `Action Required: Sign ${signatureRequest.title}`,
             html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
                 <h2 style="color: #1e40af;">Signature Requested</h2>
                 <p>Hello ${consumer.firstName || consumer.email},</p>
                 <p>You have a new document that requires your electronic signature:</p>
                 <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; margin: 20px 0;">
-                  <h3 style="margin-top: 0; color: #92400e;">${title}</h3>
+                  <h3 style="margin-top: 0; color: #92400e;">${signatureRequest.title}</h3>
                   ${description ? `<p style="color: #78350f; margin-bottom: 0;">${description}</p>` : ''}
                 </div>
                 <p>To review and sign this document:</p>
@@ -24212,7 +24313,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               
               You have a new document that requires your electronic signature:
               
-              ${title}
+              ${signatureRequest.title}
               ${description ? description : ''}
               
               To review and sign this document:
@@ -24262,14 +24363,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get signature request by ID (consumer or admin)
-  app.get('/api/signature-requests/:id', async (req, res) => {
+  // Get signature request by ID for the authenticated recipient.
+  app.get('/api/signature-requests/:id', authenticateConsumer, async (req: any, res) => {
     try {
       const { id } = req.params;
       const request = await storage.getSignatureRequestById(id);
 
       if (!request) {
         return res.status(404).json({ message: "Signature request not found" });
+      }
+      if (request.consumerId !== req.consumer?.id || request.tenantId !== req.consumer?.tenantId) {
+        return res.status(403).json({ message: "Access denied" });
       }
 
       // Mark as viewed
@@ -24291,8 +24395,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Validate request body with Zod
       const signatureRequestSchema = z.object({
-        signatureData: z.string().min(100, "Signature data must be at least 100 characters"),
-        initialsData: z.string().min(100, "Initials data must be at least 100 characters"),
+        signatureData: z.string()
+          .max(2_000_000, "Signature image is too large")
+          .regex(/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/, "Signature must be a PNG image"),
+        initialsData: z.string()
+          .max(2_000_000, "Initials image is too large")
+          .regex(/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/, "Initials must be a PNG image"),
         legalConsent: z.literal(true, { errorMap: () => ({ message: "Legal consent must be explicitly true" }) }),
       });
 
@@ -24310,9 +24418,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       // Verify the authenticated consumer matches the signature request recipient
-      const consumerEmail = req.consumer?.email;
       const consumer = await storage.getConsumer(request.consumerId);
-      if (!consumer || consumer.email !== consumerEmail) {
+      if (
+        !consumer ||
+        request.consumerId !== req.consumer?.id ||
+        request.tenantId !== req.consumer?.tenantId ||
+        consumer.tenantId !== request.tenantId
+      ) {
         return res.status(403).json({ message: "You are not authorized to sign this document" });
       }
 
@@ -24332,6 +24444,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "This signature request has expired" });
       }
 
+      const signedHtml = request.document?.fileUrl
+        ? renderSignedDocumentHtml(request.document.fileUrl, signatureData, initialsData)
+        : null;
+      if (!signedHtml) {
+        return res.status(422).json({ message: "Unable to create the signed document copy" });
+      }
+
       const result = await storage.captureSignature({
         signatureRequestId: id,
         signatureData,
@@ -24340,30 +24459,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userAgent,
         legalConsent,
         consentText: request.consentText || 'I agree to sign this document electronically.',
+        signedDocumentHtml: signedHtml,
+        documentHash: crypto.createHash('sha256').update(signedHtml, 'utf8').digest('hex'),
       });
 
-      const signedHtml = request.document?.fileUrl
-        ? renderSignedDocumentHtml(request.document.fileUrl, signatureData, initialsData)
-        : null;
-
-      // Store a self-contained signed copy so consumers can view it from their Documents section.
-      try {
-        await storage.createDocument({
-          tenantId: request.tenantId,
-          title: `Signed: ${request.title || 'Document'}`,
-          description: `Electronically signed on ${new Date().toLocaleDateString()}`,
-          fileName: `signed-${request.title || 'document'}.html`,
-          fileUrl: signedHtml
-            ? `data:text/html;charset=utf-8,${encodeURIComponent(signedHtml)}`
-            : request.document.fileUrl,
-          fileSize: signedHtml?.length || request.document.fileSize || 0,
-          mimeType: 'text/html',
-          isPublic: false,
-          accountId: request.accountId,
-        });
-      } catch (docError) {
-        console.error("Error creating document record after signature:", docError);
-        // Don't fail the signature if document creation fails - signature is more important
+      if (request.accountId) {
+        const account = await storage.getAccount(request.accountId);
+        if (account?.filenumber) {
+          await dmpService.insertNote(request.tenantId, {
+            filenumber: account.filenumber,
+            collectorname: consumer.email || 'Chain consumer',
+            logmessage: `${request.title} signed`,
+          }).catch(error => console.error('Error logging completed signature to DMP:', error));
+        }
       }
 
       // Deliver receipt links to both parties after the legal record has been saved.
@@ -24407,13 +24515,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Decline signature (consumer)
-  app.post('/api/signature-requests/:id/decline', async (req, res) => {
+  app.post('/api/signature-requests/:id/decline', authenticateConsumer, async (req: any, res) => {
     try {
       const { id } = req.params;
       const { reason } = req.body;
 
       if (!reason) {
         return res.status(400).json({ message: "Decline reason is required" });
+      }
+
+      const request = await storage.getSignatureRequestById(id);
+      if (!request) {
+        return res.status(404).json({ message: "Signature request not found" });
+      }
+      if (request.consumerId !== req.consumer?.id || request.tenantId !== req.consumer?.tenantId) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+      if (request.status !== "pending" && request.status !== "viewed") {
+        return res.status(409).json({ message: "This signature request can no longer be declined" });
       }
 
       const ipAddress = (req.headers['x-forwarded-for'] as string)?.split(',')[0] || req.ip;
@@ -24424,6 +24543,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error declining signature:", error);
       res.status(500).json({ message: "Failed to decline signature" });
+    }
+  });
+
+  // Consumer receipt download. Authorization is tied to the original request,
+  // rather than the tenant-wide document collection.
+  app.get('/api/consumer/signed-documents/:id', authenticateConsumer, async (req: any, res) => {
+    try {
+      const signedDoc = await storage.getSignedDocumentById(req.params.id);
+      if (!signedDoc) return res.status(404).json({ message: 'Signed document not found' });
+
+      if (signedDoc.consumerId !== req.consumer?.id) {
+        return res.status(403).json({ message: 'Access denied' });
+      }
+
+      const signedArtifact = await storage.getDocumentById(signedDoc.documentId);
+      const signedHtml = signedArtifact?.fileUrl
+        ? decodeHtmlDataUrl(signedArtifact.fileUrl)
+        : null;
+      if (!signedHtml) {
+        return res.status(404).json({ message: 'Signed document content not found' });
+      }
+
+      const actualHash = crypto.createHash('sha256').update(signedHtml, 'utf8').digest('hex');
+      if (!signedDoc.documentHash || actualHash !== signedDoc.documentHash) {
+        console.error('Signed document integrity check failed', { signedDocumentId: signedDoc.id });
+        return res.status(409).json({ message: 'Signed document integrity check failed' });
+      }
+
+      const safeName = (signedArtifact?.fileName || signedDoc.title || 'signed-document').replace(/[^a-z0-9._-]+/gi, '-');
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${safeName.endsWith('.html') ? safeName : `${safeName}.html`}"`);
+      res.send(signedHtml);
+    } catch (error) {
+      console.error('Error downloading consumer signed document:', error);
+      res.status(500).json({ message: 'Failed to download signed document' });
     }
   });
 
@@ -24470,58 +24624,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "Access denied" });
       }
 
-      // Get the original signature request to access the document template
-      const signatureRequest = await storage.getSignatureRequestById(signedDoc.signatureRequestId);
-      if (!signatureRequest || !signatureRequest.document) {
-        return res.status(404).json({ message: "Original document not found" });
+      const signedArtifact = await storage.getDocumentById(signedDoc.documentId);
+      const signedHtml = signedArtifact?.fileUrl ? decodeHtmlDataUrl(signedArtifact.fileUrl) : null;
+      if (!signedHtml) {
+        return res.status(404).json({ message: "Signed document content not found" });
       }
 
-      // Verify signature request also belongs to this tenant (double-check for security)
-      if (signatureRequest.tenantId !== tenantId) {
-        return res.status(403).json({ message: "Access denied" });
+      const actualHash = crypto.createHash('sha256').update(signedHtml, 'utf8').digest('hex');
+      if (!signedDoc.documentHash || actualHash !== signedDoc.documentHash) {
+        console.error('Signed document integrity check failed', { signedDocumentId: signedDoc.id });
+        return res.status(409).json({ message: "Signed document integrity check failed" });
       }
 
-      // Get the document HTML content
-      let htmlContent = '';
-      const fileUrl = signatureRequest.document.fileUrl;
-      
-      // Decode the data URL to get HTML content
-      const urlEncodedMatch = fileUrl.match(/^data:text\/html;charset=utf-8,(.+)$/);
-      const base64Match = fileUrl.match(/^data:text\/html;base64,(.+)$/);
-      
-      if (urlEncodedMatch) {
-        htmlContent = decodeURIComponent(urlEncodedMatch[1]);
-      } else if (base64Match) {
-        htmlContent = Buffer.from(base64Match[1], 'base64').toString('utf-8');
-      } else {
-        return res.status(500).json({ message: "Invalid document format" });
-      }
-
-      // Replace signature placeholders with actual signature images
-      let modifiedHtml = htmlContent;
-
-      if (signedDoc.signatureData) {
-        const signatureHtml = `<span style="display: inline-block; border-bottom: 1px solid #000; padding: 2px 5px;"><img src="${signedDoc.signatureData}" alt="Signature" style="max-width: 150px; max-height: 40px; height: auto; display: inline-block; vertical-align: middle;" /></span>`;
-        
-        // Replace all signature placeholders
-        modifiedHtml = modifiedHtml.replace(/______________/g, signatureHtml);
-        modifiedHtml = modifiedHtml.replace(/\{\{signature\}\}/gi, signatureHtml);
-        modifiedHtml = modifiedHtml.replace(/\{\{SIGNATURE_LINE\}\}/gi, signatureHtml);
-      }
-
-      if (signedDoc.initialsData) {
-        const initialsHtml = `<span style="display: inline-block; border-bottom: 1px solid #000; padding: 2px 5px;"><img src="${signedDoc.initialsData}" alt="Initials" style="max-width: 50px; max-height: 30px; height: auto; display: inline-block; vertical-align: middle;" /></span>`;
-        
-        // Replace all initials placeholders
-        modifiedHtml = modifiedHtml.replace(/____(?!_)/g, initialsHtml);
-        modifiedHtml = modifiedHtml.replace(/\{\{initials\}\}/gi, initialsHtml);
-        modifiedHtml = modifiedHtml.replace(/\{\{INITIAL\}\}/gi, initialsHtml);
-        modifiedHtml = modifiedHtml.replace(/\{\{INITIALS\}\}/gi, initialsHtml);
-      }
-
-      // Return the HTML directly
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.send(modifiedHtml);
+      res.send(signedHtml);
     } catch (error) {
       console.error("Error fetching signed document:", error);
       res.status(500).json({ message: "Failed to fetch signed document" });

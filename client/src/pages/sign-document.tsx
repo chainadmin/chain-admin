@@ -1,6 +1,6 @@
-import { useState, useRef, useMemo } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { ApiError, apiRequest, downloadAuthenticatedFile } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -21,11 +21,21 @@ export default function SignDocumentPage() {
   const [consentGiven, setConsentGiven] = useState(false);
   const [signatureDataUrl, setSignatureDataUrl] = useState<string>('');
   const [initialsDataUrl, setInitialsDataUrl] = useState<string>('');
+  const [signedDocumentId, setSignedDocumentId] = useState<string | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
 
-  const { data: request, isLoading } = useQuery<any>({
+  const { data: request, isLoading, error } = useQuery<any>({
     queryKey: [`/api/signature-requests/${requestId}`],
     enabled: !!requestId,
   });
+  const needsLogin = error instanceof ApiError && error.status === 401;
+
+  useEffect(() => {
+    if (!needsLogin || !requestId) return;
+
+    const returnTo = `/sign/${requestId}`;
+    window.location.replace(`/consumer-login?returnTo=${encodeURIComponent(returnTo)}`);
+  }, [needsLogin, requestId]);
 
   const signMutation = useMutation({
     mutationFn: async (data: { signatureData: string; initialsData: string }) => {
@@ -36,12 +46,12 @@ export default function SignDocumentPage() {
         });
       return await response.json();
     },
-    onSuccess: () => {
+    onSuccess: (result: any) => {
+      setSignedDocumentId(result?.signedDocument?.id || null);
       toast({ 
         title: "Document signed successfully!",
-        description: "Your signature has been recorded."
+        description: "Your signed copy is ready to download and has been saved in Documents."
       });
-      queryClient.invalidateQueries({ queryKey: [`/api/signature-requests/${requestId}`] });
     },
     onError: (error: any) => {
       toast({
@@ -51,6 +61,25 @@ export default function SignDocumentPage() {
       });
     },
   });
+
+  const downloadSignedDocument = async () => {
+    if (!signedDocumentId) return;
+    setIsDownloading(true);
+    try {
+      await downloadAuthenticatedFile(
+        `/api/consumer/signed-documents/${signedDocumentId}`,
+        "signed-document.html",
+      );
+    } catch (error: any) {
+      toast({
+        title: "Download failed",
+        description: error.message || "Unable to download the signed document",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   // Inject signatures into document HTML
   const documentUrlWithSignatures = useMemo(() => {
@@ -272,13 +301,33 @@ export default function SignDocumentPage() {
     signMutation.mutate({ signatureData, initialsData });
   };
 
-  if (isLoading) {
+  if (isLoading || needsLogin) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600" data-testid="text-loading">Loading document...</p>
+          <p className="mt-4 text-gray-600" data-testid="text-loading">
+            {needsLogin ? "Redirecting to secure login..." : "Loading document..."}
+          </p>
         </div>
+      </div>
+    );
+  }
+
+  if (error instanceof ApiError && error.status === 403) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <Card className="max-w-md shadow-lg">
+          <CardHeader className="bg-red-50 border-b border-red-100">
+            <CardTitle className="flex items-center text-red-700">
+              <AlertCircle className="w-6 h-6 mr-2" />
+              Access denied
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-6">
+            <p>This signing request belongs to a different consumer account. Please sign in with the email address that received the request.</p>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -295,6 +344,27 @@ export default function SignDocumentPage() {
           </CardHeader>
           <CardContent className="pt-6">
             <p data-testid="text-not-found">This signature request does not exist or has been removed.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (signedDocumentId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <Card className="max-w-lg shadow-lg">
+          <CardHeader className="bg-green-50 border-b border-green-100">
+            <CardTitle className="flex items-center text-green-700">
+              <CheckCircle className="w-6 h-6 mr-2" />
+              Signed and saved
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-6 space-y-4">
+            <p>Your signed paperwork has been saved in the Documents section of your payment portal.</p>
+            <Button className="w-full" onClick={downloadSignedDocument} disabled={isDownloading}>
+              {isDownloading ? "Preparing download..." : "Download signed document"}
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -391,10 +461,10 @@ export default function SignDocumentPage() {
               {/* Document Header */}
               <div className="border-b border-slate-200 px-8 py-5 bg-gradient-to-r from-slate-50 to-white">
                 <h2 className="text-lg font-semibold text-slate-900">
-                  Document Preview
+                  Document to Review and Sign
                 </h2>
                 <p className="text-sm text-slate-500 mt-1 font-medium" data-testid="text-document-filename">
-                  {request.document?.fileName}
+                  PDF-style preview · {request.document?.fileName}
                 </p>
               </div>
               

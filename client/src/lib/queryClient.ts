@@ -125,6 +125,25 @@ export async function apiRequest(
   }
 }
 
+export async function downloadAuthenticatedFile(url: string, fallbackFileName: string): Promise<void> {
+  const response = await apiRequest("GET", url);
+  const blob = await response.blob();
+  const disposition = response.headers.get("content-disposition") || "";
+  const headerFileName = disposition.match(/filename="([^"]+)"/i)?.[1];
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+
+  try {
+    anchor.href = objectUrl;
+    anchor.download = headerFileName || fallbackFileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+  } finally {
+    anchor.remove();
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 type UnauthorizedBehavior = "returnNull" | "throw";
 export const getQueryFn: <T>(options: {
   on401: UnauthorizedBehavior;

@@ -12,7 +12,7 @@ import { getArrangementSummary, formatCurrencyFromCents } from "@/lib/arrangemen
 import { useAgencyContext } from "@/hooks/useAgencyContext";
 import { getTerminology, type BusinessType } from "@shared/terminology";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, downloadAuthenticatedFile } from "@/lib/queryClient";
 import { Upload } from "lucide-react";
 
 export default function ConsumerPortal() {
@@ -145,6 +145,22 @@ export default function ConsumerPortal() {
       });
     },
   });
+
+  const downloadDocument = async (documentItem: any) => {
+    try {
+      if (documentItem.type === "signed_document" || documentItem.fileUrl?.startsWith("/api/consumer/signed-documents/")) {
+        await downloadAuthenticatedFile(documentItem.fileUrl, "signed-document.html");
+        return;
+      }
+      window.open(documentItem.fileUrl, "_blank");
+    } catch (error: any) {
+      toast({
+        title: "Download failed",
+        description: error.message || "Unable to download this document",
+        variant: "destructive",
+      });
+    }
+  };
 
   if (isLoading) {
     return (
@@ -481,7 +497,7 @@ export default function ConsumerPortal() {
                             Sign Now
                           </Button>
                         ) : (
-                          <Button variant="outline" size="sm" onClick={() => window.open(document.fileUrl, '_blank')}>
+                          <Button variant="outline" size="sm" onClick={() => downloadDocument(document)}>
                             <i className="fas fa-download mr-2"></i>
                             Download
                           </Button>

@@ -39,6 +39,7 @@ import {
   persistConsumerAuth,
 } from "@/lib/consumer-auth";
 import { getTerminology, type BusinessType } from "@shared/terminology";
+import { getSafeConsumerReturnPath } from "@shared/utils/consumerReturnPath";
 
 export default function ConsumerLogin() {
   const [, setLocation] = useLocation();
@@ -68,6 +69,13 @@ export default function ConsumerLogin() {
     // Do NOT detect from path - consumers should login without agency context
     const subdomain = extractSubdomain(window.location.hostname);
     return subdomain;
+  }, []);
+
+  const returnTo = useMemo(() => {
+    if (typeof window === "undefined") {
+      return null;
+    }
+    return getSafeConsumerReturnPath(new URLSearchParams(window.location.search).get("returnTo"));
   }, []);
 
   const persistAgencyContext = useCallback((context: AgencyContext) => {
@@ -255,7 +263,7 @@ export default function ConsumerLogin() {
         });
 
         // Force a hard redirect to clear any cached state
-        window.location.href = "/consumer-dashboard";
+        window.location.href = returnTo || "/consumer-dashboard";
       }
     },
     onError: (error: unknown) => {

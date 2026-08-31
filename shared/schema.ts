@@ -586,11 +586,11 @@ export const signatureRequests = pgTable("signature_requests", {
 // Signed documents (completed signature requests with full legal record)
 export const signedDocuments = pgTable("signed_documents", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  signatureRequestId: uuid("signature_request_id").references(() => signatureRequests.id, { onDelete: "cascade" }).notNull().unique(),
-  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
-  consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "cascade" }).notNull(),
-  accountId: uuid("account_id").references(() => accounts.id, { onDelete: "cascade" }),
-  documentId: uuid("document_id").references(() => documents.id, { onDelete: "cascade" }).notNull(),
+  signatureRequestId: uuid("signature_request_id").references(() => signatureRequests.id, { onDelete: "restrict" }).notNull().unique(),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "restrict" }).notNull(),
+  consumerId: uuid("consumer_id").references(() => consumers.id, { onDelete: "restrict" }).notNull(),
+  accountId: uuid("account_id").references(() => accounts.id, { onDelete: "set null" }),
+  documentId: uuid("document_id").references(() => documents.id, { onDelete: "restrict" }).notNull(),
   title: text("title").notNull(),
   signatureData: text("signature_data").notNull(), // Base64 encoded signature image
   initialsData: text("initials_data"), // Base64 encoded initials image

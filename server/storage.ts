@@ -140,13 +140,20 @@ import {
 } from "@shared/schema";
 import { messagingPlans, EMAIL_OVERAGE_RATE_PER_EMAIL, SMS_OVERAGE_RATE_PER_SEGMENT, DOCUMENT_SIGNING_ADDON_PRICE, MOBILE_APP_BRANDING_MONTHLY, AI_AUTO_RESPONSE_ADDON_PRICE, AUTO_RESPONSE_INCLUDED_RESPONSES, AUTO_RESPONSE_OVERAGE_PER_RESPONSE, type MessagingPlanId } from "@shared/billing-plans";
 import { db } from "./db";
-import { eq, and, or, desc, gt, sql, inArray, gte, lte, isNotNull } from "drizzle-orm";
+import { eq, and, or, desc, gt, sql, inArray, gte, lte, isNull, isNotNull } from "drizzle-orm";
 import {
   ensureArrangementOptionsSchema,
   ensureDocumentsSchema,
   ensureTenantSettingsSchema,
   ensureProposedArrangementsSchema,
 } from "@shared/schemaFixes";
+
+export class SignedDocumentRetentionError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SignedDocumentRetentionError';
+  }
+}
 
 type DocumentWithAccount = Document & {
   account?: (Account & { consumer?: Consumer }) | null;
@@ -418,7 +425,12 @@ export interface IStorage {
   
   // Document operations
   getDocumentsByTenant(tenantId: string): Promise<DocumentWithAccount[]>;
+  getDocumentById(id: string): Promise<Document | undefined>;
   createDocument(document: InsertDocument): Promise<Document>;
+  createSignatureRequestWithDocument(
+    document: InsertDocument,
+    request: Omit<InsertSignatureRequest, "documentId">,
+  ): Promise<{ document: Document; signatureRequest: SignatureRequest }>;
   deleteDocument(id: string, tenantId: string): Promise<boolean>;
   
   // Document template operations
@@ -1232,6 +1244,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteConsumer(id: string, tenantId: string): Promise<void> {
+    const [signedRecord] = await db
+      .select({ id: signedDocuments.id })
+      .from(signedDocuments)
+      .where(and(eq(signedDocuments.consumerId, id), eq(signedDocuments.tenantId, tenantId)))
+      .limit(1);
+    if (signedRecord) {
+      throw new SignedDocumentRetentionError('Consumers with completed signed documents cannot be deleted');
+    }
+
     await db.delete(consumers)
       .where(and(eq(consumers.id, id), eq(consumers.tenantId, tenantId)));
   }
@@ -2517,6 +2538,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteAccount(id: string, tenantId: string): Promise<void> {
+    const [signedRecord] = await db
+      .select({ id: signedDocuments.id })
+      .from(signedDocuments)
+      .where(and(eq(signedDocuments.accountId, id), eq(signedDocuments.tenantId, tenantId)))
+      .limit(1);
+    if (signedRecord) {
+      throw new SignedDocumentRetentionError('Accounts with completed signed documents cannot be deleted');
+    }
+
     await db.delete(accounts)
       .where(and(eq(accounts.id, id), eq(accounts.tenantId, tenantId)));
   }
@@ -2533,6 +2563,18 @@ export class DatabaseStorage implements IStorage {
 
     if (accountsToDelete.length === 0) {
       return 0;
+    }
+
+    const [signedRecord] = await db
+      .select({ id: signedDocuments.id })
+      .from(signedDocuments)
+      .where(and(
+        eq(signedDocuments.tenantId, tenantId),
+        inArray(signedDocuments.accountId, accountsToDelete.map(account => account.id)),
+      ))
+      .limit(1);
+    if (signedRecord) {
+      throw new SignedDocumentRetentionError('Accounts with completed signed documents cannot be deleted');
     }
 
     await db
@@ -2574,14 +2616,26 @@ export class DatabaseStorage implements IStorage {
     }
     
     const accountIds = expiredAccounts.map(a => a.id);
+    const protectedRows = await db
+      .select({ accountId: signedDocuments.accountId })
+      .from(signedDocuments)
+      .where(inArray(signedDocuments.accountId, accountIds));
+    const protectedAccountIds = new Set(
+      protectedRows.map(row => row.accountId).filter((id): id is string => Boolean(id)),
+    );
+    const deletableAccounts = expiredAccounts.filter(account => !protectedAccountIds.has(account.id));
+
+    if (deletableAccounts.length === 0) {
+      return { deletedCount: 0, deletedAccounts: [] };
+    }
     
     await db
       .delete(accounts)
-      .where(inArray(accounts.id, accountIds));
+      .where(inArray(accounts.id, deletableAccounts.map(account => account.id)));
     
     return {
-      deletedCount: expiredAccounts.length,
-      deletedAccounts: expiredAccounts.map(a => ({ id: a.id, tenantId: a.tenantId, accountNumber: a.accountNumber })),
+      deletedCount: deletableAccounts.length,
+      deletedAccounts: deletableAccounts.map(a => ({ id: a.id, tenantId: a.tenantId, accountNumber: a.accountNumber })),
     };
   }
 
@@ -2717,6 +2771,16 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
+  async getDocumentById(id: string): Promise<Document | undefined> {
+    await ensureDocumentsSchema(db);
+
+    const [document] = await db
+      .select()
+      .from(documents)
+      .where(eq(documents.id, id));
+    return document;
+  }
+
   async createDocument(document: InsertDocument): Promise<Document> {
     await ensureDocumentsSchema(db);
 
@@ -2724,8 +2788,50 @@ export class DatabaseStorage implements IStorage {
     return newDocument;
   }
 
+  async createSignatureRequestWithDocument(
+    documentData: InsertDocument,
+    requestData: Omit<InsertSignatureRequest, "documentId">,
+  ): Promise<{ document: Document; signatureRequest: SignatureRequest }> {
+    await ensureDocumentsSchema(db);
+
+    return db.transaction(async (tx) => {
+      const [document] = await tx.insert(documents).values(documentData).returning();
+      const [signatureRequest] = await tx
+        .insert(signatureRequests)
+        .values({ ...requestData, documentId: document.id })
+        .returning();
+
+      await tx.insert(signatureAuditTrail).values({
+        signatureRequestId: signatureRequest.id,
+        eventType: 'created',
+        eventData: { createdBy: 'admin' },
+      });
+
+      return { document, signatureRequest };
+    });
+  }
+
   async deleteDocument(id: string, tenantId: string): Promise<boolean> {
     await ensureDocumentsSchema(db);
+
+    const [protectedDocument] = await db
+      .select({ id: signedDocuments.id })
+      .from(signedDocuments)
+      .innerJoin(
+        signatureRequests,
+        eq(signedDocuments.signatureRequestId, signatureRequests.id),
+      )
+      .where(and(
+        eq(signedDocuments.tenantId, tenantId),
+        or(
+          eq(signedDocuments.documentId, id),
+          eq(signatureRequests.documentId, id),
+        ),
+      ))
+      .limit(1);
+    if (protectedDocument) {
+      return false;
+    }
 
     const deleted = await db
       .delete(documents)
@@ -4356,126 +4462,163 @@ export class DatabaseStorage implements IStorage {
     userAgent: string;
     legalConsent: boolean;
     consentText: string;
+    signedDocumentHtml: string;
+    documentHash: string;
   }): Promise<{ signatureRequest: SignatureRequest; signedDocument: SignedDocument }> {
-    // Get the signature request to copy data
-    const [request] = await db.select().from(signatureRequests).where(eq(signatureRequests.id, data.signatureRequestId));
-    
-    if (!request) {
-      throw new Error('Signature request not found');
-    }
+    await ensureDocumentsSchema(db);
 
-    if (request.status === 'signed') {
-      throw new Error('Document already signed');
-    }
+    return db.transaction(async (tx) => {
+      const [request] = await tx.select().from(signatureRequests).where(eq(signatureRequests.id, data.signatureRequestId));
 
-    if (request.status === 'expired') {
-      throw new Error('Signature request expired');
-    }
+      if (!request) {
+        throw new Error('Signature request not found');
+      }
+      if (request.status !== 'pending' && request.status !== 'viewed') {
+        throw new Error('Signature request can no longer be signed');
+      }
 
-    const now = new Date();
+      const now = new Date();
+      const safeTitle = request.title || 'Document';
+      const safeFileName = safeTitle.replace(/[^a-z0-9._-]+/gi, '-');
 
-    // Update signature request to signed status
-    const [updatedRequest] = await db
-      .update(signatureRequests)
-      .set({
-        status: 'signed',
-        signedAt: now,
+      const [signedArtifact] = await tx.insert(documents).values({
+        tenantId: request.tenantId,
+        accountId: request.accountId,
+        title: `Signed: ${safeTitle}`,
+        description: `Electronically signed on ${now.toLocaleDateString()}`,
+        fileName: `signed-${safeFileName}.html`,
+        fileUrl: `data:text/html;charset=utf-8,${encodeURIComponent(data.signedDocumentHtml)}`,
+        fileSize: Buffer.byteLength(data.signedDocumentHtml, 'utf8'),
+        mimeType: 'text/html',
+        isPublic: false,
+      }).returning();
+
+      const [updatedRequest] = await tx
+        .update(signatureRequests)
+        .set({
+          status: 'signed',
+          signedAt: now,
+          signatureData: data.signatureData,
+          initialsData: data.initialsData || null,
+          ipAddress: data.ipAddress,
+          userAgent: data.userAgent,
+          legalConsent: data.legalConsent,
+          consentText: data.consentText,
+          updatedAt: now,
+        })
+        .where(and(
+          eq(signatureRequests.id, data.signatureRequestId),
+          inArray(signatureRequests.status, ['pending', 'viewed']),
+          or(
+            isNull(signatureRequests.expiresAt),
+            gt(signatureRequests.expiresAt, now),
+          ),
+        ))
+        .returning();
+      if (!updatedRequest) {
+        throw new Error('Signature request can no longer be signed');
+      }
+
+      const [signedDoc] = await tx.insert(signedDocuments).values({
+        signatureRequestId: data.signatureRequestId,
+        tenantId: request.tenantId,
+        consumerId: request.consumerId,
+        accountId: request.accountId,
+        documentId: signedArtifact.id,
+        title: request.title,
         signatureData: data.signatureData,
         initialsData: data.initialsData || null,
         ipAddress: data.ipAddress,
         userAgent: data.userAgent,
         legalConsent: data.legalConsent,
         consentText: data.consentText,
-        updatedAt: now,
-      })
-      .where(eq(signatureRequests.id, data.signatureRequestId))
-      .returning();
+        signedAt: now,
+        documentHash: data.documentHash,
+      }).returning();
 
-    // Create signed document record
-    const [signedDoc] = await db.insert(signedDocuments).values({
-      signatureRequestId: data.signatureRequestId,
-      tenantId: request.tenantId,
-      consumerId: request.consumerId,
-      accountId: request.accountId,
-      documentId: request.documentId,
-      title: request.title,
-      signatureData: data.signatureData,
-      initialsData: data.initialsData || null,
-      ipAddress: data.ipAddress,
-      userAgent: data.userAgent,
-      legalConsent: data.legalConsent,
-      consentText: data.consentText,
-      signedAt: now,
-    }).returning();
+      await tx.insert(signatureAuditTrail).values({
+        signatureRequestId: data.signatureRequestId,
+        eventType: 'signed',
+        eventData: {
+          signedDocumentId: signedDoc.id,
+          documentId: signedArtifact.id,
+          documentHash: data.documentHash,
+        },
+        ipAddress: data.ipAddress,
+        userAgent: data.userAgent,
+      });
 
-    // Create audit trail entry
-    await db.insert(signatureAuditTrail).values({
-      signatureRequestId: data.signatureRequestId,
-      eventType: 'signed',
-      eventData: { signedDocumentId: signedDoc.id },
-      ipAddress: data.ipAddress,
-      userAgent: data.userAgent,
+      return { signatureRequest: updatedRequest, signedDocument: signedDoc };
     });
-
-    return { signatureRequest: updatedRequest, signedDocument: signedDoc };
   }
 
   async declineSignature(signatureRequestId: string, reason: string, ipAddress?: string, userAgent?: string): Promise<SignatureRequest> {
-    const now = new Date();
-    
-    const [updated] = await db
-      .update(signatureRequests)
-      .set({
-        status: 'declined',
-        declinedAt: now,
-        declineReason: reason,
-        updatedAt: now,
-      })
-      .where(eq(signatureRequests.id, signatureRequestId))
-      .returning();
+    return db.transaction(async (tx) => {
+      const now = new Date();
+      const [updated] = await tx
+        .update(signatureRequests)
+        .set({
+          status: 'declined',
+          declinedAt: now,
+          declineReason: reason,
+          updatedAt: now,
+        })
+        .where(and(
+          eq(signatureRequests.id, signatureRequestId),
+          inArray(signatureRequests.status, ['pending', 'viewed']),
+        ))
+        .returning();
 
-    // Create audit trail entry
-    await db.insert(signatureAuditTrail).values({
-      signatureRequestId,
-      eventType: 'declined',
-      eventData: { reason },
-      ipAddress,
-      userAgent,
+      if (!updated) {
+        throw new Error('Signature request can no longer be declined');
+      }
+
+      await tx.insert(signatureAuditTrail).values({
+        signatureRequestId,
+        eventType: 'declined',
+        eventData: { reason },
+        ipAddress,
+        userAgent,
+      });
+
+      return updated;
     });
-
-    return updated;
   }
 
   async markSignatureRequestViewed(signatureRequestId: string, ipAddress?: string, userAgent?: string): Promise<SignatureRequest> {
-    const [request] = await db.select().from(signatureRequests).where(eq(signatureRequests.id, signatureRequestId));
-    
-    if (!request || request.viewedAt) {
-      // Already viewed or doesn't exist, return as is
-      return request;
-    }
+    return db.transaction(async (tx) => {
+      const now = new Date();
+      const [updated] = await tx
+        .update(signatureRequests)
+        .set({
+          status: 'viewed',
+          viewedAt: now,
+          updatedAt: now,
+        })
+        .where(and(
+          eq(signatureRequests.id, signatureRequestId),
+          eq(signatureRequests.status, 'pending'),
+        ))
+        .returning();
 
-    const now = new Date();
-    
-    const [updated] = await db
-      .update(signatureRequests)
-      .set({
-        status: 'viewed',
-        viewedAt: now,
-        updatedAt: now,
-      })
-      .where(eq(signatureRequests.id, signatureRequestId))
-      .returning();
+      if (!updated) {
+        const [current] = await tx
+          .select()
+          .from(signatureRequests)
+          .where(eq(signatureRequests.id, signatureRequestId));
+        return current;
+      }
 
-    // Create audit trail entry
-    await db.insert(signatureAuditTrail).values({
-      signatureRequestId,
-      eventType: 'viewed',
-      eventData: {},
-      ipAddress,
-      userAgent,
+      await tx.insert(signatureAuditTrail).values({
+        signatureRequestId,
+        eventType: 'viewed',
+        eventData: {},
+        ipAddress,
+        userAgent,
+      });
+
+      return updated;
     });
-
-    return updated;
   }
 
   async getSignedDocumentsByTenant(tenantId: string): Promise<SignedDocument[]> {

@@ -1,5 +1,11 @@
 import { pool } from './db';
 import { encryptCredential } from './credentialCrypto';
+import { createHash } from 'node:crypto';
+import {
+  buildLegacyReferencedSignedArtifact,
+  buildLegacySignedArtifact,
+  decodeStoredHtml,
+} from '../shared/utils/signedDocumentArtifact';
 
 export async function runMigrations() {
   let client;
@@ -777,13 +783,21 @@ export async function runMigrations() {
       await client.query(`
         CREATE TABLE IF NOT EXISTS signed_documents (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          signature_request_id UUID NOT NULL REFERENCES signature_requests(id) ON DELETE CASCADE,
-          consumer_id UUID NOT NULL REFERENCES consumers(id) ON DELETE CASCADE,
+          signature_request_id UUID NOT NULL UNIQUE REFERENCES signature_requests(id) ON DELETE RESTRICT,
+          tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE RESTRICT,
+          consumer_id UUID NOT NULL REFERENCES consumers(id) ON DELETE RESTRICT,
+          account_id UUID REFERENCES accounts(id) ON DELETE SET NULL,
+          document_id UUID NOT NULL REFERENCES documents(id) ON DELETE RESTRICT,
+          title TEXT NOT NULL,
           signature_data TEXT NOT NULL,
           initials_data TEXT,
-          ip_address VARCHAR,
-          user_agent TEXT,
-          signed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          ip_address TEXT NOT NULL,
+          user_agent TEXT NOT NULL,
+          legal_consent BOOLEAN NOT NULL DEFAULT TRUE,
+          consent_text TEXT NOT NULL,
+          signed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          document_hash TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
       `);
       console.log('  ✓ signed_documents table');
@@ -791,13 +805,184 @@ export async function runMigrations() {
       console.log('  ⚠ signed_documents (already exists)');
     }
     
-    // Add initials_data column to signed_documents if it doesn't exist
-    console.log('Adding initials_data to signed_documents...');
+    // Upgrade legacy signed_documents tables to the full legal-record schema.
+    // Columns are nullable during backfill, then required invariants are applied.
+    console.log('Upgrading signed_documents legal record columns...');
     try {
-      await client.query(`ALTER TABLE signed_documents ADD COLUMN IF NOT EXISTS initials_data TEXT`);
-      console.log('  ✓ initials_data');
-    } catch (err) {
-      console.log('  ⚠ initials_data (already exists or error)');
+      const signedDocumentColumns = [
+        'ADD COLUMN IF NOT EXISTS tenant_id UUID',
+        'ADD COLUMN IF NOT EXISTS account_id UUID',
+        'ADD COLUMN IF NOT EXISTS document_id UUID',
+        'ADD COLUMN IF NOT EXISTS title TEXT',
+        'ADD COLUMN IF NOT EXISTS initials_data TEXT',
+        'ADD COLUMN IF NOT EXISTS legal_consent BOOLEAN DEFAULT TRUE',
+        'ADD COLUMN IF NOT EXISTS consent_text TEXT',
+        'ADD COLUMN IF NOT EXISTS document_hash TEXT',
+        'ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP',
+      ];
+      for (const definition of signedDocumentColumns) {
+        await client.query(`ALTER TABLE signed_documents ${definition}`);
+      }
+
+      await client.query(`
+        UPDATE signed_documents sd
+        SET tenant_id = COALESCE(sd.tenant_id, sr.tenant_id),
+            account_id = COALESCE(sd.account_id, sr.account_id),
+            title = COALESCE(NULLIF(sd.title, ''), sr.title, 'Signed document'),
+            legal_consent = COALESCE(sd.legal_consent, sr.legal_consent, TRUE),
+            consent_text = COALESCE(
+              NULLIF(sd.consent_text, ''),
+              NULLIF(sr.consent_text, ''),
+              'I consented to sign this document electronically.'
+            ),
+            ip_address = COALESCE(NULLIF(sd.ip_address, ''), NULLIF(sr.ip_address, ''), 'unknown'),
+            user_agent = COALESCE(NULLIF(sd.user_agent, ''), NULLIF(sr.user_agent, ''), 'unknown'),
+            signed_at = COALESCE(sd.signed_at, sr.signed_at, CURRENT_TIMESTAMP),
+            created_at = COALESCE(sd.created_at, sd.signed_at, sr.signed_at, CURRENT_TIMESTAMP)
+        FROM signature_requests sr
+        WHERE sd.signature_request_id = sr.id
+      `);
+
+      const legacyRecords = await client.query(`
+        SELECT sd.id,
+               sd.document_id,
+               sd.document_hash,
+               sd.signature_data,
+               sd.initials_data,
+               sd.signed_at,
+               sd.tenant_id,
+               sd.account_id,
+               sd.title,
+               sr.document_id AS source_document_id,
+               existing_artifact.file_url AS existing_artifact_url,
+               source_document.file_url AS source_file_url
+        FROM signed_documents sd
+        JOIN signature_requests sr ON sr.id = sd.signature_request_id
+        LEFT JOIN documents existing_artifact ON existing_artifact.id = sd.document_id
+        LEFT JOIN documents source_document ON source_document.id = sr.document_id
+        WHERE sd.document_id IS NULL
+           OR sd.document_hash IS NULL
+           OR sd.document_id = sr.document_id
+      `);
+
+      for (const record of legacyRecords.rows) {
+        if (record.document_id && record.document_id !== record.source_document_id) {
+          const existingHtml = decodeStoredHtml(record.existing_artifact_url);
+          if (existingHtml) {
+            const hash = createHash('sha256').update(existingHtml, 'utf8').digest('hex');
+            await client.query(
+              `UPDATE signed_documents SET document_hash = $2 WHERE id = $1`,
+              [record.id, hash],
+            );
+            continue;
+          }
+        }
+
+        const sourceHtml = decodeStoredHtml(record.source_file_url);
+        const finalizedHtml = sourceHtml
+          ? buildLegacySignedArtifact(
+              sourceHtml,
+              record.signature_data,
+              record.initials_data,
+              record.signed_at,
+            )
+          : buildLegacyReferencedSignedArtifact(
+              record.existing_artifact_url || record.source_file_url,
+              record.signature_data,
+              record.initials_data,
+              record.signed_at,
+            );
+        const fileName = `signed-${String(record.title || 'document')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '') || 'document'}.html`;
+        const [artifact] = (await client.query(
+          `INSERT INTO documents (
+             tenant_id, account_id, title, description, file_name, file_url,
+             file_size, mime_type, is_public
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7, 'text/html', FALSE)
+           RETURNING id`,
+          [
+            record.tenant_id,
+            record.account_id,
+            `Signed: ${record.title || 'Document'}`,
+            'Migrated finalized electronic signature record',
+            fileName,
+            `data:text/html;charset=utf-8,${encodeURIComponent(finalizedHtml)}`,
+            Buffer.byteLength(finalizedHtml, 'utf8'),
+          ],
+        )).rows;
+        const hash = createHash('sha256').update(finalizedHtml, 'utf8').digest('hex');
+        await client.query(
+          `UPDATE signed_documents SET document_id = $2, document_hash = $3 WHERE id = $1`,
+          [record.id, artifact.id, hash],
+        );
+      }
+
+      await client.query(`
+        ALTER TABLE signed_documents
+          ALTER COLUMN tenant_id SET NOT NULL,
+          ALTER COLUMN document_id SET NOT NULL,
+          ALTER COLUMN title SET NOT NULL,
+          ALTER COLUMN ip_address SET NOT NULL,
+          ALTER COLUMN user_agent SET NOT NULL,
+          ALTER COLUMN legal_consent SET NOT NULL,
+          ALTER COLUMN consent_text SET NOT NULL,
+          ALTER COLUMN signed_at SET NOT NULL,
+          ALTER COLUMN document_hash SET NOT NULL
+      `);
+      await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS signed_documents_signature_request_id_unique
+        ON signed_documents(signature_request_id)
+      `);
+      await client.query(`
+        DO $$
+        DECLARE
+          existing_fk RECORD;
+          expected_fk_count INTEGER;
+        BEGIN
+          SELECT COUNT(*) INTO expected_fk_count
+          FROM pg_constraint
+          WHERE conrelid = 'signed_documents'::regclass
+            AND (
+              (conname = 'signed_documents_signature_request_id_signature_requests_id_fk' AND confdeltype = 'r')
+              OR (conname = 'signed_documents_tenant_id_tenants_id_fk' AND confdeltype = 'r')
+              OR (conname = 'signed_documents_consumer_id_consumers_id_fk' AND confdeltype = 'r')
+              OR (conname = 'signed_documents_account_id_accounts_id_fk' AND confdeltype = 'n')
+              OR (conname = 'signed_documents_document_id_documents_id_fk' AND confdeltype = 'r')
+            );
+
+          IF expected_fk_count <> 5 THEN
+            FOR existing_fk IN
+              SELECT conname
+              FROM pg_constraint
+              WHERE conrelid = 'signed_documents'::regclass
+                AND contype = 'f'
+            LOOP
+              EXECUTE format(
+                'ALTER TABLE signed_documents DROP CONSTRAINT %I',
+                existing_fk.conname
+              );
+            END LOOP;
+
+            ALTER TABLE signed_documents
+              ADD CONSTRAINT signed_documents_signature_request_id_signature_requests_id_fk
+                FOREIGN KEY (signature_request_id) REFERENCES signature_requests(id) ON DELETE RESTRICT,
+              ADD CONSTRAINT signed_documents_tenant_id_tenants_id_fk
+                FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE RESTRICT,
+              ADD CONSTRAINT signed_documents_consumer_id_consumers_id_fk
+                FOREIGN KEY (consumer_id) REFERENCES consumers(id) ON DELETE RESTRICT,
+              ADD CONSTRAINT signed_documents_account_id_accounts_id_fk
+                FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE SET NULL,
+              ADD CONSTRAINT signed_documents_document_id_documents_id_fk
+                FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE RESTRICT;
+          END IF;
+        END $$;
+      `);
+      console.log(`  ✓ signed_documents upgraded (${legacyRecords.rowCount ?? 0} legacy records checked)`);
+    } catch (err: any) {
+      console.error(`  ✗ signed_documents legal record upgrade failed: ${err.message}`);
+      throw err;
     }
     
     try {
