@@ -13,6 +13,8 @@ import {
   arrangementPlanTypes,
   agencyTrialRegistrationSchema,
   platformUsers,
+  globalAdminCredentials,
+  globalAdminLoginAttempts,
   tenants,
   tenantSettings,
   consumers,
@@ -69,7 +71,11 @@ import externalApiRouter from "./external-api";
 import { registerWalletRoutes } from "./walletRoutes";
 import { registerChiamoRoutes } from "./chiamoRoutes";
 import { getAdminCommunicationsInventory } from "./adminCommunicationsService";
-import { createGlobalAdminToken, verifyGlobalAdminToken } from "./globalAdminAuth";
+import {
+  createGlobalAdminToken,
+  validateGlobalAdminPassword,
+  verifyGlobalAdminToken,
+} from "./globalAdminAuth";
 import { walletService, InsufficientFundsError } from "./walletService";
 import { AuthnetService } from "./authnetService";
 import bcrypt from "bcryptjs";
@@ -1676,6 +1682,10 @@ async function sendChainInvoiceEmail(params: {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Replit terminates client connections at a trusted reverse proxy. This makes
+  // req.ip usable for security controls without treating every user as the proxy.
+  app.set("trust proxy", 1);
+
   app.use('/api/v2', externalApiRouter);
   // The Chiamo customer origin is Voice-only. This server-side boundary prevents
   // manually entered Chain API URLs from bypassing the separate product shell.
@@ -20463,55 +20473,95 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Global Admin Routes (Platform Owner Only)
   
-  // Seed subscription plans endpoint (no auth required - safe to call multiple times)
-  // Support both GET and POST for easy browser access
-  app.get('/api/admin/seed-plans', async (req, res) => {
-    try {
-      const { seedSubscriptionPlans } = await import('./seed-subscription-plans');
-      await seedSubscriptionPlans();
-      res.json({ success: true, message: 'Subscription plans seeded successfully' });
-    } catch (error) {
-      console.error('Error seeding plans:', error);
-      res.status(500).json({ success: false, message: 'Failed to seed subscription plans' });
-    }
+  const globalAdminLoginSchema = z.object({
+    username: z.string().trim().min(1).max(100),
+    password: z.string().min(1).max(256),
   });
-  
-  app.post('/api/admin/seed-plans', async (req, res) => {
-    try {
-      const { seedSubscriptionPlans } = await import('./seed-subscription-plans');
-      await seedSubscriptionPlans();
-      res.json({ success: true, message: 'Subscription plans seeded successfully' });
-    } catch (error) {
-      console.error('Error seeding plans:', error);
-      res.status(500).json({ success: false, message: 'Failed to seed subscription plans' });
-    }
+  const globalAdminPasswordChangeSchema = z.object({
+    currentPassword: z.string().min(1).max(256),
+    newPassword: z.string().min(1).max(256),
   });
-  
-  // Admin login endpoint (simple password-based)
+  const dummyGlobalAdminHash = '$2b$12$C6UzMDM.H6dfI/f/IKxGhuQ5XxXxXxXxXxXxXxXxXxXxXxXxXxXx';
+  const globalAdminLoginWindowMs = 15 * 60 * 1000;
+  const globalAdminMaxLoginFailures = 5;
+
+  const reserveGlobalAdminLoginAttempt = async (clientKeyHash: string, now: Date) => {
+    const resetAt = new Date(now.getTime() + globalAdminLoginWindowMs);
+    const result = await db.execute(sql`
+      INSERT INTO global_admin_login_attempts (client_key_hash, failures, reset_at, updated_at)
+      VALUES (${clientKeyHash}, 1, ${resetAt}, ${now})
+      ON CONFLICT (client_key_hash) DO UPDATE
+      SET failures = CASE
+            WHEN global_admin_login_attempts.reset_at <= ${now} THEN 1
+            ELSE global_admin_login_attempts.failures + 1
+          END,
+          reset_at = CASE
+            WHEN global_admin_login_attempts.reset_at <= ${now} THEN ${resetAt}
+            ELSE global_admin_login_attempts.reset_at
+          END,
+          updated_at = ${now}
+      RETURNING failures, reset_at
+    `);
+    return result.rows[0] as { failures: number; reset_at: Date };
+  };
+
   app.post('/api/admin/login', async (req, res) => {
     try {
-      const { username, password } = req.body;
-      
-      // Hardcoded admin credentials (same as frontend)
-      if (username === 'ChainAdmin' && password === 'W@yp0intsolutions') {
-        if (!process.env.JWT_SECRET) {
-          return res.status(500).json({ message: "Server configuration error" });
-        }
-        
-        // Create admin token
-        const adminToken = createGlobalAdminToken(process.env.JWT_SECRET);
-        
-        res.json({ 
-          success: true,
-          token: adminToken,
-          message: "Admin authenticated successfully"
-        });
-      } else {
-        res.status(401).json({ 
-          success: false,
-          message: "Invalid credentials" 
-        });
+      const clientKeyHash = crypto
+        .createHash('sha256')
+        .update(req.ip || req.socket.remoteAddress || 'unknown')
+        .digest('hex');
+      const now = new Date();
+      const attempt = await reserveGlobalAdminLoginAttempt(clientKeyHash, now);
+      if (attempt.failures > globalAdminMaxLoginFailures) {
+        const retryAfter = Math.max(
+          1,
+          Math.ceil((new Date(attempt.reset_at).getTime() - now.getTime()) / 1000),
+        );
+        res.setHeader('Retry-After', String(retryAfter));
+        return res.status(429).json({ success: false, message: "Too many login attempts. Please try again later." });
       }
+
+      const parsed = globalAdminLoginSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(401).json({ success: false, message: "Invalid credentials" });
+      }
+      if (!process.env.JWT_SECRET) {
+        return res.status(503).json({ message: "Global Admin authentication is unavailable" });
+      }
+
+      const [credential] = await db
+        .select()
+        .from(globalAdminCredentials)
+        .where(eq(globalAdminCredentials.id, 'primary'))
+        .limit(1);
+      const submittedUsernameHash = crypto.createHash('sha256').update(parsed.data.username).digest();
+      const storedUsernameHash = crypto.createHash('sha256').update(credential?.username || '').digest();
+      const usernameMatches = credential
+        ? crypto.timingSafeEqual(submittedUsernameHash, storedUsernameHash)
+        : false;
+      const passwordMatches = await bcrypt.compare(
+        parsed.data.password,
+        credential?.passwordHash || dummyGlobalAdminHash,
+      ).catch(() => false);
+
+      if (!credential || !usernameMatches || !passwordMatches) {
+        return res.status(401).json({ success: false, message: "Invalid credentials" });
+      }
+
+      await db
+        .delete(globalAdminLoginAttempts)
+        .where(eq(globalAdminLoginAttempts.clientKeyHash, clientKeyHash));
+      const adminToken = createGlobalAdminToken(
+        process.env.JWT_SECRET,
+        credential.credentialVersion,
+      );
+      return res.json({
+        success: true,
+        token: adminToken,
+        mustChangePassword: credential.mustChangePassword,
+        message: "Admin authenticated successfully",
+      });
     } catch (error) {
       console.error('Admin login error:', error);
       res.status(500).json({ message: "Login failed" });
@@ -20527,28 +20577,104 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!jwtSecret) {
         return res.status(503).json({ message: "Global Admin authentication is unavailable" });
       }
-      if (verifyGlobalAdminToken(token, jwtSecret)) {
+      const claims = verifyGlobalAdminToken(token, jwtSecret);
+      if (claims) {
+        const [credential] = await db
+          .select({
+            credentialVersion: globalAdminCredentials.credentialVersion,
+            mustChangePassword: globalAdminCredentials.mustChangePassword,
+          })
+          .from(globalAdminCredentials)
+          .where(eq(globalAdminCredentials.id, 'primary'))
+          .limit(1);
+        if (!credential || credential.credentialVersion !== claims.credentialVersion) {
+          return res.status(401).json({ message: "Global Admin session has expired" });
+        }
+        if (
+          credential.mustChangePassword
+          && req.path !== '/api/admin/change-password'
+        ) {
+          return res.status(403).json({
+            code: "PASSWORD_CHANGE_REQUIRED",
+            message: "Change the bootstrap password before using Global Admin",
+          });
+        }
+        req.globalAdminClaims = claims;
         req.user = { isGlobalAdmin: true };
         return next();
       }
     }
-    
-    const userId = req.user?.id ?? req.user?.userId;
-
-    if (!userId) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-
-    // Check if user has platform_admin role (they might have multiple roles)
-    const userRoles = await db.select().from(platformUsers).where(eq(platformUsers.authId, userId));
-    const hasPlatformAdminRole = userRoles.some((user: any) => user.role === 'platform_admin');
-
-    if (!hasPlatformAdminRole) {
-      return res.status(403).json({ message: "Platform admin access required" });
-    }
-    
-    next();
+    return res.status(401).json({ message: "Unauthorized" });
   };
+
+  app.post('/api/admin/change-password', isPlatformAdmin, async (req: any, res) => {
+    try {
+      if (!req.globalAdminClaims) {
+        return res.status(403).json({ message: "Password changes require a Global Admin credential session" });
+      }
+      if (!process.env.JWT_SECRET) {
+        return res.status(503).json({ message: "Global Admin authentication is unavailable" });
+      }
+
+      const parsed = globalAdminPasswordChangeSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: "Current and new passwords are required" });
+      }
+      const passwordError = validateGlobalAdminPassword(parsed.data.newPassword);
+      if (passwordError) {
+        return res.status(400).json({ message: passwordError });
+      }
+      if (parsed.data.currentPassword === parsed.data.newPassword) {
+        return res.status(400).json({ message: "New password must be different from the current password" });
+      }
+
+      const [credential] = await db
+        .select()
+        .from(globalAdminCredentials)
+        .where(eq(globalAdminCredentials.id, 'primary'))
+        .limit(1);
+      if (!credential || !(await bcrypt.compare(parsed.data.currentPassword, credential.passwordHash))) {
+        return res.status(401).json({ message: "Current password is incorrect" });
+      }
+
+      const passwordHash = await bcrypt.hash(parsed.data.newPassword, 12);
+      const [updated] = await db
+        .update(globalAdminCredentials)
+        .set({
+          passwordHash,
+          credentialVersion: sql`${globalAdminCredentials.credentialVersion} + 1`,
+          mustChangePassword: false,
+          updatedAt: new Date(),
+        })
+        .where(and(
+          eq(globalAdminCredentials.id, 'primary'),
+          eq(globalAdminCredentials.credentialVersion, credential.credentialVersion),
+        ))
+        .returning({ credentialVersion: globalAdminCredentials.credentialVersion });
+      if (!updated) {
+        return res.status(409).json({ message: "Password changed elsewhere. Please sign in again." });
+      }
+
+      const token = createGlobalAdminToken(process.env.JWT_SECRET, updated.credentialVersion);
+      return res.json({ success: true, token, message: "Password changed successfully" });
+    } catch (error) {
+      console.error('Global Admin password change error:', error);
+      return res.status(500).json({ message: "Failed to change password" });
+    }
+  });
+
+  const seedPlans = async (_req: any, res: any) => {
+    try {
+      const { seedSubscriptionPlans } = await import('./seed-subscription-plans');
+      await seedSubscriptionPlans();
+      return res.json({ success: true, message: 'Subscription plans seeded successfully' });
+    } catch (error) {
+      console.error('Error seeding plans:', error);
+      return res.status(500).json({ success: false, message: 'Failed to seed subscription plans' });
+    }
+  };
+  app.get('/api/admin/seed-plans', isPlatformAdmin, seedPlans);
+  app.post('/api/admin/seed-plans', isPlatformAdmin, seedPlans);
 
   registerChiamoRoutes(app, isPlatformAdmin);
 

@@ -28,6 +28,12 @@ const formatCurrency = (amount: number) => {
 export default function GlobalAdmin() {
   const { toast } = useToast();
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [isPasswordChangeRequired, setIsPasswordChangeRequired] = useState(false);
+  const [currentAdminPassword, setCurrentAdminPassword] = useState("");
+  const [newAdminPassword, setNewAdminPassword] = useState("");
+  const [confirmAdminPassword, setConfirmAdminPassword] = useState("");
+  const [isChangingAdminPassword, setIsChangingAdminPassword] = useState(false);
   const [globalAdminSection, setGlobalAdminSection] = useState<"chain" | "chiamo">("chain");
   const [companyStatus, setCompanyStatus] = useState("all");
   const [companySearch, setCompanySearch] = useState("");
@@ -157,6 +163,10 @@ export default function GlobalAdmin() {
     const adminAuth = sessionStorage.getItem("admin_authenticated");
     if (adminAuth === "true") {
       setIsAdminAuthenticated(true);
+      if (sessionStorage.getItem("admin_password_change_required") === "true") {
+        setIsPasswordChangeRequired(true);
+        setPasswordDialogOpen(true);
+      }
     }
   }, []);
 
@@ -1203,12 +1213,68 @@ export default function GlobalAdmin() {
     );
   };
 
+  const handleChangeAdminPassword = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (newAdminPassword !== confirmAdminPassword) {
+      toast({
+        title: "Passwords do not match",
+        description: "Enter the same new password in both fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsChangingAdminPassword(true);
+    try {
+      const token = sessionStorage.getItem("admin_token");
+      const response = await fetch("/api/admin/change-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          currentPassword: currentAdminPassword,
+          newPassword: newAdminPassword,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || "Unable to change password");
+      }
+
+      sessionStorage.setItem("admin_token", data.token);
+      sessionStorage.removeItem("admin_password_change_required");
+      setIsPasswordChangeRequired(false);
+      setCurrentAdminPassword("");
+      setNewAdminPassword("");
+      setConfirmAdminPassword("");
+      setPasswordDialogOpen(false);
+      toast({
+        title: "Password changed",
+        description: "Your new Global Admin password is active. Other credential sessions have been signed out.",
+      });
+    } catch (error) {
+      toast({
+        title: "Password change failed",
+        description: error instanceof Error ? error.message : "Unable to change password",
+        variant: "destructive",
+      });
+    } finally {
+      setIsChangingAdminPassword(false);
+    }
+  };
+
   // Show admin authentication form if not authenticated
   if (!isAdminAuthenticated) {
     return (
       <AdminAuth
         onAuthenticated={() => {
           queryClient.removeQueries({ queryKey: ['/api/admin/tenants'] });
+          if (sessionStorage.getItem("admin_password_change_required") === "true") {
+            setIsPasswordChangeRequired(true);
+            setPasswordDialogOpen(true);
+          }
           setIsAdminAuthenticated(true);
         }}
       />
@@ -1227,6 +1293,69 @@ export default function GlobalAdmin() {
           </div>
           
           <div className="flex gap-3">
+            <Dialog
+              open={passwordDialogOpen}
+              onOpenChange={(open) => {
+                if (!open && isPasswordChangeRequired) return;
+                setPasswordDialogOpen(open);
+              }}
+            >
+              <DialogTrigger asChild>
+                <Button variant="outline" data-testid="button-change-admin-password">
+                  <Shield className="h-4 w-4 mr-2" />
+                  Change password
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[440px]">
+                <DialogHeader>
+                  <DialogTitle>Change Global Admin password</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleChangeAdminPassword} className="space-y-4 pt-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="current-admin-password">Current password</Label>
+                    <Input
+                      id="current-admin-password"
+                      type="password"
+                      autoComplete="current-password"
+                      value={currentAdminPassword}
+                      onChange={(event) => setCurrentAdminPassword(event.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="new-admin-password">New password</Label>
+                    <Input
+                      id="new-admin-password"
+                      type="password"
+                      autoComplete="new-password"
+                      value={newAdminPassword}
+                      onChange={(event) => setNewAdminPassword(event.target.value)}
+                      minLength={14}
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Use at least 14 characters with uppercase, lowercase, a number, and a special character.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="confirm-admin-password">Confirm new password</Label>
+                    <Input
+                      id="confirm-admin-password"
+                      type="password"
+                      autoComplete="new-password"
+                      value={confirmAdminPassword}
+                      onChange={(event) => setConfirmAdminPassword(event.target.value)}
+                      minLength={14}
+                      required
+                    />
+                  </div>
+                  <Button type="submit" className="w-full" disabled={isChangingAdminPassword}>
+                    {isChangingAdminPassword ? "Changing password..." : "Change password"}
+                  </Button>
+                </form>
+              </DialogContent>
+            </Dialog>
+
             {/* Logout Button */}
             <Button 
               variant="outline" 

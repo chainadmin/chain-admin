@@ -1,11 +1,13 @@
 import { pool } from './db';
 import { encryptCredential } from './credentialCrypto';
 import { createHash } from 'node:crypto';
+import bcrypt from 'bcryptjs';
 import {
   buildLegacyReferencedSignedArtifact,
   buildLegacySignedArtifact,
   decodeStoredHtml,
 } from '../shared/utils/signedDocumentArtifact';
+import { validateGlobalAdminPassword } from './globalAdminAuth';
 
 export async function runMigrations() {
   let client;
@@ -13,6 +15,53 @@ export async function runMigrations() {
   try {
     client = await pool.connect();
     console.log('🔄 Running database migrations...');
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS global_admin_credentials (
+        id TEXT PRIMARY KEY DEFAULT 'primary',
+        username TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+        credential_version INTEGER NOT NULL DEFAULT 1,
+        must_change_password BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      ALTER TABLE global_admin_credentials
+      ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT TRUE
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS global_admin_login_attempts (
+        client_key_hash TEXT PRIMARY KEY,
+        failures INTEGER NOT NULL DEFAULT 1,
+        reset_at TIMESTAMP NOT NULL,
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    const bootstrapUsername = process.env.GLOBAL_ADMIN_USERNAME?.trim();
+    const bootstrapPassword = process.env.GLOBAL_ADMIN_BOOTSTRAP_PASSWORD;
+    if (bootstrapUsername && bootstrapPassword) {
+      const existingCredential = await client.query(
+        `SELECT id FROM global_admin_credentials WHERE id = 'primary' LIMIT 1`,
+      );
+      if (!existingCredential.rowCount) {
+        const bootstrapPasswordError = validateGlobalAdminPassword(bootstrapPassword);
+        if (bootstrapPasswordError) {
+          throw new Error(`GLOBAL_ADMIN_BOOTSTRAP_PASSWORD is invalid: ${bootstrapPasswordError}`);
+        }
+        const bootstrapHash = await bcrypt.hash(bootstrapPassword, 12);
+        const bootstrapResult = await client.query(
+          `INSERT INTO global_admin_credentials (id, username, password_hash, must_change_password)
+           VALUES ('primary', $1, $2, TRUE)
+           ON CONFLICT (id) DO NOTHING`,
+          [bootstrapUsername, bootstrapHash],
+        );
+        if (bootstrapResult.rowCount) {
+          console.log('  ✓ Global Admin credential initialized from protected bootstrap configuration');
+        }
+      }
+    }
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS platform_announcements (

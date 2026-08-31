@@ -36,6 +36,11 @@ export default function AdminAuth({ onAuthenticated }: AdminAuthProps) {
         // Store authentication token in sessionStorage
         sessionStorage.setItem("admin_authenticated", "true");
         sessionStorage.setItem("admin_token", data.token);
+        if (data.mustChangePassword) {
+          sessionStorage.setItem("admin_password_change_required", "true");
+        } else {
+          sessionStorage.removeItem("admin_password_change_required");
+        }
         
         onAuthenticated();
         toast({

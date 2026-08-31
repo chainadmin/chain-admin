@@ -105,6 +105,7 @@ function Router() {
   const isMobileApp = mobileConfig.isNativePlatform;
   const pathname = window.location.pathname;
   const adminRoutePaths = ["/admin", "/admin/", "/Admin", "/Admin/", "/global-admin", "/global-admin/"] as const;
+  const isGlobalAdminRoute = adminRoutePaths.includes(pathname as typeof adminRoutePaths[number]);
   const createRouteElements = (
     paths: readonly string[],
     component: ComponentType<any>,
@@ -266,6 +267,12 @@ function Router() {
         <Route key="web-loading" path="/:rest*" component={LoadingScreen} />
       </Switch>
     );
+  }
+
+  // Global Admin uses its own managed credential and must not be captured by
+  // tenant-subdomain routing in proxied development or custom-domain setups.
+  if (isGlobalAdminRoute) {
+    return <Switch>{createRouteElements(adminRoutePaths, GlobalAdmin, "global-admin")}</Switch>;
   }
 
   // Chiamo is a distinct customer experience while retaining shared auth and Voice APIs.

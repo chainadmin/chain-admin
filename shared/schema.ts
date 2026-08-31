@@ -234,6 +234,23 @@ export const platformUsers = pgTable("platform_users", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+export const globalAdminCredentials = pgTable("global_admin_credentials", {
+  id: text("id").primaryKey().default("primary"),
+  username: text("username").unique().notNull(),
+  passwordHash: text("password_hash").notNull(),
+  credentialVersion: integer("credential_version").default(1).notNull(),
+  mustChangePassword: boolean("must_change_password").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const globalAdminLoginAttempts = pgTable("global_admin_login_attempts", {
+  clientKeyHash: text("client_key_hash").primaryKey(),
+  failures: integer("failures").default(1).notNull(),
+  resetAt: timestamp("reset_at").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Consumers (end users)
 export const consumers = pgTable("consumers", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
