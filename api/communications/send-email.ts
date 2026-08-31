@@ -10,6 +10,10 @@ import { resolveConsumerPortalUrl } from '@shared/utils/consumerPortal';
 import { finalizeEmailHtml } from '@shared/utils/emailTemplate';
 import { ensureBaseUrl, resolveBaseUrl } from '@shared/utils/baseUrl';
 import { ANDROID_APP_URL, IOS_APP_URL } from '@shared/constants/appStoreLinks';
+import {
+  getCompanyMessagingBlockMessage,
+  isServiceRestrictedForMember,
+} from '@shared/utils/messagingAccess';
 
 const DEFAULT_FROM_EMAIL = 'support@chainsoftwaregroup.com';
 
@@ -328,6 +332,17 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       res.status(404).json({ error: 'Tenant not found' });
       return;
     }
+    const companyBlockMessage = getCompanyMessagingBlockMessage('email', tenantRecord);
+    if (companyBlockMessage) {
+      res.status(403).json({ error: companyBlockMessage });
+      return;
+    }
+    const senderRole = req.platformUser?.role || req.user?.role;
+    const restrictedServices = req.platformUser?.restrictedServices || req.user?.restrictedServices || [];
+    if (isServiceRestrictedForMember('email', senderRole, restrictedServices)) {
+      res.status(403).json({ error: "Access denied. You don't have permission to access email features." });
+      return;
+    }
 
     const [tenantSettingsRecord] = await db
       .select()
@@ -414,6 +429,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
     const metadata = {
       tenantId,
       consumerId: consumerRecord.id,
+      senderUserId: req.authClaims?.userId || req.user?.id,
       ...(accountRecord ? { accountId: accountRecord.id } : {}),
       ...(templateRecord ? { templateId: templateRecord.id } : {}),
     };

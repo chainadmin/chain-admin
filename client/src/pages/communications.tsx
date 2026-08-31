@@ -4,9 +4,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { usePaginatedConsumers } from "@/hooks/use-paginated-consumers";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { useServiceAccess } from "@/hooks/useServiceAccess";
 import AdminLayout from "@/components/admin-layout";
 import { ServiceUpsellBanner } from "@/components/service-upsell-banner";
-import { ServiceGate } from "@/components/service-gate";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -410,6 +411,7 @@ const createEmptyEmailTemplateForm = () => ({
 });
 
 export default function Communications() {
+  const { user, isJwtAuth } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
   const [communicationType, setCommunicationType] = useState<"email" | "sms">("email");
   const [showTemplateModal, setShowTemplateModal] = useState(false);
@@ -654,7 +656,29 @@ export default function Communications() {
   // Get user data for agency URL
   const { data: userData } = useQuery({
     queryKey: ["/api/auth/user"],
+    enabled: !isJwtAuth,
   });
+  const { emailServiceEnabled, smsServiceEnabled } = useServiceAccess();
+  const platformUser = isJwtAuth ? user : (userData as any)?.platformUser;
+  const isOwner = platformUser?.role === "owner";
+  const restrictedServices: string[] = platformUser?.restrictedServices || [];
+  const emailAvailable = emailServiceEnabled && (isOwner || !restrictedServices.includes("email"));
+  const smsAvailable = smsServiceEnabled && (isOwner || !restrictedServices.includes("sms"));
+  const serviceAvailable = (service: "email" | "sms") => service === "email" ? emailAvailable : smsAvailable;
+  const unavailableMessage = (service: "email" | "sms") =>
+    !isOwner && restrictedServices.includes(service)
+      ? `Your team-member account is restricted from using ${service === "sms" ? "SMS" : "email"}.`
+      : `${service === "sms" ? "SMS" : "Email"} service is disabled for this company.`;
+
+  useEffect(() => {
+    if (!emailAvailable && smsAvailable) {
+      setCommunicationType("sms");
+      if (activeTab === "send") setActiveTab("send-sms");
+    } else if (emailAvailable && !smsAvailable) {
+      setCommunicationType("email");
+      if (activeTab === "send-sms") setActiveTab("send");
+    }
+  }, [activeTab, emailAvailable, smsAvailable]);
 
   // Queries
   const { data: emailTemplates, isLoading: emailTemplatesLoading } = useQuery({
@@ -1821,6 +1845,10 @@ export default function Communications() {
   };
 
   const handleSendSms = () => {
+    if (!smsAvailable) {
+      toast({ title: "SMS unavailable", description: unavailableMessage("sms"), variant: "destructive" });
+      return;
+    }
     if (!sendSmsForm.to || !sendSmsForm.message) {
       toast({
         title: "Error",
@@ -1851,6 +1879,10 @@ export default function Communications() {
   };
 
   const handleSendEmail = () => {
+    if (!emailAvailable) {
+      toast({ title: "Email unavailable", description: unavailableMessage("email"), variant: "destructive" });
+      return;
+    }
     if (!sendEmailForm.to || !sendEmailForm.subject || !sendEmailForm.message) {
       toast({
         title: "Error",
@@ -1891,6 +1923,10 @@ export default function Communications() {
 
   const handleTemplateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!serviceAvailable(communicationType)) {
+      toast({ title: "Service unavailable", description: unavailableMessage(communicationType), variant: "destructive" });
+      return;
+    }
     if (communicationType === "email") {
       const htmlContent = emailTemplateForm.html || "";
       const plainText = getPlainText(htmlContent);
@@ -1940,6 +1976,10 @@ export default function Communications() {
 
   const handleCampaignSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!serviceAvailable(communicationType)) {
+      toast({ title: "Service unavailable", description: unavailableMessage(communicationType), variant: "destructive" });
+      return;
+    }
     if (!campaignForm.name.trim() || !campaignForm.templateId) {
       toast({
         title: "Error",
@@ -2058,6 +2098,11 @@ export default function Communications() {
   };
 
   const handleCampaignConfirm = () => {
+    if (!serviceAvailable(communicationType)) {
+      toast({ title: "Service unavailable", description: unavailableMessage(communicationType), variant: "destructive" });
+      setShowCampaignConfirmation(false);
+      return;
+    }
     if (communicationType === "email") {
       const payload = {
         ...campaignForm,
@@ -2103,6 +2148,10 @@ export default function Communications() {
 
   const handleAutomationSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!serviceAvailable(automationForm.type)) {
+      toast({ title: "Service unavailable", description: unavailableMessage(automationForm.type), variant: "destructive" });
+      return;
+    }
     
     // Validate required fields
     if (!automationForm.name.trim()) {
@@ -2239,7 +2288,16 @@ export default function Communications() {
     <AdminLayout>
       <div className="mx-auto flex max-w-7xl flex-col gap-10 px-4 py-10 text-blue-50 sm:px-6 lg:px-8">
         <ServiceUpsellBanner service="email" />
-        <ServiceGate service="email">
+        {(!emailAvailable || !smsAvailable) && (
+          <div className="rounded-xl border border-amber-300/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+            {!emailAvailable && !smsAvailable
+              ? "Email and SMS are unavailable. "
+              : !emailAvailable
+                ? `${unavailableMessage("email")} `
+                : `${unavailableMessage("sms")} `}
+            Contact a company owner to update service access.
+          </div>
+        )}
         <section className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-sky-600/20 via-indigo-600/20 to-blue-900/10 p-8 shadow-2xl shadow-blue-900/30 backdrop-blur">
           <div className="pointer-events-none absolute -right-10 top-16 h-64 w-64 rounded-full bg-sky-500/30 blur-3xl" />
           <div className="pointer-events-none absolute -bottom-20 left-10 h-56 w-56 rounded-full bg-indigo-500/30 blur-3xl" />
@@ -2262,6 +2320,7 @@ export default function Communications() {
                 <Button
                   variant="ghost"
                   onClick={() => setCommunicationType("email")}
+                  disabled={!emailAvailable}
                   className={cn(
                     "rounded-xl border border-white/15 px-5 py-2 text-sm font-semibold transition",
                     communicationType === "email"
@@ -2274,6 +2333,7 @@ export default function Communications() {
                 <Button
                   variant="ghost"
                   onClick={() => setCommunicationType("sms")}
+                  disabled={!smsAvailable}
                   className={cn(
                     "rounded-xl border border-white/15 px-5 py-2 text-sm font-semibold transition",
                     communicationType === "sms"
@@ -2348,6 +2408,7 @@ export default function Communications() {
             </TabsTrigger>
             <TabsTrigger
               value="send"
+              disabled={!emailAvailable}
               className="rounded-xl px-4 py-2.5 text-sm font-semibold text-blue-100 transition data-[state=active]:bg-[#0b1733]/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/20"
             >
               <Mail className="h-4 w-4 mr-1.5 inline" />
@@ -2355,6 +2416,7 @@ export default function Communications() {
             </TabsTrigger>
             <TabsTrigger
               value="send-sms"
+              disabled={!smsAvailable}
               className="rounded-xl px-4 py-2.5 text-sm font-semibold text-blue-100 transition data-[state=active]:bg-[#0b1733]/80 data-[state=active]:text-white data-[state=active]:shadow-lg data-[state=active]:shadow-blue-900/20"
             >
               <MessageSquare className="h-4 w-4 mr-1.5 inline" />
@@ -2401,6 +2463,7 @@ export default function Communications() {
                 <Button
                   variant="ghost"
                   onClick={() => setCommunicationType("email")}
+                  disabled={!emailAvailable}
                   className={cn(
                     "rounded-full px-4 py-1.5 text-xs font-semibold transition",
                     communicationType === "email"
@@ -2413,6 +2476,7 @@ export default function Communications() {
                 <Button
                   variant="ghost"
                   onClick={() => setCommunicationType("sms")}
+                  disabled={!smsAvailable}
                   className={cn(
                     "rounded-full px-4 py-1.5 text-xs font-semibold transition",
                     communicationType === "sms"
@@ -2867,7 +2931,7 @@ export default function Communications() {
                   <Button
                     className="bg-blue-600 hover:bg-blue-700 text-white"
                     onClick={handleSendEmail}
-                    disabled={sendIndividualEmailMutation.isPending}
+                    disabled={!emailAvailable || sendIndividualEmailMutation.isPending}
                     data-testid="button-send-email"
                   >
                     {sendIndividualEmailMutation.isPending ? (
@@ -3106,7 +3170,7 @@ export default function Communications() {
                   <Button
                     className="bg-emerald-600 hover:bg-emerald-700 text-white"
                     onClick={handleSendSms}
-                    disabled={sendIndividualSmsMutation.isPending}
+                    disabled={!smsAvailable || sendIndividualSmsMutation.isPending}
                     data-testid="button-send-sms"
                   >
                     {sendIndividualSmsMutation.isPending ? (
@@ -3749,7 +3813,7 @@ export default function Communications() {
                         </Button>
                         <Button 
                           onClick={handleTemplateSubmit} 
-                          disabled={createEmailTemplateMutation.isPending || updateEmailTemplateMutation.isPending}
+                          disabled={!emailAvailable || createEmailTemplateMutation.isPending || updateEmailTemplateMutation.isPending}
                           className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white"
                         >
                           {(createEmailTemplateMutation.isPending || updateEmailTemplateMutation.isPending) ? (
@@ -3866,7 +3930,7 @@ export default function Communications() {
                           <Button
                             type="submit"
                             className="rounded-xl bg-blue-600 hover:bg-blue-700 text-white"
-                            disabled={createSmsTemplateMutation.isPending || updateSmsTemplateMutation.isPending}
+                            disabled={!smsAvailable || createSmsTemplateMutation.isPending || updateSmsTemplateMutation.isPending}
                             data-testid="button-save-template"
                           >
                             {(createSmsTemplateMutation.isPending || updateSmsTemplateMutation.isPending) 
@@ -4217,7 +4281,7 @@ export default function Communications() {
               </div>
               <Dialog open={showCampaignModal} onOpenChange={setShowCampaignModal}>
                 <DialogTrigger asChild>
-                  <Button data-testid="button-create-campaign">
+                  <Button disabled={!serviceAvailable(communicationType)} data-testid="button-create-campaign">
                     <Plus className="h-4 w-4 mr-2" />
                     Create {communicationType === "email" ? "Email" : "SMS"} Campaign
                   </Button>
@@ -4567,7 +4631,7 @@ export default function Communications() {
                       </Button>
                       <Button
                         type="submit"
-                        disabled={createEmailCampaignMutation.isPending || createSmsCampaignMutation.isPending}
+                        disabled={!serviceAvailable(communicationType) || createEmailCampaignMutation.isPending || createSmsCampaignMutation.isPending}
                         data-testid="button-save-campaign"
                       >
                         {(createEmailCampaignMutation.isPending || createSmsCampaignMutation.isPending) ? "Creating..." : "Create Campaign"}
@@ -4612,7 +4676,7 @@ export default function Communications() {
                                   variant="outline"
                                   size="sm"
                                   className="border border-emerald-400/60 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/20"
-                                  disabled={communicationType === "email" ? approveEmailCampaignMutation.isPending : approveSmsCampaignMutation.isPending}
+                                  disabled={!serviceAvailable(communicationType) || (communicationType === "email" ? approveEmailCampaignMutation.isPending : approveSmsCampaignMutation.isPending)}
                                 >
                                   {(communicationType === "email" ? approveEmailCampaignMutation.isPending : approveSmsCampaignMutation.isPending) ? "Approving..." : "Approve & Send"}
                                 </Button>
@@ -4637,8 +4701,14 @@ export default function Communications() {
                                   <AlertDialogCancel>Cancel</AlertDialogCancel>
                                   <AlertDialogAction
                                     className="bg-emerald-600 hover:bg-emerald-700"
-                                    onClick={() => communicationType === "email" ? approveEmailCampaignMutation.mutate(campaign.id) : approveSmsCampaignMutation.mutate(campaign.id)}
-                                    disabled={communicationType === "email" ? approveEmailCampaignMutation.isPending : approveSmsCampaignMutation.isPending}
+                                    onClick={() => {
+                                      if (!serviceAvailable(communicationType)) {
+                                        toast({ title: "Service unavailable", description: unavailableMessage(communicationType), variant: "destructive" });
+                                        return;
+                                      }
+                                      communicationType === "email" ? approveEmailCampaignMutation.mutate(campaign.id) : approveSmsCampaignMutation.mutate(campaign.id);
+                                    }}
+                                    disabled={!serviceAvailable(communicationType) || (communicationType === "email" ? approveEmailCampaignMutation.isPending : approveSmsCampaignMutation.isPending)}
                                   >
                                     {(communicationType === "email" ? approveEmailCampaignMutation.isPending : approveSmsCampaignMutation.isPending) ? "Approving..." : "Approve"}
                                   </AlertDialogAction>
@@ -5012,7 +5082,7 @@ export default function Communications() {
                       <Button 
                         type="submit"
                         className="bg-blue-600 text-white hover:bg-blue-700" 
-                        disabled={createAutomationMutation.isPending}
+                        disabled={!serviceAvailable(automationForm.type) || createAutomationMutation.isPending}
                         data-testid="button-submit-automation"
                       >
                         {createAutomationMutation.isPending ? "Creating..." : "Create Automation"}
@@ -6156,6 +6226,7 @@ export default function Communications() {
               <AlertDialogCancel data-testid="button-cancel-campaign">Cancel</AlertDialogCancel>
               <AlertDialogAction 
                 onClick={handleCampaignConfirm}
+                disabled={!serviceAvailable(communicationType)}
                 data-testid="button-confirm-campaign"
                 className="bg-red-600 hover:bg-red-700"
               >
@@ -6164,7 +6235,6 @@ export default function Communications() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-        </ServiceGate>
       </div>
     </AdminLayout>
   );

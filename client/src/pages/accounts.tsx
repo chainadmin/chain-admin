@@ -41,8 +41,19 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Badge } from "@/components/ui/badge";
 import { FolderOpen, Plus, Upload, Trash2, Mail, Phone, MapPin, Calendar, FileSignature, Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
+import { useServiceAccess } from "@/hooks/useServiceAccess";
 
 export default function Accounts() {
+  const { user, isJwtAuth } = useAuth();
+  const { data: authUser } = useQuery<any>({ queryKey: ["/api/auth/user"], enabled: !isJwtAuth });
+  const { emailServiceEnabled } = useServiceAccess();
+  const platformUser = isJwtAuth ? user : authUser?.platformUser;
+  const isOwner = platformUser?.role === "owner";
+  const emailAvailable = emailServiceEnabled && (isOwner || !(platformUser?.restrictedServices || []).includes("email"));
+  const emailUnavailableMessage = !isOwner && (platformUser?.restrictedServices || []).includes("email")
+    ? "Your team-member account is restricted from sending email."
+    : "Email service is disabled for this company.";
   const [selectedFolderId, setSelectedFolderId] = useState<string>("all");
   const [registrationFilter, setRegistrationFilter] = useState<string>("all"); // all, registered, not_registered
   const [showImportModal, setShowImportModal] = useState(false);
@@ -557,6 +568,10 @@ export default function Accounts() {
   };
 
   const handleComposeEmail = (account: any) => {
+    if (!emailAvailable) {
+      toast({ title: "Email unavailable", description: emailUnavailableMessage, variant: "destructive" });
+      return;
+    }
     if (!account?.consumer?.email) {
       return;
     }
@@ -1812,7 +1827,9 @@ export default function Accounts() {
                   Contact {selectedAccount.consumer?.firstName} {selectedAccount.consumer?.lastName}
                 </DialogTitle>
                 <DialogDescription className="text-sm text-blue-100/70">
-                  Reach out using the consumer's preferred channel.
+                  {emailAvailable
+                    ? "Reach out using the consumer's preferred channel."
+                    : `${emailUnavailableMessage} Calling remains available.`}
                 </DialogDescription>
               </DialogHeader>
 
@@ -1832,7 +1849,7 @@ export default function Accounts() {
                     size="sm"
                     className="rounded-lg border border-white/10 bg-white/5 px-3 text-blue-100 hover:bg-white/10"
                     onClick={() => selectedAccount && handleComposeEmail(selectedAccount)}
-                    disabled={!selectedAccount.consumer?.email}
+                    disabled={!emailAvailable || !selectedAccount.consumer?.email}
                     data-testid="button-compose-email"
                   >
                     Compose Email
@@ -2043,7 +2060,7 @@ export default function Accounts() {
                   templateId: composeEmailForm.templateId || undefined,
                 })
               }
-              disabled={sendEmailMutation.isPending || !composeEmailForm.subject || !composeEmailForm.body}
+              disabled={!emailAvailable || sendEmailMutation.isPending || !composeEmailForm.subject || !composeEmailForm.body}
             >
               {sendEmailMutation.isPending ? "Sending..." : "Send Email"}
             </Button>

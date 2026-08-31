@@ -1,7 +1,7 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDb } from './db';
-import { platformUsers, users } from '../../shared/schema';
-import { eq } from 'drizzle-orm';
+import { agencyCredentials, platformUsers, users } from '../../shared/schema';
+import { and, eq } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 import { getKnownDomainOrigins } from '@shared/utils/baseUrl';
 import { isOriginOnKnownDomain } from '@shared/utils/domains';
@@ -11,6 +11,7 @@ export const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 export interface AuthenticatedRequest extends VercelRequest {
   user?: any;
   platformUser?: any;
+  authClaims?: any;
 }
 
 export async function verifyAuth(req: AuthenticatedRequest): Promise<boolean> {
@@ -35,6 +36,29 @@ export async function verifyAuth(req: AuthenticatedRequest): Promise<boolean> {
 
     const decoded = jwt.verify(token, JWT_SECRET) as any;
     const db = await getDb();
+    req.authClaims = decoded;
+
+    const [agencyCredential] = await db
+      .select()
+      .from(agencyCredentials)
+      .where(
+        decoded.tenantId
+          ? and(eq(agencyCredentials.id, decoded.userId), eq(agencyCredentials.tenantId, decoded.tenantId))
+          : eq(agencyCredentials.id, decoded.userId),
+      )
+      .limit(1);
+    if (agencyCredential && agencyCredential.isActive !== false) {
+      req.user = agencyCredential;
+      req.platformUser = {
+        tenantId: agencyCredential.tenantId,
+        role: agencyCredential.role,
+        restrictedServices: agencyCredential.restrictedServices || [],
+      };
+      return true;
+    }
+    if (agencyCredential) {
+      return false;
+    }
     
     // Get the user
     const [user] = await db

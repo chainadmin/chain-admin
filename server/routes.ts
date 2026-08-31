@@ -4598,7 +4598,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Production email sending route (for individual emails to consumers)
-  app.post('/api/send-email', authenticateUser, async (req: any, res) => {
+  app.post('/api/send-email', authenticateUser, requireEmailService, requireServiceAccess('email'), async (req: any, res) => {
     let walletReservation: any = null;
     try {
       const tenantId = req.user.tenantId;
@@ -4606,13 +4606,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const { to, subject, message } = req.body;
+      const directEmailInput = z.object({
+        to: z.string().trim().email(),
+        subject: z.string().trim().min(1).max(500),
+        message: z.string().min(1).max(500000),
+        consumerId: z.string().uuid().optional(),
+        accountId: z.string().uuid().optional(),
+        templateId: z.string().uuid().optional(),
+      }).safeParse(req.body);
       
-      if (!to || !subject || !message) {
-        return res.status(400).json({ message: "To, subject, and message are required" });
+      if (!directEmailInput.success) {
+        return res.status(400).json({ message: "A valid recipient, subject, and message are required" });
       }
+      const { to, subject, message, consumerId, accountId, templateId } = directEmailInput.data;
 
       const tenant = await storage.getTenant(tenantId);
+      if (!tenant) {
+        return res.status(404).json({ message: "Tenant not found" });
+      }
+
+      let resolvedConsumerId = consumerId;
+      if (accountId) {
+        const [account] = await db
+          .select({ consumerId: accountsTable.consumerId })
+          .from(accountsTable)
+          .where(and(eq(accountsTable.id, accountId), eq(accountsTable.tenantId, tenantId)))
+          .limit(1);
+        if (!account) {
+          return res.status(404).json({ message: "Account not found" });
+        }
+        if (resolvedConsumerId && account.consumerId !== resolvedConsumerId) {
+          return res.status(400).json({ message: "Account does not belong to the selected person" });
+        }
+        resolvedConsumerId = account.consumerId;
+      }
+      if (resolvedConsumerId) {
+        const [consumer] = await db
+          .select({ id: consumers.id, email: consumers.email })
+          .from(consumers)
+          .where(and(eq(consumers.id, resolvedConsumerId), eq(consumers.tenantId, tenantId)))
+          .limit(1);
+        if (!consumer) {
+          return res.status(404).json({ message: "Person not found" });
+        }
+        if (consumer.email && consumer.email.trim().toLowerCase() !== to.toLowerCase()) {
+          return res.status(400).json({ message: "Recipient email does not match the selected person" });
+        }
+      }
 
       // Wallet billing gate (Task #47): atomic reserve-then-send-then-commit/refund.
       const walletMode = await walletService.isWalletMode(tenantId);
@@ -4696,9 +4736,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           type: 'individual',
           tenantId: tenantId,
           senderUserId: req.user.id,
+          ...(resolvedConsumerId ? { consumerId: resolvedConsumerId } : {}),
+          ...(accountId ? { accountId } : {}),
+          ...(templateId ? { templateId } : {}),
         },
         tenantId: tenantId, // Track email usage by tenant
+        consumerId: resolvedConsumerId,
       });
+
+      if (!result.success) {
+        throw new Error(result.error || "Email provider rejected the message");
+      }
 
       // Commit the reservation now that send succeeded.
       if (walletReservation) {
@@ -4734,7 +4782,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Test email route (for testing only - adds test tags)
-  app.post('/api/test-email', authenticateUser, async (req: any, res) => {
+  app.post('/api/test-email', authenticateUser, requireEmailService, requireServiceAccess('email'), async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
       if (!tenantId) { 
@@ -4901,7 +4949,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Send response to an email reply
-  app.post('/api/email-replies/:id/respond', authenticateUser, async (req: any, res) => {
+  app.post('/api/email-replies/:id/respond', authenticateUser, requireEmailService, requireServiceAccess('email'), async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
       if (!tenantId) { 
@@ -5049,7 +5097,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Send response to an SMS reply
-  app.post('/api/sms-replies/:id/respond', authenticateUser, async (req: any, res) => {
+  app.post('/api/sms-replies/:id/respond', authenticateUser, requireSmsService, requireServiceAccess('sms'), async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
       if (!tenantId) { 
@@ -5089,7 +5137,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Quick SMS send endpoint - for sending individual SMS to a consumer
-  app.post('/api/sms/quick', authenticateUser, async (req: any, res) => {
+  app.post('/api/sms/quick', authenticateUser, requireSmsService, requireServiceAccess('sms'), async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
       if (!tenantId) { 
@@ -6470,7 +6518,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/send-test-sms', authenticateUser, async (req: any, res) => {
+  app.post('/api/send-test-sms', authenticateUser, requireSmsService, requireServiceAccess('sms'), async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
       if (!tenantId) { 
@@ -23727,10 +23775,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update email_logs if we have update data
       if (Object.keys(updateData).length > 0) {
         try {
+          const updateCondition = tenantId
+            ? and(eq(emailLogs.messageId, MessageID), eq(emailLogs.tenantId, tenantId))
+            : eq(emailLogs.messageId, MessageID);
           await db
             .update(emailLogs)
             .set(updateData)
-            .where(eq(emailLogs.messageId, MessageID));
+            .where(updateCondition);
         } catch (logUpdateError) {
           console.error('Error updating email log:', logUpdateError);
         }

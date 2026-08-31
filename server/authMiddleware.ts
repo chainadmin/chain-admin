@@ -1,6 +1,10 @@
 import { RequestHandler } from "express";
 import jwt from "jsonwebtoken";
 import { storage } from "./storage";
+import {
+  getCompanyMessagingBlockMessage,
+  isServiceRestrictedForMember,
+} from "@shared/utils/messagingAccess";
 
 // Combined authentication middleware that supports both JWT and Replit auth
 export const authenticateUser: RequestHandler = async (req: any, res, next) => {
@@ -251,16 +255,9 @@ export const requireEmailService: RequestHandler = async (req: any, res, next) =
       return res.status(404).json({ message: "Tenant not found" });
     }
 
-    if (tenant.isTrialAccount) {
-      return res.status(403).json({ 
-        message: "Email service is not available during trial period. Please upgrade to a paid plan to access this feature." 
-      });
-    }
-
-    if (tenant.emailServiceEnabled === false) {
-      return res.status(403).json({ 
-        message: "Email service is disabled for your account. Please contact support." 
-      });
+    const blockMessage = getCompanyMessagingBlockMessage('email', tenant);
+    if (blockMessage) {
+      return res.status(403).json({ message: blockMessage });
     }
 
     next();
@@ -283,16 +280,9 @@ export const requireSmsService: RequestHandler = async (req: any, res, next) => 
       return res.status(404).json({ message: "Tenant not found" });
     }
 
-    if (tenant.isTrialAccount) {
-      return res.status(403).json({ 
-        message: "SMS service is not available during trial period. Please upgrade to a paid plan to access this feature." 
-      });
-    }
-
-    if (tenant.smsServiceEnabled === false) {
-      return res.status(403).json({ 
-        message: "SMS service is disabled for your account. Please contact support." 
-      });
+    const blockMessage = getCompanyMessagingBlockMessage('sms', tenant);
+    if (blockMessage) {
+      return res.status(403).json({ message: blockMessage });
     }
 
     next();
@@ -406,7 +396,7 @@ export const requireServiceAccess = (serviceName: string): RequestHandler => {
       const userCredentials = await storage.getAgencyCredentialsById(userId);
       const restrictedServices = userCredentials?.restrictedServices || [];
       
-      if (Array.isArray(restrictedServices) && restrictedServices.includes(serviceName)) {
+      if (isServiceRestrictedForMember(serviceName, userRole, restrictedServices)) {
         return res.status(403).json({ 
           message: `Access denied. You don't have permission to access ${serviceName} features.` 
         });

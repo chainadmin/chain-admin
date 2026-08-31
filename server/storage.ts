@@ -4681,8 +4681,7 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(emailLogs.tenantId, tenantId),
-          or(...emailConditions),
-          sql`${emailLogs.metadata}->>'senderUserId' = ${userId}`
+          or(...emailConditions)
         )
       )
       .orderBy(desc(emailLogs.sentAt));

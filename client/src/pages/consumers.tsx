@@ -26,6 +26,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Eye, Phone, Edit, Trash2, Mail, MapPin, Calendar, UserCheck, UserX, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/hooks/useAuth";
+import { useServiceAccess } from "@/hooks/useServiceAccess";
 import {
   Select,
   SelectContent,
@@ -35,6 +37,19 @@ import {
 } from "@/components/ui/select";
 
 export default function Consumers() {
+  const { user, isJwtAuth } = useAuth();
+  const { data: authUser } = useQuery<any>({ queryKey: ["/api/auth/user"], enabled: !isJwtAuth });
+  const { emailServiceEnabled, smsServiceEnabled } = useServiceAccess();
+  const platformUser = isJwtAuth ? user : authUser?.platformUser;
+  const isOwner = platformUser?.role === "owner";
+  const restrictedServices: string[] = platformUser?.restrictedServices || [];
+  const isServiceAvailable = (service: "email" | "sms") =>
+    (service === "email" ? emailServiceEnabled : smsServiceEnabled) &&
+    (isOwner || !restrictedServices.includes(service));
+  const serviceMessage = (service: "email" | "sms") =>
+    !isOwner && restrictedServices.includes(service)
+      ? `Your account is restricted from sending ${service === "sms" ? "SMS messages" : "email"}.`
+      : `${service === "sms" ? "SMS" : "Email"} service is disabled for this company.`;
   const { data: tenantSettings } = useQuery<any>({ queryKey: ['/api/settings'] });
   const isMunicipality = tenantSettings?.businessType === 'municipality';
   const contactLabel = isMunicipality ? 'Contact' : 'Consumer';
@@ -139,9 +154,13 @@ export default function Consumers() {
   };
 
   const handleContact = (consumer: any) => {
+    if (!isServiceAvailable("email") && !isServiceAvailable("sms")) {
+      toast({ title: "Messaging unavailable", description: "Email and SMS are disabled or restricted for your account.", variant: "destructive" });
+      return;
+    }
     setSelectedConsumer(consumer);
     setContactForm({
-      method: consumer.email ? "email" : "sms",
+      method: consumer.email && isServiceAvailable("email") ? "email" : "sms",
       message: "",
     });
     setShowContactDialog(true);
@@ -203,6 +222,10 @@ export default function Consumers() {
         description: "Please enter a message",
         variant: "destructive",
       });
+      return;
+    }
+    if (!isServiceAvailable(contactForm.method as "email" | "sms")) {
+      toast({ title: "Messaging unavailable", description: serviceMessage(contactForm.method as "email" | "sms"), variant: "destructive" });
       return;
     }
     
@@ -381,6 +404,7 @@ export default function Consumers() {
                             size="sm"
                             variant="outline"
                             onClick={() => handleContact(consumer)}
+                            disabled={!isServiceAvailable("email") && !isServiceAvailable("sms")}
                             data-testid={`button-contact-${consumer.id}`}
                           >
                             <Phone className="h-4 w-4" />
@@ -650,8 +674,8 @@ export default function Consumers() {
                 value={contactForm.method}
                 onChange={(e) => setContactForm({ ...contactForm, method: e.target.value })}
               >
-                {selectedConsumer?.email && <option value="email">Email</option>}
-                {selectedConsumer?.phone && <option value="sms">SMS</option>}
+                {selectedConsumer?.email && isServiceAvailable("email") && <option value="email">Email</option>}
+                {selectedConsumer?.phone && isServiceAvailable("sms") && <option value="sms">SMS</option>}
               </select>
             </div>
             <div>
@@ -673,7 +697,7 @@ export default function Consumers() {
               >
                 Cancel
               </Button>
-              <Button type="submit" className="bg-blue-600 text-white hover:bg-blue-700">
+              <Button type="submit" disabled={sendMessageMutation.isPending} className="bg-blue-600 text-white hover:bg-blue-700">
                 Send Message
               </Button>
             </div>

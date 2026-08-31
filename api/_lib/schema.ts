@@ -95,6 +95,7 @@ export const agencyCredentials = pgTable("agency_credentials", {
   lastName: text("last_name"),
   role: text("role", { enum: ['owner', 'manager', 'agent', 'viewer', 'uploader'] }).default('owner').notNull(),
   isActive: boolean("is_active").default(true),
+  restrictedServices: text("restricted_services").array().default(sql`ARRAY[]::TEXT[]`),
   lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

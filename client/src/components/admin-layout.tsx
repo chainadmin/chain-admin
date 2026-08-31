@@ -106,6 +106,18 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   const restrictedServices: string[] = isJwtAuth
     ? (user as any)?.restrictedServices || []
     : (userData as any)?.platformUser?.restrictedServices || [];
+  const { emailServiceEnabled, smsServiceEnabled } = useServiceAccess();
+  const isServiceAvailable = (service: "email" | "sms") =>
+    (service === "email" ? emailServiceEnabled : smsServiceEnabled) &&
+    (isOwner || !restrictedServices.includes(service));
+  const emailAvailable = isServiceAvailable("email");
+  const smsAvailable = isServiceAvailable("sms");
+  const unavailableServiceMessage = (service: "email" | "sms") =>
+    !isServiceAvailable(service)
+      ? !isOwner && restrictedServices.includes(service)
+        ? `Your team-member account is restricted from sending ${service === "sms" ? "SMS messages" : "email"}.`
+        : `${service === "sms" ? "SMS" : "Email"} service is disabled for this company.`
+      : "";
   
   // Build agency-specific navigation URLs
   const buildNavHref = (path: string) => {
@@ -116,17 +128,19 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   };
   
   // Map navigation items to their service restriction keys
-  const serviceRestrictionMap: Record<string, string> = {
-    "Communications": "email",
+  const serviceRestrictionMap: Record<string, "email" | "sms" | "payments"> = {
     "Payments": "payments",
     "Inbox": "email",
+    "Email Campaigns": "email",
+    "SMS Campaigns": "sms",
   };
   
   // Check if a navigation item should be hidden based on service restrictions
   const isServiceRestricted = (itemName: string): boolean => {
     const serviceKey = serviceRestrictionMap[itemName];
-    if (!serviceKey) return false;
-    return restrictedServices.includes(serviceKey);
+    if (!serviceKey) return itemName === "Communications" && !emailAvailable && !smsAvailable;
+    if (serviceKey === "payments") return restrictedServices.includes(serviceKey);
+    return !isServiceAvailable(serviceKey);
   };
   
   const standardNavigationItems = [
@@ -158,7 +172,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     ] : []),
     ...(isOwner ? [{ name: "Users & Departments", href: buildNavHref("/municipality-admin"), icon: "fas fa-users-cog" }] : []),
     { name: "Settings", href: buildNavHref("/settings"), icon: "fas fa-cog" },
-  ];
+  ].filter(item => !isServiceRestricted(item.name));
   const navigationItems = (tenantSettings as any)?.businessType === 'municipality'
     ? municipalityNavigationItems
     : standardNavigationItems;
@@ -244,6 +258,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
   });
 
   const openQuickSend = (consumer: SearchResults['consumers'][0], type: 'sms' | 'email') => {
+    if (!isServiceAvailable(type)) {
+      toast({ title: `${type === "sms" ? "SMS" : "Email"} unavailable`, description: unavailableServiceMessage(type), variant: "destructive" });
+      return;
+    }
     setQuickSendTarget({
       consumerId: consumer.id,
       name: `${consumer.firstName} ${consumer.lastName}`,
@@ -259,6 +277,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
   const handleQuickSend = () => {
     if (!quickSendTarget || !quickSendMessage.trim()) return;
+    if (!isServiceAvailable(quickSendTarget.type)) {
+      toast({ title: `${quickSendTarget.type === "sms" ? "SMS" : "Email"} unavailable`, description: unavailableServiceMessage(quickSendTarget.type), variant: "destructive" });
+      return;
+    }
     
     if (quickSendTarget.type === 'sms') {
       if (!quickSendTarget.phone) {
@@ -443,7 +465,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                                 <p className="text-xs text-blue-100/60 truncate">{consumer.email}</p>
                               </button>
                               <div className="flex items-center gap-1">
-                                {consumer.phone && (
+                                {consumer.phone && smsAvailable && (
                                   <button
                                     type="button"
                                     onClick={(e) => {
@@ -457,7 +479,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                                     <MessageSquare className="h-4 w-4 text-emerald-300" />
                                   </button>
                                 )}
-                                {consumer.email && (
+                                {consumer.email && emailAvailable && (
                                   <button
                                     type="button"
                                     onClick={(e) => {
