@@ -415,10 +415,10 @@ export default function SignDocumentPage() {
               {/* Document Header */}
               <div className="border-b border-slate-200 px-8 py-5 bg-gradient-to-r from-slate-50 to-white">
                 <h2 className="text-lg font-semibold text-slate-900">
-                  Document Preview
+                  Document to Review and Sign
                 </h2>
                 <p className="text-sm text-slate-500 mt-1 font-medium" data-testid="text-document-filename">
-                  {request.document?.fileName}
+                  PDF-style preview · {request.document?.fileName}
                 </p>
               </div>
               

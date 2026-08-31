@@ -4226,23 +4226,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Use safe name handling
       const consumerFirstName = consumer.firstName || 'there';
       const companyName = customBranding?.companyName || 'Our Company';
+      const emailFirstName = escapeHtml(consumerFirstName);
+      const emailDocumentType = escapeHtml(template.name || processedTitle);
+      const emailDocumentTitle = escapeHtml(processedTitle);
+      const emailMessage = message ? escapeHtml(message) : '';
+      const emailCompanyName = escapeHtml(companyName);
       
       try {
         console.log(`📧 Sending signature request email to ${consumer.email} for request ${signatureRequest.id}`);
         await emailService.sendEmail({
           to: consumer.email!,
-          subject: `Document Signature Request - ${processedTitle}`,
+          subject: `Signature requested: ${template.name || processedTitle}`,
           html: `
-            <h2>Document Signature Request</h2>
-            <p>Hi ${consumerFirstName},</p>
-            <p>You have a document that requires your signature.</p>
-            <p><strong>Document:</strong> ${processedTitle}</p>
-            ${message ? `<p><strong>Message:</strong> ${message}</p>` : ''}
-            <p><strong>Expires:</strong> ${expiresAt.toLocaleDateString()}</p>
-            <p><a href="${signUrl}" style="display: inline-block; background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; margin: 16px 0;">Sign Document</a></p>
-            <p>Or copy this link: ${signUrl}</p>
-            <p>Best regards,<br/>${companyName}</p>
+            <div style="background:#f8fafc;padding:32px 16px;font-family:Arial,sans-serif;color:#0f172a;">
+              <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;padding:32px;">
+                <h2 style="margin:0 0 24px;color:#1e3a8a;">Signature requested</h2>
+                <p style="font-size:16px;line-height:1.6;">Hello ${emailFirstName},</p>
+                <p style="font-size:16px;line-height:1.6;">
+                  The following document is requesting a signature from you:
+                </p>
+                <div style="background:#eff6ff;border-left:4px solid #2563eb;padding:16px;margin:20px 0;">
+                  <p style="margin:0 0 6px;"><strong>Document type:</strong> ${emailDocumentType}</p>
+                  <p style="margin:0;"><strong>Document:</strong> ${emailDocumentTitle}</p>
+                </div>
+                ${emailMessage ? `<p style="font-size:15px;line-height:1.6;"><strong>Message:</strong> ${emailMessage}</p>` : ''}
+                <p style="font-size:14px;color:#475569;">This request expires ${expiresAt.toLocaleDateString()}.</p>
+                <p style="margin:28px 0;text-align:center;">
+                  <a href="${signUrl}" style="display:inline-block;background:#2563eb;color:#ffffff;padding:14px 28px;text-decoration:none;border-radius:7px;font-weight:bold;">Click here to review and sign</a>
+                </p>
+                <p style="font-size:13px;color:#64748b;line-height:1.5;">After clicking, the document will open in a secure, PDF-style viewer where you can read it before electronically signing.</p>
+                <p style="font-size:12px;color:#64748b;word-break:break-all;">If the button does not work, copy and paste this link: ${signUrl}</p>
+                <p style="margin-top:28px;">Best regards,<br/>${emailCompanyName}</p>
+              </div>
+            </div>
           `,
+          text: `Hello ${consumerFirstName},\n\nThe following document is requesting a signature from you.\n\nDocument type: ${template.name || processedTitle}\nDocument: ${processedTitle}\n${message ? `Message: ${message}\n` : ''}Expires: ${expiresAt.toLocaleDateString()}\n\nClick here to review and sign: ${signUrl}\n\nThe document will open in a secure viewer where you can read it before electronically signing.\n\nBest regards,\n${companyName}`,
           tenantId,
         });
         console.log(`✅ Email sent successfully to ${consumer.email}`);
