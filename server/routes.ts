@@ -69,6 +69,7 @@ import { uploadLogo } from "./r2Storage";
 import { downloadVoiceGreeting, uploadVoiceGreeting } from "./voiceObjectStorage";
 import externalApiRouter from "./external-api";
 import { registerWalletRoutes } from "./walletRoutes";
+import { registerVoiceAutoDialerRoutes } from "./voiceAutoDialerRoutes";
 import { registerChiamoRoutes } from "./chiamoRoutes";
 import { getAdminCommunicationsInventory } from "./adminCommunicationsService";
 import {
@@ -26982,6 +26983,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   registerWalletRoutes(app);
+  registerVoiceAutoDialerRoutes(app);
 
   const httpServer = createServer(app);
   return httpServer;
