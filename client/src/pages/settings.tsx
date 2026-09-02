@@ -49,6 +49,9 @@ import AutoResponseSettings from "@/components/auto-response-settings";
 import TeamMembersSection from "@/components/team-members-section";
 import { usePaginatedConsumers } from "@/hooks/use-paginated-consumers";
 
+const getValidBrandColor = (value: unknown, fallback: string) =>
+  typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback;
+
 export default function Settings() {
   const [showDocumentModal, setShowDocumentModal] = useState(false);
   const [showArrangementModal, setShowArrangementModal] = useState(false);
@@ -1579,6 +1582,70 @@ export default function Settings() {
                         Uploading logo...
                       </div>
                     )}
+                  </div>
+
+                  {/* Brand Colors Section */}
+                  <div className="space-y-4 border-b pb-6">
+                    <div>
+                      <Label className="text-base font-medium text-white">Consumer Portal Colors</Label>
+                      <p className="text-sm text-blue-100/70">
+                        Choose the primary and secondary colors customers see on your landing page and portal. Changes take effect after you save.
+                      </p>
+                    </div>
+
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      {([
+                        ["primaryColor", "Primary color", "#3B82F6"],
+                        ["secondaryColor", "Secondary color", "#1E40AF"],
+                      ] as const).map(([field, label, fallback]) => {
+                        const customBranding = (localSettings?.customBranding as any) || {};
+                        const value = customBranding[field] || fallback;
+                        const pickerValue = getValidBrandColor(value, fallback);
+                        return (
+                          <div key={field} className="space-y-2">
+                            <Label htmlFor={`branding-${field}`}>{label}</Label>
+                            <div className="flex gap-2">
+                              <Input
+                                id={`branding-${field}`}
+                                type="color"
+                                value={pickerValue}
+                                onChange={(event) => handleSettingsUpdate("customBranding", {
+                                  ...customBranding,
+                                  [field]: event.target.value.toUpperCase(),
+                                })}
+                                className={`${inputClasses} h-11 w-14 cursor-pointer p-1`}
+                                data-testid={`input-${field}`}
+                              />
+                              <Input
+                                value={value}
+                                onChange={(event) => handleSettingsUpdate("customBranding", {
+                                  ...customBranding,
+                                  [field]: event.target.value,
+                                })}
+                                placeholder={fallback}
+                                pattern="^#[0-9A-Fa-f]{6}$"
+                                maxLength={7}
+                                className={`${inputClasses} font-mono uppercase`}
+                                aria-label={`${label} hex value`}
+                                data-testid={`input-${field}-hex`}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div
+                      className="rounded-2xl p-5 text-white shadow-lg"
+                      style={{
+                        background: `linear-gradient(135deg, ${getValidBrandColor((localSettings?.customBranding as any)?.primaryColor, "#3B82F6")}, ${getValidBrandColor((localSettings?.customBranding as any)?.secondaryColor, "#1E40AF")})`,
+                      }}
+                      data-testid="branding-color-preview"
+                    >
+                      <p className="text-xs font-semibold uppercase tracking-widest text-white/75">Customer preview</p>
+                      <p className="mt-2 text-lg font-semibold">{(userData as any)?.tenantName || "Your company"}</p>
+                      <p className="mt-1 text-sm text-white/80">These colors will brand customer-facing portal headers and accents.</p>
+                    </div>
                   </div>
 
                   {/* Landing Page Customization Section */}
