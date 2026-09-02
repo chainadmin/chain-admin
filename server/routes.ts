@@ -8421,6 +8421,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   }
 
+  async function consumerMatchesLoginCredential(
+    consumerRecord: Consumer,
+    dateOfBirth: unknown,
+    fileNumber: unknown,
+  ): Promise<boolean> {
+    if (
+      dateOfBirth &&
+      consumerRecord.dateOfBirth &&
+      datesMatch(String(dateOfBirth), consumerRecord.dateOfBirth)
+    ) {
+      return true;
+    }
+
+    return fileNumber
+      ? consumerMatchesFileNumber(consumerRecord.id, String(fileNumber))
+      : false;
+  }
+
   app.post('/api/consumer/login', async (req, res) => {
     try {
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
@@ -8509,7 +8527,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
-        consumer = consumersForTenant[0];
+        // Legacy data can contain more than one consumer with the same email in a
+        // tenant. Select the record that owns the supplied file number/DOB rather
+        // than arbitrarily authenticating (or rejecting) the first row returned.
+        const credentialMatches = await Promise.all(
+          consumersForTenant.map(candidate =>
+            consumerMatchesLoginCredential(candidate, dateOfBirth, fileNumber)
+          )
+        );
+        consumer = consumersForTenant.find((_, index) => credentialMatches[index]) ?? null;
+
+        if (!consumer) {
+          return res.status(401).json({
+            message: fileNumber
+              ? "Verification failed. Please check your file number (from your letter, or contact your agency to receive it) or your date of birth."
+              : "Date of birth verification failed. Please check your information.",
+          });
+        }
       } else {
         if (linkedConsumers.length === 0) {
           if (stillUnlinkedConsumers.length > 0) {
@@ -8532,8 +8566,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
+        const credentialMatches = await Promise.all(
+          linkedConsumers.map(candidate =>
+            consumerMatchesLoginCredential(candidate, dateOfBirth, fileNumber)
+          )
+        );
+        const verifiedConsumers = linkedConsumers.filter((_, index) => credentialMatches[index]);
+
+        if (verifiedConsumers.length === 0) {
+          return res.status(401).json({
+            message: fileNumber
+              ? "Verification failed. Please check your file number (from your letter, or contact your agency to receive it) or your date of birth."
+              : "Date of birth verification failed. Please check your information.",
+          });
+        }
+
         const agencyResults = await Promise.all(
-          linkedConsumers.map(async consumerRecord => {
+          verifiedConsumers.map(async consumerRecord => {
             if (!consumerRecord.tenantId) return null;
             const tenantRecord = await storage.getTenant(consumerRecord.tenantId);
             if (!tenantRecord) return null;
@@ -8570,7 +8619,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           consumer = singleEntry.consumerRecord;
           tenant = singleEntry.tenantRecord;
         } else {
-          consumer = linkedConsumers[0];
+          consumer = verifiedConsumers[0];
         }
       }
 
@@ -8613,22 +8662,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
             name: tenant.name,
             slug: tenant.slug,
           },
-        });
-      }
-
-      // Verify with either credential: DOB match OR file number match is sufficient.
-      const dobVerified = Boolean(
-        dateOfBirth && consumer.dateOfBirth && datesMatch(dateOfBirth, consumer.dateOfBirth)
-      );
-      const fileVerified = !dobVerified && fileNumber
-        ? await consumerMatchesFileNumber(consumer.id, fileNumber)
-        : false;
-
-      if (!dobVerified && !fileVerified) {
-        return res.status(401).json({
-          message: fileNumber
-            ? "Verification failed. Please check your file number (from your letter, or contact your agency to receive it) or your date of birth."
-            : "Date of birth verification failed. Please check your information.",
         });
       }
 
