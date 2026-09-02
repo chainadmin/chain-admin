@@ -42,7 +42,7 @@ import { isSubdomainSupported } from "@shared/utils/subdomain";
 import { resolveConsumerPortalUrl } from "@shared/utils/consumerPortal";
 import { getArrangementSummary, getPlanTypeLabel, formatCurrencyFromCents } from "@/lib/arrangements";
 import { cn } from "@/lib/utils";
-import { balanceTiers, getBalanceRangeFromTier, getBalanceTierLabel, type BalanceTier } from "@shared/schema";
+import { selectableBalanceTiers, getBalanceRangeFromTier, getBalanceTierLabel, type BalanceTier } from "@shared/schema";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import AutoResponseSettings from "@/components/auto-response-settings";
@@ -123,7 +123,7 @@ export default function Settings() {
   type ArrangementFormState = {
     name: string;
     description: string;
-    balanceTier: "under_3000" | "3000_to_5000" | "5000_to_10000" | "over_10000" | "";
+    balanceTier: BalanceTier | "";
     planType: "range" | "fixed_monthly" | "settlement" | "custom_terms" | "one_time_payment" | "pay_in_full";
     monthlyPaymentMin: string;
     monthlyPaymentMax: string;
@@ -3945,7 +3945,7 @@ export default function Settings() {
                                 <SelectValue placeholder="Select balance tier" />
                               </SelectTrigger>
                               <SelectContent>
-                                {balanceTiers.map((tier) => (
+                                {selectableBalanceTiers.map((tier) => (
                                   <SelectItem key={tier} value={tier} data-testid={`option-tier-${tier}`}>
                                     {getBalanceTierLabel(tier)}
                                   </SelectItem>
