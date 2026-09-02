@@ -24,7 +24,12 @@ type AgencyBranding = {
   agencyName: string;
   logoUrl: string | null;
   contactEmail: string | null;
+  primaryColor: string;
+  secondaryColor: string;
 };
+
+const getBrandColor = (value: unknown, fallback: string) =>
+  typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback;
 
 export default function ConsumerDashboard() {
   const [, setLocation] = useLocation();
@@ -268,6 +273,15 @@ export default function ConsumerDashboard() {
     || branding?.contactEmail
     || null;
 
+  const resolvedPrimaryColor = getBrandColor(
+    tenantSettings?.customBranding?.primaryColor || branding?.primaryColor,
+    "#2563EB",
+  );
+  const resolvedSecondaryColor = getBrandColor(
+    tenantSettings?.customBranding?.secondaryColor || branding?.secondaryColor,
+    "#1D4ED8",
+  );
+
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
       case 'active':
@@ -297,7 +311,11 @@ export default function ConsumerDashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header with Company Info */}
-      <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-4 py-6">
+      <div
+        className="px-4 py-6"
+        style={{ background: `linear-gradient(135deg, ${resolvedPrimaryColor}, ${resolvedSecondaryColor})` }}
+        data-testid="consumer-branded-header"
+      >
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">

@@ -10012,15 +10012,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         showDocuments: z.boolean().optional(),
         allowSettlementRequests: z.boolean().optional(),
         customBranding: z.any().optional().refine((val) => {
+          let hasValidLandingPageUrl = true;
           // If customBranding has customLandingPageUrl, validate it
           if (val && val.customLandingPageUrl) {
             const url = val.customLandingPageUrl;
             // Only allow http:// or https:// URLs
-            return typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'));
+            hasValidLandingPageUrl = typeof url === 'string' && (url.startsWith('http://') || url.startsWith('https://'));
           }
-          return true;
+          const isHexColor = (color: unknown) =>
+            color === undefined || (typeof color === 'string' && /^#[0-9a-fA-F]{6}$/.test(color));
+          return hasValidLandingPageUrl && isHexColor(val?.primaryColor) && isHexColor(val?.secondaryColor);
         }, {
-          message: "Custom landing page URL must start with http:// or https://"
+          message: "Brand colors must be six-digit hex values and custom landing page URLs must start with http:// or https://"
         }),
         consumerPortalSettings: z.any().optional(),
         smsThrottleLimit: z.number().min(1).max(1000).optional(),
