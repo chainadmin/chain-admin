@@ -723,31 +723,54 @@ export const arrangementPlanTypes = [
 export type ArrangementPlanType = (typeof arrangementPlanTypes)[number];
 
 export const balanceTiers = [
-  "under_3000",      // < $3,000
+  "under_500",       // < $500
+  "500_to_1000",     // $500 - $999.99
+  "1000_to_3000",    // $1,000 - $2,999.99
   "3000_to_5000",    // $3,000 - $5,000
   "5000_to_10000",   // $5,000 - $10,000
   "over_10000",      // > $10,000
+  "under_3000",      // Legacy tier retained for existing arrangements
 ] as const;
 
 export type BalanceTier = (typeof balanceTiers)[number];
 
+export const selectableBalanceTiers = balanceTiers.filter(
+  (tier): tier is Exclude<BalanceTier, "under_3000"> => tier !== "under_3000",
+);
+
+export function isBalanceTier(value: unknown): value is BalanceTier {
+  return typeof value === "string" && (balanceTiers as readonly string[]).includes(value);
+}
+
 // Helper to map balance tiers to min/max values (in cents)
 export function getBalanceRangeFromTier(tier: BalanceTier): { minBalance: number; maxBalance: number } {
   switch (tier) {
+    case "under_500":
+      return { minBalance: 0, maxBalance: 49999 }; // $0 - $499.99
+    case "500_to_1000":
+      return { minBalance: 50000, maxBalance: 99999 }; // $500 - $999.99
+    case "1000_to_3000":
+      return { minBalance: 100000, maxBalance: 299999 }; // $1,000 - $2,999.99
     case "under_3000":
-      return { minBalance: 0, maxBalance: 299999 }; // $0 - $2,999.99
+      return { minBalance: 0, maxBalance: 299999 }; // Legacy: $0 - $2,999.99
     case "3000_to_5000":
       return { minBalance: 300000, maxBalance: 499999 }; // $3,000 - $4,999.99
     case "5000_to_10000":
       return { minBalance: 500000, maxBalance: 999999 }; // $5,000 - $9,999.99
     case "over_10000":
-      return { minBalance: 1000000, maxBalance: 999999999 }; // $10,000+
+      return { minBalance: 1000000, maxBalance: Number.MAX_SAFE_INTEGER }; // $10,000+
   }
 }
 
 // Helper to get display name for balance tier
 export function getBalanceTierLabel(tier: BalanceTier): string {
   switch (tier) {
+    case "under_500":
+      return "Under $500";
+    case "500_to_1000":
+      return "$500 - $1,000";
+    case "1000_to_3000":
+      return "$1,000 - $3,000";
     case "under_3000":
       return "Under $3,000";
     case "3000_to_5000":
@@ -755,8 +778,39 @@ export function getBalanceTierLabel(tier: BalanceTier): string {
     case "5000_to_10000":
       return "$5,000 - $10,000";
     case "over_10000":
-      return "Over $10,000";
+      return "$10,000+";
   }
+}
+
+type BalanceRangedOption = {
+  balanceTier?: string | null;
+  minBalance: number;
+  maxBalance: number;
+  isActive?: boolean | null;
+};
+
+/**
+ * Prefer the narrowest matching range so a legacy under_3000 option cannot
+ * unpredictably shadow a newly configured granular tier.
+ */
+export function findMostSpecificArrangementOption<T extends BalanceRangedOption>(
+  options: readonly T[],
+  balanceCents: number,
+): T | undefined {
+  return options
+    .filter(option =>
+      option.isActive !== false &&
+      balanceCents >= option.minBalance &&
+      balanceCents <= option.maxBalance
+    )
+    .reduce<T | undefined>((best, option) => {
+      if (!best) return option;
+      const optionWidth = option.maxBalance - option.minBalance;
+      const bestWidth = best.maxBalance - best.minBalance;
+      if (optionWidth !== bestWidth) return optionWidth < bestWidth ? option : best;
+      if (best.balanceTier === "under_3000" && option.balanceTier !== "under_3000") return option;
+      return best;
+    }, undefined);
 }
 
 export const arrangementOptions = pgTable("arrangement_options", {

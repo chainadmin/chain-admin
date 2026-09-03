@@ -10,7 +10,9 @@ import {
   insertConsumerSchema,
   insertAccountSchema,
   insertArrangementOptionSchema,
+  arrangementOptions,
   arrangementPlanTypes,
+  findMostSpecificArrangementOption,
   agencyTrialRegistrationSchema,
   platformUsers,
   globalAdminCredentials,
@@ -53,6 +55,7 @@ import {
   type SmsTracking,
 } from "@shared/schema";
 import { db } from "./db";
+import { resolveArrangementTierForWrite } from "./arrangementTierValidation";
 import { and, eq, sql, desc, gt, gte, inArray, lte, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 import multer from "multer";
@@ -732,9 +735,7 @@ function replaceTemplateVariables(
   const arrangementOptions: any[] = (tenant as any)?._arrangementOptions || [];
   let arrangementOptionFloorCents = 0;
   if (arrangementOptions.length > 0 && balanceCents != null && balanceCents > 0) {
-    const matchingOption = arrangementOptions.find((opt: any) =>
-      balanceCents >= (opt.minBalance || 0) && balanceCents <= (opt.maxBalance || Number.MAX_SAFE_INTEGER) && opt.isActive !== false
-    );
+    const matchingOption = findMostSpecificArrangementOption(arrangementOptions, balanceCents);
     if (matchingOption) {
       arrangementOptionFloorCents = matchingOption.fixedMonthlyPayment || matchingOption.monthlyPaymentMin || 0;
     }
@@ -805,9 +806,7 @@ async function processSmartArrangementSave(
   try {
     const options = await storage.getArrangementOptionsByTenant(tenantId);
     // Find an option whose balance range covers this consumer's balance
-    const matchingOption = options.find(opt =>
-      balanceCents >= (opt.minBalance || 0) && balanceCents <= (opt.maxBalance || Number.MAX_SAFE_INTEGER) && opt.isActive
-    );
+    const matchingOption = findMostSpecificArrangementOption(options, balanceCents);
     if (matchingOption) {
       // Use the configured floor: fixedMonthlyPayment > monthlyPaymentMin > 0
       arrangementOptionFloorCents = matchingOption.fixedMonthlyPayment ||
@@ -9738,20 +9737,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return result;
   }
 
-  const buildArrangementOptionPayload = (body: any, tenantId: string): InsertArrangementOption => {
+  const buildArrangementOptionPayload = (
+    body: any,
+    tenantId: string,
+    options: { allowLegacyTier?: boolean } = {},
+  ): InsertArrangementOption => {
     const planTypeRaw = typeof body.planType === "string" ? body.planType : "range";
     const planType = planTypeSet.has(planTypeRaw as any) ? (planTypeRaw as InsertArrangementOption["planType"]) : "range";
 
     // Accept balanceTier if provided, otherwise use min/max balances for backward compatibility
-    const balanceTier = typeof body.balanceTier === "string" && body.balanceTier ? body.balanceTier : null;
+    const resolvedTier = resolveArrangementTierForWrite(body.balanceTier, options);
+    const balanceTier = resolvedTier?.balanceTier ?? null;
     
     let minBalance: number | null;
     let maxBalance: number | null;
     
     if (balanceTier) {
-      // Balance tier is provided - use it (already includes min/max from frontend)
-      minBalance = parseCurrencyInput(body.minBalance);
-      maxBalance = parseCurrencyInput(body.maxBalance);
+      // Tier boundaries are authoritative on the server. Never trust client-supplied ranges.
+      minBalance = resolvedTier!.minBalance;
+      maxBalance = resolvedTier!.maxBalance;
     } else {
       // Legacy: min/max provided directly
       minBalance = parseCurrencyInput(body.minBalance);
@@ -9882,7 +9886,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const payload = buildArrangementOptionPayload(req.body, tenantId);
+      const [existing] = await db
+        .select({
+          id: arrangementOptions.id,
+          balanceTier: arrangementOptions.balanceTier,
+        })
+        .from(arrangementOptions)
+        .where(and(
+          eq(arrangementOptions.id, req.params.id),
+          eq(arrangementOptions.tenantId, tenantId),
+        ))
+        .limit(1);
+      if (!existing) {
+        return res.status(404).json({ message: "Arrangement option not found" });
+      }
+      const payload = buildArrangementOptionPayload(req.body, tenantId, {
+        allowLegacyTier: existing.balanceTier === "under_3000",
+      });
       const option = await storage.updateArrangementOption(req.params.id, tenantId, payload);
 
       if (!option) {
