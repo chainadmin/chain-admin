@@ -13,6 +13,7 @@ const chiamoTitles: Record<string, string> = {
   "/calls": "Call Logs | Chiamo Connect",
   "/call-logs": "Call Logs | Chiamo Connect",
   "/voicemail": "Voicemail | Chiamo Connect",
+  "/auto-dialer": "Auto Dialer | Chain",
   "/help": "How to Use the Phone | Chiamo Connect",
   "/recordings": "Recordings | Chiamo Connect",
   "/numbers": "Numbers | Chiamo Connect",

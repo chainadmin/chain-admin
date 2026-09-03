@@ -149,6 +149,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     { name: "Communications", href: buildNavHref("/communications"), icon: "fas fa-comments" },
     { name: "Inbox", href: buildNavHref("/email-inbox"), icon: "fas fa-inbox" },
     { name: "Phones", href: buildNavHref("/phones"), icon: "fas fa-phone-alt" },
+    { name: "Auto Dialer", href: buildNavHref("/auto-dialer"), icon: "fas fa-bullhorn" },
     { name: "Requests", href: buildNavHref("/requests"), icon: "fas fa-phone" },
     { name: "Payments", href: buildNavHref("/payments"), icon: "fas fa-credit-card" },
     ...(isOwner && showTenantBilling ? [{ name: "Billing", href: buildNavHref("/billing"), icon: "fas fa-receipt" }] : []),

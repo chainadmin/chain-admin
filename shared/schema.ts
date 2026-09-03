@@ -1293,6 +1293,39 @@ export const voipVoicemails = pgTable("voip_voicemails", {
   tenantCallIdx: uniqueIndex("voip_voicemails_tenant_call_idx").on(table.tenantId, table.callSid),
 }));
 
+// Outbound voice broadcasts. Contacts are copied into tenant-owned rows so a
+// campaign remains auditable even when its source CSV is later removed.
+export const voiceDialerCampaigns = pgTable("voice_dialer_campaigns", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull(),
+  message: text("message").notNull(),
+  transferKey: text("transfer_key").notNull().default("1"),
+  callerIdNumberId: uuid("caller_id_number_id").references(() => voipPhoneNumbers.id, { onDelete: "restrict" }).notNull(),
+  agentIdentity: text("agent_identity").notNull(),
+  status: text("status", { enum: ['DRAFT', 'RUNNING', 'PAUSED', 'COMPLETED'] }).notNull().default('DRAFT'),
+  totalContacts: integer("total_contacts").notNull().default(0),
+  createdByUserId: text("created_by_user_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({ tenantCreatedIdx: index("voice_dialer_campaigns_tenant_created_idx").on(table.tenantId, table.createdAt) }));
+
+export const voiceDialerContacts = pgTable("voice_dialer_contacts", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  campaignId: uuid("campaign_id").references(() => voiceDialerCampaigns.id, { onDelete: "cascade" }).notNull(),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
+  name: text("name").notNull().default(""),
+  phoneNumber: text("phone_number").notNull(),
+  status: text("status", { enum: ['PENDING', 'QUEUED', 'RINGING', 'ANSWERED', 'TRANSFERRED', 'COMPLETED', 'FAILED'] }).notNull().default('PENDING'),
+  callSid: text("call_sid"),
+  error: text("error"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  campaignStatusIdx: index("voice_dialer_contacts_campaign_status_idx").on(table.campaignId, table.status),
+  tenantCallIdx: uniqueIndex("voice_dialer_contacts_tenant_call_idx").on(table.tenantId, table.callSid),
+}));
+
 export const voipSuspendedCalls = pgTable("voip_suspended_calls", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),

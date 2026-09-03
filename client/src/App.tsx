@@ -49,6 +49,7 @@ import SignDocument from "@/pages/sign-document";
 import Info from "@/pages/info";
 import Phones from "@/pages/phones";
 import Softphone from "@/pages/softphone";
+import AutoDialer from "@/pages/auto-dialer";
 import InstallPage from "@/pages/install";
 import MunicipalityDashboard from "@/pages/municipality-dashboard";
 import MunicipalityAdmin from "@/pages/municipality-admin";
@@ -362,7 +363,8 @@ function Router() {
         <Route key="agency-settings" path="/settings" component={Settings} />,
         <Route key="agency-documents" path="/documents" component={Documents} />,
         <Route key="agency-municipality-admin" path="/municipality-admin" component={MunicipalityAdmin} />,
-        <Route key="agency-phones" path="/phones" component={Phones} />
+        <Route key="agency-phones" path="/phones" component={Phones} />,
+        <Route key="agency-auto-dialer" path="/auto-dialer" component={AutoDialer} />
       );
     }
 
@@ -458,6 +460,7 @@ function Router() {
     <Route key="auth-documents" path="/documents" component={Documents} />,
     <Route key="auth-municipality-admin" path="/municipality-admin" component={MunicipalityAdmin} />,
     <Route key="auth-phones" path="/phones" component={Phones} />,
+    <Route key="auth-auto-dialer" path="/auto-dialer" component={AutoDialer} />,
     <Route key="auth-softphone" path="/softphone" component={Softphone} />,
     <Route key="auth-install" path="/install" component={InstallPage} />,
     ...createRouteElements(adminRoutePaths, GlobalAdmin, "auth-admin"),
