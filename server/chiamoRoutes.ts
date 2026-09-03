@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
 import { db } from "./db";
 import { emailService } from "./emailService";
+import { buildChiamoLeadEmails } from "./chiamoLeadEmails";
 import { storage } from "./storage";
 import { authenticateUser } from "./authMiddleware";
 import { agencyCredentials, tenants, voipCallLogs, voipPhoneNumbers, voipRoutingBuckets, voipTenantSettings, voipVoicemails } from "@shared/schema";
@@ -20,9 +21,13 @@ const leadInput = z.object({
   consent: z.literal(true), website: z.string().max(0).optional(),
 });
 
-async function sendLeadNotification(lead: typeof chiamoLeads.$inferSelect) {
-  try { return await emailService.sendEmail({ to: CHIAMO_SUPPORT_EMAIL, subject: `New Chiamo Connect Lead — ${lead.businessName}`, html: `<h1>New Chiamo Connect lead</h1><p><strong>${lead.businessName}</strong></p><p>${lead.firstName} ${lead.lastName} · ${lead.businessEmail} · ${lead.businessPhone}</p><p>${lead.phoneUsersNeeded} phone users · ${lead.planInterest} plan · Texting: ${lead.textingInterest ? "Interested" : "No"}</p>`, tag: "chiamo-lead" }); }
-  catch (error) { return { success:false, messageId:"", error:error instanceof Error?error.message:"Postmark delivery failed" }; }
+async function sendLeadEmails(lead: typeof chiamoLeads.$inferSelect) {
+  const emails = buildChiamoLeadEmails(lead);
+  const [admin, customer] = await Promise.all([
+    emailService.sendEmail(emails.admin),
+    emailService.sendEmail(emails.customer),
+  ]);
+  return { admin, customer };
 }
 
 export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandler) {
@@ -39,10 +44,16 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
     if (!parsed.success) return res.status(400).json({ message: "Please check the highlighted business information.", issues: parsed.error.flatten().fieldErrors });
     const { consent: _consent, website: _website, ...lead } = parsed.data;
     const [saved] = await db.insert(chiamoLeads).values(lead).returning();
-    // Saving is the transaction boundary. Notification failure is deliberately non-fatal.
-    sendLeadNotification(saved).then(async result => {
-      await db.update(chiamoLeads).set(result.success ? { notificationStatus: "SENT", notificationSentAt: new Date(), notificationError: null } : { notificationStatus: "FAILED", notificationError: result.error || "Postmark delivery failed" }).where(eq(chiamoLeads.id, saved.id));
-    }).catch(error => console.error("Chiamo lead notification status update failed", error));
+    // Saving is the transaction boundary. Email delivery failure is deliberately non-fatal,
+    // but wait for both Postmark requests so short-lived server processes do not drop them.
+    try {
+      const { admin, customer } = await sendLeadEmails(saved);
+      const success = admin.success && customer.success;
+      const errors = [admin.error, customer.error].filter(Boolean).join("; ");
+      await db.update(chiamoLeads).set(success ? { notificationStatus: "SENT", notificationSentAt: new Date(), notificationError: null } : { notificationStatus: "FAILED", notificationError: errors || "Postmark delivery failed" }).where(eq(chiamoLeads.id, saved.id));
+    } catch (error) {
+      console.error("Chiamo lead email status update failed", error);
+    }
     return res.status(201).json({ id: saved.id, message: "Thank you. Our team will contact you to review your business phone needs." });
   });
 
@@ -145,9 +156,11 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
   app.post("/api/admin/chiamo/leads/:id/resend-notification", isPlatformAdmin, async (req, res) => {
     const [lead] = await db.select().from(chiamoLeads).where(eq(chiamoLeads.id, req.params.id)).limit(1);
     if (!lead) return res.status(404).json({ message: "Lead not found" });
-    const result = await sendLeadNotification(lead);
-    const [updated] = await db.update(chiamoLeads).set(result.success ? { notificationStatus: "SENT", notificationSentAt: new Date(), notificationError: null } : { notificationStatus: "FAILED", notificationError: result.error || "Postmark delivery failed" }).where(eq(chiamoLeads.id, lead.id)).returning();
-    res.status(result.success ? 200 : 502).json(updated);
+    const { admin, customer } = await sendLeadEmails(lead);
+    const success = admin.success && customer.success;
+    const errors = [admin.error, customer.error].filter(Boolean).join("; ");
+    const [updated] = await db.update(chiamoLeads).set(success ? { notificationStatus: "SENT", notificationSentAt: new Date(), notificationError: null } : { notificationStatus: "FAILED", notificationError: errors || "Postmark delivery failed" }).where(eq(chiamoLeads.id, lead.id)).returning();
+    res.status(success ? 200 : 502).json(updated);
   });
   app.get("/api/admin/chiamo/customers", isPlatformAdmin, async (_req, res) => {
     try {
