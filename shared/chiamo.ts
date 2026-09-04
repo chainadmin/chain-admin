@@ -1,4 +1,9 @@
 export const CHIAMO_SUPPORT_EMAIL = "support@chiamoconnect.com";
+export const CHAIN_SUPPORT_EMAIL = "support@chainsoftwaregroup.com";
+export const CHIAMO_REGISTRATION_NOTIFICATION_RECIPIENTS = [
+  CHIAMO_SUPPORT_EMAIL,
+  CHAIN_SUPPORT_EMAIL,
+] as const;
 
 export const chiamoPlans = [
   { id: "starter", name: "Starter", monthlyPriceCents: 19900, includedUsers: 3, additionalUserPriceCents: 2500, includedNumbers: 1, features: ["Business Calling", "1 Business Phone Number", "Web-Based Business Phone", "Incoming Calling", "Outgoing Calling", "Call Logs", "Voicemail", "Call Recording where currently supported", "Call Routing", "User Management"] },
