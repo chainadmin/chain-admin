@@ -2649,6 +2649,60 @@ export async function runMigrations() {
         updated_at TIMESTAMP NOT NULL DEFAULT NOW()
       )
     `);
+    // A tenant can have exactly one phone product entitlement. This intentionally
+    // records ownership without touching historical invoices or joining tenants.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS phone_product_entitlements (
+        tenant_id UUID PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+        billing_owner TEXT NOT NULL CHECK (billing_owner IN ('CHAIN', 'CHIAMO')),
+        lifecycle_status TEXT NOT NULL CHECK (lifecycle_status IN ('ACTIVE', 'SUSPENDED', 'CANCELLED')),
+        enabled BOOLEAN NOT NULL DEFAULT FALSE,
+        source TEXT NOT NULL CHECK (source IN ('LEGACY_BACKFILL', 'CHAIN', 'CHIAMO', 'BILLING', 'MANUAL')),
+        effective_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        disabled_at TIMESTAMP,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    // Backfill is insert-only and tenant-scoped. A Chiamo subscription always
+    // takes billing ownership; unknown/PENDING source states remain suspended.
+    await client.query(`
+      INSERT INTO phone_product_entitlements
+        (tenant_id, billing_owner, lifecycle_status, enabled, source, effective_at, disabled_at)
+      SELECT
+        t.id,
+        CASE WHEN cs.tenant_id IS NOT NULL THEN 'CHIAMO' ELSE 'CHAIN' END,
+        CASE
+          WHEN cs.tenant_id IS NULL THEN CASE WHEN t.voip_enabled THEN 'ACTIVE' ELSE 'SUSPENDED' END
+          WHEN UPPER(COALESCE(cs.billing_status, '')) = 'ACTIVE' THEN 'ACTIVE'
+          WHEN UPPER(COALESCE(cs.billing_status, '')) = 'CANCELLED' THEN 'CANCELLED'
+          ELSE 'SUSPENDED'
+        END,
+        CASE
+          WHEN cs.tenant_id IS NULL THEN COALESCE(t.voip_enabled, FALSE)
+          ELSE COALESCE(t.voip_enabled, FALSE)
+            AND COALESCE(csc.account_active, FALSE)
+            AND COALESCE(csc.voice_enabled, FALSE)
+        END,
+        'LEGACY_BACKFILL',
+        NOW(),
+        CASE
+          WHEN cs.tenant_id IS NULL AND COALESCE(t.voip_enabled, FALSE) THEN NULL
+          WHEN cs.tenant_id IS NOT NULL
+            AND UPPER(COALESCE(cs.billing_status, '')) = 'ACTIVE'
+            AND COALESCE(t.voip_enabled, FALSE)
+            AND COALESCE(csc.account_active, FALSE)
+            AND COALESCE(csc.voice_enabled, FALSE) THEN NULL
+          ELSE NOW()
+        END
+      FROM tenants t
+      LEFT JOIN chiamo_subscriptions cs ON cs.tenant_id = t.id
+      LEFT JOIN chiamo_service_configurations csc ON csc.tenant_id = t.id
+      WHERE COALESCE(t.voip_enabled, FALSE)
+         OR COALESCE(t.chiamo_connect_enabled, FALSE)
+         OR cs.tenant_id IS NOT NULL
+      ON CONFLICT (tenant_id) DO NOTHING
+    `);
     await client.query(`
       CREATE TABLE IF NOT EXISTS chiamo_usage_settings (
         id INTEGER PRIMARY KEY DEFAULT 1,

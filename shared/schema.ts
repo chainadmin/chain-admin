@@ -119,6 +119,21 @@ export const tenants = pgTable("tenants", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+// The single authoritative commercial entitlement for a tenant's phone
+// product. Legacy Chain Voice and Chiamo Connect may continue to have their
+// own operational configuration, but only this record decides billing owner.
+export const phoneProductEntitlements = pgTable("phone_product_entitlements", {
+  tenantId: uuid("tenant_id").primaryKey().references(() => tenants.id, { onDelete: "cascade" }),
+  billingOwner: text("billing_owner", { enum: ["CHAIN", "CHIAMO"] }).notNull(),
+  lifecycleStatus: text("lifecycle_status", { enum: ["ACTIVE", "SUSPENDED", "CANCELLED"] }).notNull(),
+  enabled: boolean("enabled").notNull().default(false),
+  source: text("source", { enum: ["LEGACY_BACKFILL", "CHAIN", "CHIAMO", "BILLING", "MANUAL"] }).notNull(),
+  effectiveAt: timestamp("effective_at").notNull().defaultNow(),
+  disabledAt: timestamp("disabled_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
 // SMS provider credentials are intentionally separate from the legacy Twilio
 // fields on tenants, which are also used by Voice provisioning.
 export const tenantSmsConfigurations = pgTable("tenant_sms_configurations", {
@@ -2087,12 +2102,15 @@ export const insertWalletSchema = createInsertSchema(wallets).omit({ id: true, c
 export const insertWalletLedgerSchema = createInsertSchema(walletLedger).omit({ id: true, createdAt: true });
 export const insertAddonSchema = createInsertSchema(addons).omit({ id: true, createdAt: true });
 export const insertTenantAddonSchema = createInsertSchema(tenantAddons).omit({ id: true, activatedAt: true, cancelledAt: true, lastChargedAt: true });
+export const insertPhoneProductEntitlementSchema = createInsertSchema(phoneProductEntitlements).omit({ createdAt: true, updatedAt: true });
 
 // Types
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type Tenant = typeof tenants.$inferSelect;
 export type InsertTenant = z.infer<typeof insertTenantSchema>;
+export type PhoneProductEntitlement = typeof phoneProductEntitlements.$inferSelect;
+export type InsertPhoneProductEntitlement = z.infer<typeof insertPhoneProductEntitlementSchema>;
 export type TenantSmsConfiguration = typeof tenantSmsConfigurations.$inferSelect;
 export type AgencyTrialRegistration = z.infer<typeof agencyTrialRegistrationSchema>;
 export type SelectAgencyCredentials = typeof agencyCredentials.$inferSelect;

@@ -73,6 +73,15 @@ import { downloadVoiceGreeting, uploadVoiceGreeting } from "./voiceObjectStorage
 import externalApiRouter from "./external-api";
 import { registerWalletRoutes } from "./walletRoutes";
 import { registerChiamoRoutes } from "./chiamoRoutes";
+import {
+  findCanonicalTenant,
+  getEffectivePhoneEntitlement,
+  isChainPhoneBillingEligible,
+  lockCompanyIdentity,
+  normalizeCompanyEmail,
+  PhoneProductOwnershipConflictError,
+  setChainPhoneEntitlement,
+} from "./phoneProductEntitlement";
 import { getAdminCommunicationsInventory } from "./adminCommunicationsService";
 import {
   createGlobalAdminToken,
@@ -7960,52 +7969,95 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const data = validationResult.data;
 
-      // Check if agency with this email already exists
-      const existingTenant = await storage.getTenantByEmail(data.email);
-      if (existingTenant) {
-        return res.status(400).json({ 
-          message: "An agency with this email already exists. Please try logging in instead." 
-        });
-      }
-      
-      // Check if username is already taken
-      const existingCredentials = await storage.getAgencyCredentialsByUsername(data.username);
-      if (existingCredentials) {
-        return res.status(400).json({ 
-          message: "This username is already taken. Please choose another one." 
-        });
-      }
-
-      // Generate a unique slug for the agency
-      const baseSlug = data.businessName.toLowerCase()
+       // Generate a readable, collision-resistant slug. Identity and all tenant/
+       // credential changes below are serialized in one transaction.
+       const baseSlug = data.businessName.toLowerCase()
         .replace(/[^a-z0-9]/g, '-')
         .replace(/-+/g, '-')
-        .replace(/^-|-$/g, '');
-      
-      let slug = baseSlug;
-      let counter = 1;
-      
-      // Ensure slug is unique
-      while (await storage.getTenantBySlug(slug)) {
-        slug = `${baseSlug}-${counter}`;
-        counter++;
-      }
+         .replace(/^-|-$/g, '') || 'agency';
+       const registration = await db.transaction(async tx => {
+         const email = normalizeCompanyEmail(data.email);
+         await lockCompanyIdentity(tx, email, data.businessName);
+         const canonical = await findCanonicalTenant(tx, email, data.businessName);
+         if (canonical.reason) throw Object.assign(new Error("A company record has a conflicting or ambiguous identity and requires manual review."), { status: 409 });
+         let tenant = canonical.tenant;
+         if (tenant && !tenant.chiamoConnectEnabled) throw Object.assign(new Error("An agency with this company identity already exists. Please try logging in instead."), { status: 400 });
+         if (tenant) {
+           if (tenant.chainCoreEnabled) {
+             throw Object.assign(new Error("This company already has a Chain account. Please log in instead."), { status: 400 });
+           }
+           const existingOwners = await tx.select().from(agencyCredentials).where(and(
+             eq(agencyCredentials.tenantId, tenant.id),
+             eq(agencyCredentials.role, "owner"),
+             eq(agencyCredentials.isActive, true),
+             sql`lower(trim(${agencyCredentials.email})) = ${email}`,
+           ));
+           if (existingOwners.length !== 1 || !existingOwners[0].email) {
+             throw Object.assign(new Error("This Chiamo company requires manual review before Chain can be activated."), { status: 409 });
+           }
+           const activationToken = `chain-activation-${crypto.randomBytes(32).toString("hex")}`;
+           await tx.execute(sql`
+             INSERT INTO password_reset_tokens (credential_id, token, expires_at)
+             VALUES (${existingOwners[0].id}, ${activationToken}, ${new Date(Date.now() + 60 * 60 * 1000)})
+           `);
+           return {
+             mode: "chiamo_handoff" as const,
+             tenant,
+             slug: tenant.slug,
+             credential: existingOwners[0],
+             activationToken,
+           };
+         }
 
-      // Create the trial tenant
-      console.log("Creating trial tenant with slug:", slug);
-      const tenant = await storage.createTrialTenant({
-        name: data.businessName,
-        slug,
-        businessType: data.businessType || 'call_center',
-        billingMode: data.billingMode || 'subscription',
-        ownerFirstName: data.ownerFirstName,
-        ownerLastName: data.ownerLastName,
-        ownerDateOfBirth: data.ownerDateOfBirth,
-        ownerSSN: data.ownerSSN, // In production, this should be encrypted
-        businessName: data.businessName,
-        phoneNumber: data.phoneNumber,
-        email: data.email,
-      });
+         const username = data.username.trim().toLowerCase();
+         const passwordHash = await bcrypt.hash(data.password, 10);
+         const existingUsername = await tx.select().from(agencyCredentials).where(sql`lower(trim(${agencyCredentials.username})) = ${username}`).limit(1);
+         if (existingUsername[0]) throw Object.assign(new Error("This username is already taken. Please choose another one."), { status: 400 });
+         const slug = `${baseSlug}-${crypto.randomBytes(5).toString("hex")}`;
+         [tenant] = await tx.insert(tenants).values({
+           name: data.businessName, slug, businessType: data.businessType || "call_center",
+           billingMode: data.billingMode || "subscription", ownerFirstName: data.ownerFirstName,
+           ownerLastName: data.ownerLastName, ownerDateOfBirth: data.ownerDateOfBirth,
+           ownerSSN: data.ownerSSN, businessName: data.businessName,
+           phoneNumber: data.phoneNumber, email, isTrialAccount: true, isPaidAccount: false,
+         }).returning();
+         await tx.insert(agencyCredentials).values({ tenantId: tenant.id, username, passwordHash, email, firstName: data.ownerFirstName, lastName: data.ownerLastName, role: "owner", isActive: true });
+         await tx.insert(tenantSettings).values({
+           tenantId: tenant.id,
+           showPaymentPlans: true,
+           showDocuments: true,
+           allowSettlementRequests: true,
+           smsThrottleLimit: 10,
+           customBranding: {},
+           consumerPortalSettings: {},
+         }).onConflictDoNothing();
+         return { mode: "created" as const, tenant, slug };
+       });
+
+       if (registration.mode === "chiamo_handoff") {
+         const baseUrl = process.env.BASE_URL || "https://chainsoftwaregroup.com";
+         const activationUrl = `${baseUrl}/agency/reset-password?token=${registration.activationToken}`;
+         const delivery = await emailService.sendEmail({
+           to: registration.credential.email,
+           subject: "Confirm adding Chain to your Chiamo Connect company",
+           html: `
+             <p>Hello${registration.credential.firstName ? ` ${registration.credential.firstName}` : ""},</p>
+             <p>Someone requested to add Chain services to your existing Chiamo Connect company, ${registration.tenant.name}.</p>
+             <p>To confirm ownership, activate Chain, and set the password you will use across both products, use this secure link:</p>
+             <p><a href="${activationUrl}">Confirm and activate Chain</a></p>
+             <p>This link expires in one hour. If you did not request this, ignore this email and nothing will change.</p>
+           `,
+           tag: "chain-product-activation",
+         });
+         if (!delivery.success) {
+           throw Object.assign(new Error("We found your Chiamo account but could not send the secure activation email. Please try again."), { status: 502 });
+         }
+         return res.status(202).json({
+           message: "We found your existing Chiamo Connect company. Check the owner email for a secure link to activate Chain without creating a duplicate account.",
+           existingCompany: true,
+         });
+       }
+       const { tenant, slug } = registration;
 
       // Initialize wallet if signing up as wallet tenant
       if ((data.billingMode || 'subscription') === 'wallet') {
@@ -8015,24 +8067,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.error("Failed to initialize wallet for new tenant:", e);
         }
       }
-
-      // Hash the password
-      console.log("Hashing password for username:", data.username);
-      const passwordHash = await bcrypt.hash(data.password, 10);
-      console.log("Password hashed successfully");
-      
-      // Create agency credentials for username/password login
-      console.log("Creating agency credentials for tenant:", tenant.id);
-      await storage.createAgencyCredentials({
-        tenantId: tenant.id,
-        username: data.username,
-        passwordHash,
-        email: data.email,
-        firstName: data.ownerFirstName,
-        lastName: data.ownerLastName,
-        role: 'owner',
-        isActive: true,
-      });
 
       // Send notification email to support about new registration
       console.log(`New trial agency registered: ${data.businessName} (${data.email})`);
@@ -8108,6 +8142,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
     } catch (error) {
       console.error("Error during agency registration:", error);
+      if (typeof error === "object" && error !== null && "status" in error) {
+        const expected = error as { status: number; message?: string };
+        return res.status(expected.status).json({ message: expected.message || "Registration could not be completed." });
+      }
       if (error instanceof Error) {
         console.error("Error message:", error.message);
         console.error("Error stack:", error.stack);
@@ -8350,44 +8388,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Password must be at least 8 characters long" });
       }
       
-      // Get token from database
-      const resetToken = await storage.getPasswordResetToken(token);
-      
-      if (!resetToken) {
-        return res.status(400).json({ message: "Invalid or expired reset link. Please request a new one." });
-      }
-      
-      // Check if token is expired
-      if (new Date() > resetToken.expiresAt) {
-        return res.status(400).json({ message: "This reset link has expired. Please request a new one." });
-      }
-      
-      // Check if token was already used
-      if (resetToken.usedAt) {
-        return res.status(400).json({ message: "This reset link has already been used. Please request a new one." });
-      }
-      
-      // Get credentials to verify they still exist
-      const credentials = await storage.getAgencyCredentialsById(resetToken.credentialId);
-      if (!credentials) {
-        return res.status(400).json({ message: "Account not found. Please contact support." });
-      }
-      
       // Hash new password
       const passwordHash = await bcrypt.hash(newPassword, 10);
-      
-      // Update password
-      await storage.updateAgencyCredentialsPassword(credentials.id, passwordHash);
-      
-      // Mark token as used
-      await storage.markPasswordResetTokenUsed(token);
-      
-      console.log(`Password successfully reset for user ${credentials.username}`);
-      
-      res.json({ message: "Password has been reset successfully. You can now log in with your new password." });
+
+      const result = await db.transaction(async tx => {
+        const tokenResult = await tx.execute(sql`
+          SELECT id, credential_id, expires_at, used_at
+          FROM password_reset_tokens
+          WHERE token = ${token}
+          FOR UPDATE
+        `);
+        const resetToken = tokenResult.rows?.[0] as any;
+        if (!resetToken) {
+          throw Object.assign(new Error("Invalid or expired reset link. Please request a new one."), { status: 400 });
+        }
+        if (new Date() > new Date(resetToken.expires_at)) {
+          throw Object.assign(new Error("This reset link has expired. Please request a new one."), { status: 400 });
+        }
+        if (resetToken.used_at) {
+          throw Object.assign(new Error("This reset link has already been used. Please request a new one."), { status: 400 });
+        }
+
+        const [credentials] = await tx.select().from(agencyCredentials)
+          .where(eq(agencyCredentials.id, resetToken.credential_id)).limit(1);
+        if (!credentials) {
+          throw Object.assign(new Error("Account not found. Please contact support."), { status: 400 });
+        }
+
+        await tx.update(agencyCredentials).set({ passwordHash, updatedAt: new Date() })
+          .where(eq(agencyCredentials.id, credentials.id));
+        const chainActivated = token.startsWith("chain-activation-");
+        if (chainActivated) {
+          await tx.update(tenants).set({ chainCoreEnabled: true })
+            .where(eq(tenants.id, credentials.tenantId));
+        }
+        await tx.execute(sql`
+          UPDATE password_reset_tokens
+          SET used_at = NOW()
+          WHERE id = ${resetToken.id}
+        `);
+        return { username: credentials.username, chainActivated };
+      });
+
+      console.log(`Password successfully reset for user ${result.username}`);
+      res.json({
+        message: result.chainActivated
+          ? "Chain has been activated for your existing company and your password is set. You can now use the same login across Chain and Chiamo Connect."
+          : "Password has been reset successfully. You can now log in with your new password.",
+      });
       
     } catch (error) {
       console.error("Error during password reset:", error);
+      if (typeof error === "object" && error !== null && "status" in error) {
+        const expected = error as { status: number; message?: string };
+        return res.status(expected.status).json({ message: expected.message || "Password reset could not be completed." });
+      }
       res.status(500).json({ message: "Failed to reset password" });
     }
   });
@@ -19831,7 +19886,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tenant = await storage.getTenant(tenantId);
       let voipCosts = 0;
       let voipDetails = null;
-      if (tenant?.voipEnabled) {
+      if (tenant?.voipEnabled && await isChainPhoneBillingEligible(tenantId)) {
         const voipUserCount = await voipStorage.countVoipUsersForTenant(tenantId);
         const { localCount, tollFreeCount } = await voipStorage.countVoipPhoneNumbersByTenant(tenantId);
         
@@ -25348,7 +25403,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // All customer Voice endpoints share one entitlement gate. Provider webhooks remain
   // below under /api/voice and continue to use provider signature/account validation.
-  app.use('/api/voip', authenticateUser, requireVoiceProduct);
+  app.use('/api/voip', authenticateUser, (req, res, next) => {
+    if (req.method === 'GET' && req.path === '/billing-summary') return next();
+    return requireVoiceProduct(req, res, next);
+  });
   const { canUseSoftphone } = await import('./voiceCallAccess');
 
   const voiceSettingsInput = z.object({
@@ -26153,6 +26211,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!tenant) {
         return res.status(404).json({ message: "Tenant not found" });
       }
+      const entitlement = await getEffectivePhoneEntitlement(user.tenantId);
 
       // Count phone numbers
       const counts = await voipStorage.countVoipPhoneNumbersByTenant(user.tenantId);
@@ -26160,6 +26219,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Count VoIP users
       const credentials = await storage.getAgencyCredentialsByTenant(user.tenantId);
       const voipUserCount = credentials.filter(c => c.voipAccess).length;
+
+      if (entitlement.owner === "CHIAMO") {
+        return res.json({
+          billingOwner: "CHIAMO",
+          entitlementStatus: entitlement.status,
+          legacyChainBillingSuppressed: true,
+          voipEnabled: entitlement.allowed,
+          voipUserCount,
+          localDidCount: counts.localCount,
+          tollFreeCount: counts.tollFreeCount,
+          pricing: null,
+          costs: null,
+        });
+      }
 
       // Calculate costs using tenant pricing (or defaults)
       const userPrice = tenant.voipUserPrice || 8000; // $80
@@ -26173,7 +26246,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const totalCost = usersCost + localDidsCost + tollFreeCost;
 
       res.json({
-        voipEnabled: tenant.voipEnabled,
+        billingOwner: "CHAIN",
+        entitlementStatus: entitlement.status,
+        legacyChainBillingSuppressed: false,
+        voipEnabled: entitlement.allowed,
         voipUserCount,
         localDidCount: counts.localCount,
         tollFreeCount: counts.tollFreeCount,
@@ -26208,18 +26284,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Invalid tenant configuration. Please contact support." });
       }
 
-      const { enabled } = req.body;
+      const parsed = z.object({ enabled: z.boolean() }).safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: "enabled must be true or false" });
 
-      if (enabled) {
-        // Just enable VoIP - user will select and add phone numbers separately
-        await storage.updateTenant(user.tenantId, { voipEnabled: true });
+      await db.transaction(tx => setChainPhoneEntitlement(tx, user.tenantId, parsed.data.enabled));
+      if (parsed.data.enabled) {
         res.json({ success: true, message: "VoIP enabled successfully. You can now add phone numbers from the Numbers tab." });
       } else {
-        // Disable VoIP (keep numbers for now, just disable access)
-        await storage.updateTenant(user.tenantId, { voipEnabled: false });
         res.json({ success: true, message: "VoIP disabled" });
       }
     } catch (error) {
+      if (error instanceof PhoneProductOwnershipConflictError) {
+        return res.status(409).json({ message: error.message, code: "CHIAMO_BILLING_OWNER" });
+      }
       console.error("Error enabling VoIP:", error);
       res.status(500).json({ message: "Failed to enable VoIP" });
     }

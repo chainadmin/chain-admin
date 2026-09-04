@@ -134,22 +134,16 @@ export const requireVoiceProduct: RequestHandler = async (req: any, res, next) =
     if (!tenantId) return res.status(401).json({ message: "Unauthorized" });
     const tenant = await storage.getTenant(tenantId);
     if (!tenant) return res.status(404).json({ message: "Tenant not found" });
-    // Existing Chain tenants remain backwards-compatible. Chiamo is explicitly provisioned.
-    const hasProduct = tenant.chainCoreEnabled !== false || tenant.chiamoConnectEnabled === true;
-    if (!hasProduct || tenant.voipEnabled === false) {
-      return res.status(403).json({ message: "Business Phone is not enabled for this organization" });
-    }
-    if (tenant.chiamoConnectEnabled === true) {
-      const { getChiamoPhoneSystemAccess } = await import("./chiamoAccess");
-      const access = await getChiamoPhoneSystemAccess(tenantId);
-      if (!access.allowed) {
-        return res.status(402).json({
-          message: access.reason === "BILLING_INACTIVE"
-            ? "The Chiamo phone system is unavailable because billing is not active."
-            : "The Chiamo phone system is disabled for this organization.",
-          code: access.reason,
-        });
-      }
+    const { getEffectivePhoneEntitlement } = await import("./phoneProductEntitlement");
+    const entitlement = await getEffectivePhoneEntitlement(tenantId);
+    if (!entitlement.allowed) {
+      const chiamoBillingInactive = entitlement.owner === "CHIAMO" && entitlement.status !== "ACTIVE";
+      return res.status(chiamoBillingInactive ? 402 : 403).json({
+        message: chiamoBillingInactive
+          ? "The Chiamo phone system is unavailable because billing is not active."
+          : "Business Phone is not enabled for this organization",
+        code: chiamoBillingInactive ? "BILLING_INACTIVE" : "PHONE_SYSTEM_DISABLED",
+      });
     }
     return next();
   } catch (error) {

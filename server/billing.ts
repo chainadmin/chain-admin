@@ -4,6 +4,7 @@ import { voipStorage } from "./voipStorage";
 import { autoResponseUsage, consumers, subscriptionPlans } from "@shared/schema";
 import { and, eq, sql, gte, lte } from "drizzle-orm";
 import { nanoid } from "nanoid";
+import { isChainPhoneBillingEligible } from "./phoneProductEntitlement";
 import {
   A_LA_CARTE_SERVICE_PRICE,
   A_LA_CARTE_CORE_SERVICES,
@@ -73,7 +74,7 @@ async function countConsumers(tenantId: string): Promise<number> {
 /** Compute VoIP costs for a tenant (returns { voipCosts, voipDetails }). */
 async function computeVoipCosts(tenantId: string): Promise<{ voipCosts: number; voipDetails: any | null }> {
   const tenant = await storage.getTenant(tenantId);
-  if (!tenant?.voipEnabled) return { voipCosts: 0, voipDetails: null };
+  if (!tenant?.voipEnabled || !(await isChainPhoneBillingEligible(tenantId))) return { voipCosts: 0, voipDetails: null };
 
   const voipUserCount = await voipStorage.countVoipUsersForTenant(tenantId);
   const { localCount, tollFreeCount } = await voipStorage.countVoipPhoneNumbersByTenant(tenantId);

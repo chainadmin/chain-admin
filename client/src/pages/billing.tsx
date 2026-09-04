@@ -439,11 +439,13 @@ export default function Billing() {
 
   // Fetch VoIP billing summary
   const { data: voipBillingSummary } = useQuery<{
+    billingOwner: 'CHAIN' | 'CHIAMO';
+    legacyChainBillingSuppressed: boolean;
     voipEnabled: boolean;
     voipUserCount: number;
     localDidCount: number;
     tollFreeCount: number;
-    costs: { totalCostCents: number };
+    costs: { totalCostCents: number } | null;
   }>({
     queryKey: ["/api/voip/billing-summary"],
   });
@@ -1558,24 +1560,32 @@ export default function Billing() {
                   <div className="flex-1 space-y-2">
                     <div className="flex items-center gap-2">
                       <Phone className="h-5 w-5 text-green-400" />
-                      <h3 className="text-base font-semibold text-white">VoIP Phone System</h3>
+                      <h3 className="text-base font-semibold text-white">
+                        {voipBillingSummary?.billingOwner === 'CHIAMO' ? 'Phone Service' : 'VoIP Phone System'}
+                      </h3>
                       <span className="rounded-full bg-green-500/20 px-2 py-0.5 text-xs font-semibold text-green-200 border border-green-400/30">
-                        $80/user/mo
+                        {voipBillingSummary?.billingOwner === 'CHIAMO' ? 'Managed by Chiamo Connect' : '$80/user/mo'}
                       </span>
                     </div>
                     <p className="text-sm text-blue-100/70">
-                      Make and receive calls directly from your browser with our integrated softphone. Includes unlimited calling and call recording.
+                      {voipBillingSummary?.billingOwner === 'CHIAMO'
+                        ? 'Phone access and charges are managed through your Chiamo Connect subscription. Chain will not add a separate VoIP charge.'
+                        : 'Make and receive calls directly from your browser with our integrated softphone. Includes unlimited calling and call recording.'}
                     </p>
-                    <div className="flex flex-wrap gap-2 text-xs text-blue-100/60">
-                      <span className="rounded-full bg-white/10 px-2 py-1">Unlimited Calls</span>
-                      <span className="rounded-full bg-white/10 px-2 py-1">Call Recording</span>
-                      <span className="rounded-full bg-white/10 px-2 py-1">Browser Softphone</span>
-                    </div>
-                    <div className="mt-3 space-y-1 text-xs text-blue-100/70">
-                      <p><strong className="text-white">Per user:</strong> $80/month (unlimited calls)</p>
-                      <p><strong className="text-white">Local DIDs:</strong> $5/month each</p>
-                      <p><strong className="text-white">Toll-Free:</strong> First included free, additional $10/month each</p>
-                    </div>
+                    {voipBillingSummary?.billingOwner !== 'CHIAMO' && (
+                      <>
+                        <div className="flex flex-wrap gap-2 text-xs text-blue-100/60">
+                          <span className="rounded-full bg-white/10 px-2 py-1">Unlimited Calls</span>
+                          <span className="rounded-full bg-white/10 px-2 py-1">Call Recording</span>
+                          <span className="rounded-full bg-white/10 px-2 py-1">Browser Softphone</span>
+                        </div>
+                        <div className="mt-3 space-y-1 text-xs text-blue-100/70">
+                          <p><strong className="text-white">Per user:</strong> $80/month (unlimited calls)</p>
+                          <p><strong className="text-white">Local DIDs:</strong> $5/month each</p>
+                          <p><strong className="text-white">Toll-Free:</strong> $10/month each</p>
+                        </div>
+                      </>
+                    )}
                     {voipBillingSummary?.voipEnabled && (
                       <div className="mt-3 rounded-lg bg-green-500/10 border border-green-400/20 p-3">
                         <div className="flex items-center justify-between">
@@ -1583,7 +1593,9 @@ export default function Billing() {
                             Currently active: {voipBillingSummary.voipUserCount} users, {voipBillingSummary.localDidCount} local DIDs, {voipBillingSummary.tollFreeCount} toll-free
                           </span>
                           <span className="font-semibold text-green-300">
-                            ${((voipBillingSummary.costs?.totalCostCents || 0) / 100).toFixed(2)}/mo
+                            {voipBillingSummary.billingOwner === 'CHIAMO'
+                              ? 'No separate Chain charge'
+                              : `$${((voipBillingSummary.costs?.totalCostCents || 0) / 100).toFixed(2)}/mo`}
                           </span>
                         </div>
                       </div>
@@ -1603,7 +1615,7 @@ export default function Billing() {
                         size="sm"
                         className="border-green-400/40 bg-green-500/10 text-green-200 hover:bg-green-500/20"
                       >
-                        Manage VoIP
+                        {voipBillingSummary?.billingOwner === 'CHIAMO' ? 'Manage phones' : 'Manage VoIP'}
                       </Button>
                     </Link>
                   </div>

@@ -73,11 +73,15 @@ interface AvailablePhoneNumber {
   capabilities: { voice: boolean; sms: boolean; mms: boolean };
 }
 
-interface VoipBillingSummary {
+type VoipBillingSummary = {
   voipEnabled: boolean;
   voipUserCount: number;
   localDidCount: number;
   tollFreeCount: number;
+  entitlementStatus: "ACTIVE" | "SUSPENDED" | "CANCELLED";
+} & ({
+  billingOwner: "CHAIN";
+  legacyChainBillingSuppressed: false;
   pricing: {
     userPriceCents: number;
     localDidPriceCents: number;
@@ -89,7 +93,12 @@ interface VoipBillingSummary {
     tollFreeCostCents: number;
     totalCostCents: number;
   };
-}
+} | {
+  billingOwner: "CHIAMO";
+  legacyChainBillingSuppressed: true;
+  pricing: null;
+  costs: null;
+});
 
 interface TeamMember {
   id: string;
@@ -537,19 +546,27 @@ export default function PhonesPage() {
               <CardHeader>
                 <CardTitle className="text-lg flex items-center justify-between text-white">
                   <span>VoIP Phone System</span>
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-normal text-blue-100/60">
-                      {billingSummary?.voipEnabled ? "Enabled" : "Disabled"}
-                    </span>
-                    <Switch
-                      checked={billingSummary?.voipEnabled || false}
-                      onCheckedChange={(checked) => enableVoipMutation.mutate(checked)}
-                      disabled={enableVoipMutation.isPending}
-                    />
-                  </div>
+                  {billingSummary?.billingOwner === "CHIAMO" ? (
+                    <Badge className="border border-sky-400/30 bg-sky-500/20 text-sky-100">
+                      Managed through Chiamo Connect
+                    </Badge>
+                  ) : (
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-normal text-blue-100/60">
+                        {billingSummary?.voipEnabled ? "Enabled" : "Disabled"}
+                      </span>
+                      <Switch
+                        checked={billingSummary?.voipEnabled || false}
+                        onCheckedChange={(checked) => enableVoipMutation.mutate(checked)}
+                        disabled={enableVoipMutation.isPending}
+                      />
+                    </div>
+                  )}
                 </CardTitle>
                 <CardDescription className="text-blue-100/70">
-                  {billingSummary?.voipEnabled 
+                  {billingSummary?.billingOwner === "CHIAMO"
+                    ? "Phone access and billing are managed through your Chiamo Connect subscription. Chain does not add a separate VoIP charge."
+                    : billingSummary?.voipEnabled
                     ? "VoIP is enabled. Add phone numbers from the Numbers tab to start making calls."
                     : "Enable VoIP to make and receive calls. $80/user/month. Phone numbers billed separately."}
                 </CardDescription>
@@ -822,6 +839,14 @@ export default function PhonesPage() {
                 {loadingBilling ? (
                   <div className="flex items-center justify-center py-8">
                     <Loader2 className="h-8 w-8 animate-spin text-blue-100/60" />
+                  </div>
+                ) : billingSummary?.billingOwner === "CHIAMO" ? (
+                  <div className="rounded-lg border border-sky-400/30 bg-sky-500/10 p-6 text-center text-sky-100">
+                    <DollarSign className="h-10 w-10 mx-auto mb-3 opacity-70" />
+                    <p className="font-medium">Managed through Chiamo Connect</p>
+                    <p className="mt-1 text-sm text-blue-100/70">
+                      Your Chiamo Connect subscription owns phone billing. Chain does not add a separate VoIP charge.
+                    </p>
                   </div>
                 ) : !billingSummary?.voipEnabled ? (
                   <div className="text-center py-8 text-blue-100/60">
