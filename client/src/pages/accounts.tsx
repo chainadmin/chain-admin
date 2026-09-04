@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { ACCOUNT_STATUSES, ACCOUNT_STATUS_LABELS } from "@shared/constants";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ApiError, apiRequest } from "@/lib/queryClient";
+import { isChiamoConnectPhoneShell } from "@/lib/app-detection";
 import { useToast } from "@/hooks/use-toast";
 import AdminLayout from "@/components/admin-layout";
 import ImportModal from "@/components/import-modal";
@@ -475,7 +476,7 @@ export default function Accounts() {
     onSuccess: (data: any) => {
       toast({
         title: "Call initiated",
-        description: `Calling ${data.toNumber || "number"}. Open the Phones page to manage your call.`,
+        description: `Calling ${data.toNumber || "number"}. Open ${isChiamoConnectPhoneShell() ? "Chiamo Connect" : "the Phones page"} to manage your call.`,
       });
     },
     onError: (error: any) => {

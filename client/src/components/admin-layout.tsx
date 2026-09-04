@@ -22,6 +22,7 @@ import { clearAuth } from "@/lib/cookies";
 import { useServiceAccess } from "@/hooks/useServiceAccess";
 import { MessageSquare, Mail } from "lucide-react";
 import { canTenantViewBilling } from "@shared/tenantAccess";
+import { isChiamoConnectPhoneShell } from "@/lib/app-detection";
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -148,7 +149,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
     { name: "Accounts", href: buildNavHref("/accounts"), icon: "fas fa-file-invoice-dollar" },
     { name: "Communications", href: buildNavHref("/communications"), icon: "fas fa-comments" },
     { name: "Inbox", href: buildNavHref("/email-inbox"), icon: "fas fa-inbox" },
-    { name: "Phones", href: buildNavHref("/phones"), icon: "fas fa-phone-alt" },
+    { name: isChiamoConnectPhoneShell() ? "Chiamo Connect" : "Phones", href: buildNavHref("/phones"), icon: "fas fa-phone-alt" },
     { name: "Requests", href: buildNavHref("/requests"), icon: "fas fa-phone" },
     { name: "Payments", href: buildNavHref("/payments"), icon: "fas fa-credit-card" },
     ...(isOwner && showTenantBilling ? [{ name: "Billing", href: buildNavHref("/billing"), icon: "fas fa-receipt" }] : []),

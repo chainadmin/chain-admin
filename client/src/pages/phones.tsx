@@ -27,6 +27,10 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { VoipControlCenter } from "@/components/voip-control-center";
+import { useAuth } from "@/hooks/useAuth";
+import { isChiamoConnectPhoneShell } from "@/lib/app-detection";
+import { canShowChainVoiceCommerce, getVoicePresentation } from "@/lib/chiamo-connect-presentation";
+import { CHIAMO_SUPPORT_EMAIL } from "@shared/chiamo";
 import {
   Phone,
   Users,
@@ -138,6 +142,7 @@ const cardBaseClasses = "rounded-2xl border border-white/10 bg-white/5 text-blue
 const inputClasses = "border-white/20 bg-white/10 text-white placeholder:text-blue-100/60 focus:border-sky-400/60 focus-visible:ring-sky-400/40";
 
 export default function PhonesPage() {
+  const { user, isJwtAuth } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -149,19 +154,43 @@ export default function PhonesPage() {
   const [unassignedNumbers, setUnassignedNumbers] = useState<{sid: string; phoneNumber: string; friendlyName: string; numberType: 'local' | 'toll_free'; areaCode: string}[]>([]);
   const [loadingUnassigned, setLoadingUnassigned] = useState(false);
 
+  const { data: billingSummary, isLoading: loadingBilling, isError: billingError } = useQuery<VoipBillingSummary>({
+    queryKey: ["/api/voip/billing-summary"],
+  });
+  const { data: authUser, isLoading: loadingAuthUser } = useQuery<any>({
+    queryKey: ["/api/auth/user"],
+    enabled: !isJwtAuth,
+  });
+  const isOwner = isJwtAuth ? (user as any)?.role === "owner" : authUser?.platformUser?.role === "owner";
+  const voipAccess = isJwtAuth ? (user as any)?.voipAccess : authUser?.platformUser?.voipAccess;
+  const connectShell = isChiamoConnectPhoneShell();
+  const hasActiveVoiceEntitlement =
+    billingSummary?.entitlementStatus === "ACTIVE" && billingSummary.voipEnabled;
+  const voiceQueriesEnabled = !connectShell || hasActiveVoiceEntitlement;
+  const showCallControl = !connectShell || hasActiveVoiceEntitlement;
+  const showChainVoiceCommerce = canShowChainVoiceCommerce(billingSummary?.billingOwner);
+  const presentation = getVoicePresentation({
+    billingOwner: billingSummary?.billingOwner,
+    entitlementStatus: billingSummary?.entitlementStatus,
+    voipEnabled: billingSummary?.voipEnabled,
+    isOwner,
+    isLoading: loadingBilling || (!isJwtAuth && loadingAuthUser),
+    hasError: billingError,
+  });
+
   const { data: phoneNumbers = [], isLoading: loadingNumbers } = useQuery<VoipPhoneNumber[]>({
     queryKey: ["/api/voip/phone-numbers"],
+    enabled: voiceQueriesEnabled,
   });
-  const { data: localPresence } = useQuery<any>({ queryKey: ["/api/voip/local-presence"] });
+  const { data: localPresence } = useQuery<any>({
+    queryKey: ["/api/voip/local-presence"],
+    enabled: voiceQueriesEnabled && showChainVoiceCommerce,
+  });
   const [selectedLocalPresencePackage, setSelectedLocalPresencePackage] = useState("");
   const requestLocalPresence = useMutation({
     mutationFn: () => apiRequest('POST', '/api/voip/local-presence/requests', { packageId: selectedLocalPresencePackage }),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/voip/local-presence"] }); toast({ title: 'Request submitted', description: 'No numbers will be purchased until Global Admin reviews and approves coverage.' }); },
     onError: (error: any) => toast({ title: 'Request failed', description: error.message, variant: 'destructive' }),
-  });
-
-  const { data: billingSummary, isLoading: loadingBilling } = useQuery<VoipBillingSummary>({
-    queryKey: ["/api/voip/billing-summary"],
   });
 
   const { data: teamMembers = [], isLoading: loadingTeamMembers } = useQuery<TeamMember[]>({
@@ -170,6 +199,7 @@ export default function PhonesPage() {
 
   const { data: callLogs = [], isLoading: loadingCallLogs } = useQuery<VoipCallLog[]>({
     queryKey: ["/api/voip/call-logs?limit=500"],
+    enabled: voiceQueriesEnabled,
   });
 
   const callAnalytics = useMemo(() => {
@@ -222,14 +252,14 @@ export default function PhonesPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/voip/billing-summary"] });
       queryClient.invalidateQueries({ queryKey: ["/api/voip/phone-numbers"] });
       toast({
-        title: "VoIP Updated",
-        description: enabled ? "VoIP has been enabled. Add phone numbers from the Numbers tab." : "VoIP has been disabled.",
+        title: connectShell ? "Calling updated" : "VoIP Updated",
+        description: enabled ? (connectShell ? "Calling has been enabled. Add phone numbers from the Numbers tab." : "VoIP has been enabled. Add phone numbers from the Numbers tab.") : (connectShell ? "Calling has been disabled." : "VoIP has been disabled."),
       });
     },
     onError: (error: any) => {
       toast({
         title: "Error",
-        description: error.message || "Failed to update VoIP settings",
+        description: error.message || (connectShell ? "Failed to update calling settings" : "Failed to update VoIP settings"),
         variant: "destructive",
       });
     },
@@ -335,13 +365,13 @@ export default function PhonesPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/voip/billing-summary"] });
       toast({
         title: "Access Updated",
-        description: "VoIP access has been updated",
+        description: connectShell ? "Calling access has been updated" : "VoIP access has been updated",
       });
     },
     onError: (error: any) => {
       toast({
         title: "Error",
-        description: error.message || "Failed to update VoIP access",
+        description: error.message || (connectShell ? "Failed to update calling access" : "Failed to update VoIP access"),
         variant: "destructive",
       });
     },
@@ -406,19 +436,33 @@ export default function PhonesPage() {
   return (
     <AdminLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        {connectShell ? <div className="relative overflow-hidden rounded-3xl border border-cyan-300/20 bg-gradient-to-r from-[#072f3d] via-[#084b57] to-[#10315a] p-6 shadow-2xl shadow-cyan-950/30">
+          <div className="pointer-events-none absolute -right-10 -top-12 h-44 w-44 rounded-full border-[20px] border-cyan-200/10" />
+          <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.22em] text-cyan-200">Chain workspace / communications</p>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight text-white">{connectShell ? "Chiamo Connect" : "VoIP Phone System"}</h1>
+            <p className="mt-1 max-w-xl text-cyan-50/75">{connectShell ? "Your company calling workspace, connected to the accounts and teams you already manage in Chain." : "Manage phone numbers, users, and VoIP settings"}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className={`rounded-2xl border px-4 py-2 text-sm ${presentation.tone === "active" ? "border-emerald-300/30 bg-emerald-300/10 text-emerald-100" : presentation.tone === "attention" ? "border-amber-200/30 bg-amber-200/10 text-amber-50" : "border-slate-200/20 bg-slate-200/10 text-slate-100"}`}>
+              <span className="font-bold tracking-wide">{presentation.label}</span><span className="ml-2 hidden text-xs opacity-80 sm:inline">{presentation.detail}</span>
+            </div>
+            {presentation.action === "enable" ? <Button onClick={() => enableVoipMutation.mutate(true)} disabled={enableVoipMutation.isPending} className="bg-cyan-300 text-slate-950 hover:bg-cyan-200">Enable calling</Button> :
+              presentation.action === "open-phone" && voipAccess !== false ? <Button onClick={openSoftphone} className="bg-cyan-300 text-slate-950 hover:bg-cyan-200"><ExternalLink className="mr-2 h-4 w-4" />Open phone</Button> :
+              presentation.action === "contact-chiamo" ? <a href={`mailto:${CHIAMO_SUPPORT_EMAIL}`} className="inline-flex min-h-10 items-center rounded-md bg-cyan-300 px-4 text-sm font-semibold text-slate-950 transition hover:bg-cyan-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100 focus-visible:ring-offset-2 focus-visible:ring-offset-[#084b57]">Contact Chiamo Connect</a> :
+              <p className="max-w-xs text-sm text-cyan-50/80">{presentation.detail}</p>}
+          </div>
+          </div>
+        </div> : <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-white">VoIP Phone System</h1>
-            <p className="text-blue-100/60 mt-1">Manage phone numbers, users, and VoIP settings</p>
+            <p className="mt-1 text-blue-100/60">Manage phone numbers, users, and VoIP settings</p>
           </div>
-          <Button 
-            onClick={openSoftphone}
-            className="bg-sky-500 hover:bg-sky-600 text-white"
-          >
-            <ExternalLink className="h-4 w-4 mr-2" />
-            Open Softphone
+          <Button onClick={openSoftphone} className="bg-sky-500 text-white hover:bg-sky-600">
+            <ExternalLink className="mr-2 h-4 w-4" />Open Softphone
           </Button>
-        </div>
+        </div>}
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid h-auto w-full grid-cols-2 gap-1 p-1 sm:grid-cols-4 lg:w-[960px]">
@@ -437,12 +481,16 @@ export default function PhonesPage() {
             <TabsTrigger value="billing" className="flex items-center gap-2">
               <DollarSign className="h-4 w-4" /> Billing
             </TabsTrigger>
-            <TabsTrigger value="local-presence" className="flex items-center gap-2">
-              <Phone className="h-4 w-4" /> Local Presence
-            </TabsTrigger>
-            <TabsTrigger value="call-control" className="flex items-center gap-2">
-              <Settings className="h-4 w-4" /> Call Control
-            </TabsTrigger>
+            {showChainVoiceCommerce && (
+              <TabsTrigger value="local-presence" className="flex items-center gap-2">
+                <Phone className="h-4 w-4" /> Local Presence
+              </TabsTrigger>
+            )}
+            {showCallControl && (
+              <TabsTrigger value="call-control" className="flex items-center gap-2">
+                <Settings className="h-4 w-4" /> Call Control
+              </TabsTrigger>
+            )}
           </TabsList>
 
           {/* Call Analytics Dashboard */}
@@ -536,21 +584,21 @@ export default function PhonesPage() {
             )}
           </TabsContent>
 
-          <TabsContent value="call-control" className="mt-6">
-            <VoipControlCenter tone="chain" />
-          </TabsContent>
+          {showCallControl && <TabsContent value="call-control" className="mt-6">
+            <VoipControlCenter tone={connectShell ? "chiamo" : "chain"} />
+          </TabsContent>}
 
           {/* Settings Tab */}
           <TabsContent value="settings" className="mt-6">
             <Card className={cardBaseClasses}>
               <CardHeader>
                 <CardTitle className="text-lg flex items-center justify-between text-white">
-                  <span>VoIP Phone System</span>
+                  <span>{connectShell ? "Chiamo Connect service" : "VoIP Phone System"}</span>
                   {billingSummary?.billingOwner === "CHIAMO" ? (
                     <Badge className="border border-sky-400/30 bg-sky-500/20 text-sky-100">
                       Managed through Chiamo Connect
                     </Badge>
-                  ) : (
+                  ) : billingSummary?.billingOwner === "CHAIN" && isOwner ? (
                     <div className="flex items-center gap-3">
                       <span className="text-sm font-normal text-blue-100/60">
                         {billingSummary?.voipEnabled ? "Enabled" : "Disabled"}
@@ -561,21 +609,31 @@ export default function PhonesPage() {
                         disabled={enableVoipMutation.isPending}
                       />
                     </div>
+                  ) : billingSummary?.billingOwner === "CHAIN" ? (
+                    <Badge className="border border-white/20 bg-white/10 text-blue-50">Owner access required</Badge>
+                  ) : (
+                    <Badge className="border border-amber-200/30 bg-amber-200/10 text-amber-50">
+                      {billingError ? "Access unavailable" : "Checking access"}
+                    </Badge>
                   )}
                 </CardTitle>
                 <CardDescription className="text-blue-100/70">
                   {billingSummary?.billingOwner === "CHIAMO"
-                    ? "Phone access and billing are managed through your Chiamo Connect subscription. Chain does not add a separate VoIP charge."
-                    : billingSummary?.voipEnabled
-                    ? "VoIP is enabled. Add phone numbers from the Numbers tab to start making calls."
-                    : "Enable VoIP to make and receive calls. $80/user/month. Phone numbers billed separately."}
+                    ? "Phone access and billing are managed through your Chiamo Connect subscription. Chain does not add a separate calling charge."
+                    : billingSummary?.billingOwner === "CHAIN" && billingSummary.voipEnabled
+                    ? (connectShell ? "Calling is enabled. Add phone numbers from the Numbers tab to start making calls." : "VoIP is enabled. Add phone numbers from the Numbers tab to start making calls.")
+                    : billingSummary?.billingOwner === "CHAIN" && isOwner
+                    ? "Enable calling to configure numbers and give your team access."
+                    : billingSummary?.billingOwner === "CHAIN"
+                    ? "An account owner can activate calling and configure access for your team."
+                    : presentation.detail}
                 </CardDescription>
               </CardHeader>
               {enableVoipMutation.isPending && (
                 <CardContent>
                   <div className="flex items-center gap-2 text-sm text-blue-100/60">
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    {billingSummary?.voipEnabled ? "Disabling VoIP..." : "Enabling VoIP..."}
+                    {billingSummary?.voipEnabled ? (connectShell ? "Disabling calling..." : "Disabling VoIP...") : (connectShell ? "Enabling calling..." : "Enabling VoIP...")}
                   </div>
                 </CardContent>
               )}
@@ -611,7 +669,7 @@ export default function PhonesPage() {
           </TabsContent>
 
           {/* Phone Numbers Tab */}
-          <TabsContent value="local-presence" className="mt-6">
+          {showChainVoiceCommerce && <TabsContent value="local-presence" className="mt-6">
             <Card className={cardBaseClasses}>
               <CardHeader><CardTitle className="text-white">Local Presence</CardTitle><CardDescription className="text-blue-100/60">Use dedicated local business numbers based on the area you are calling.</CardDescription></CardHeader>
               <CardContent className="space-y-5">
@@ -622,7 +680,7 @@ export default function PhonesPage() {
                 </> : <div className="rounded-xl border border-white/10 bg-white/5 p-4"><p className="font-medium text-white">Current status: {localPresence.request.status.replaceAll('_', ' ')}</p><p className="mt-1 text-sm text-blue-100/60">Provisioning begins only after coverage, availability, cost, and Global Admin approval reviews.</p></div>}
               </CardContent>
             </Card>
-          </TabsContent>
+          </TabsContent>}
 
           {/* Phone Numbers Tab */}
           <TabsContent value="numbers" className="mt-6">
@@ -632,7 +690,7 @@ export default function PhonesPage() {
                   <div>
                     <CardTitle className="text-white">Phone Numbers</CardTitle>
                     <CardDescription className="text-blue-100/60">
-                      Manage your VoIP phone numbers
+                    {connectShell ? "Manage your company calling numbers" : "Manage your VoIP phone numbers"}
                     </CardDescription>
                   </div>
                   <Button
@@ -710,6 +768,7 @@ export default function PhonesPage() {
                                   onClick={() => setPrimaryMutation.mutate(number.id)}
                                   disabled={setPrimaryMutation.isPending}
                                   className="text-amber-300 hover:text-amber-200 hover:bg-amber-500/20"
+                                  aria-label={`Set ${number.phoneNumber} as primary number`}
                                 >
                                   <Star className="h-4 w-4" />
                                 </Button>
@@ -720,6 +779,7 @@ export default function PhonesPage() {
                                 onClick={() => deleteNumberMutation.mutate(number.id)}
                                 disabled={deleteNumberMutation.isPending || number.isPrimary}
                                 className="text-red-300 hover:text-red-200 hover:bg-red-500/20"
+                                  aria-label={`Remove ${number.phoneNumber}`}
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
@@ -738,9 +798,15 @@ export default function PhonesPage() {
           <TabsContent value="users" className="mt-6">
             <Card className={cardBaseClasses}>
               <CardHeader>
-                <CardTitle className="text-white">VoIP User Access</CardTitle>
+                <CardTitle className="text-white">{connectShell ? "Chiamo Connect user access" : "VoIP User Access"}</CardTitle>
                 <CardDescription className="text-blue-100/60">
-                  Manage which team members can use the softphone. Each enabled user costs $80/month.
+                  {billingSummary?.billingOwner === "CHIAMO"
+                    ? "Manage which team members can use the shared calling workspace. Subscription details are managed through Chiamo Connect."
+                    : billingSummary?.billingOwner === "CHAIN" && connectShell
+                    ? "Manage which team members can use the shared calling workspace. Each enabled user costs $80/month."
+                    : billingSummary?.billingOwner === "CHAIN"
+                    ? "Manage which team members can use the softphone. Each enabled user costs $80/month."
+                    : presentation.detail}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -752,7 +818,7 @@ export default function PhonesPage() {
                   <div className="text-center py-8 text-blue-100/60">
                     <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
                     <p>No team members found</p>
-                    <p className="text-sm">Add team members in Settings to give them VoIP access</p>
+                    <p className="text-sm">{connectShell ? "Add team members in Settings to give them calling access" : "Add team members in Settings to give them VoIP access"}</p>
                   </div>
                 ) : (
                   <Table>
@@ -762,7 +828,7 @@ export default function PhonesPage() {
                         <TableHead className="text-blue-100/60">Username</TableHead>
                         <TableHead className="text-blue-100/60">Role</TableHead>
                         <TableHead className="text-blue-100/60">Status</TableHead>
-                        <TableHead className="text-blue-100/60">VoIP Access</TableHead>
+                        <TableHead className="text-blue-100/60">{connectShell ? "Calling access" : "VoIP Access"}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -809,9 +875,9 @@ export default function PhonesPage() {
                                   disabled={updateVoipAccessMutation.isPending || !billingSummary?.voipEnabled}
                                 />
                                 {!billingSummary?.voipEnabled && (
-                                  <span className="flex items-center gap-1 text-xs text-amber-300/70" title="Enable VoIP in Settings to manage user access">
+                                  <span className="flex items-center gap-1 text-xs text-amber-300/70" title={connectShell ? "Enable calling in Settings to manage user access" : "Enable VoIP in Settings to manage user access"}>
                                     <Info className="h-3 w-3" />
-                                    VoIP disabled
+                                    {connectShell ? "Calling disabled" : "VoIP disabled"}
                                   </span>
                                 )}
                               </div>
@@ -830,9 +896,9 @@ export default function PhonesPage() {
           <TabsContent value="billing" className="mt-6">
             <Card className={cardBaseClasses}>
               <CardHeader>
-                <CardTitle className="text-white">VoIP Billing Summary</CardTitle>
+                <CardTitle className="text-white">{connectShell ? "Chiamo Connect billing" : "VoIP Billing Summary"}</CardTitle>
                 <CardDescription className="text-blue-100/60">
-                  Monthly costs for your VoIP phone system
+                  {connectShell ? "Monthly calling costs for your company workspace" : "Monthly costs for your VoIP phone system"}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -845,21 +911,27 @@ export default function PhonesPage() {
                     <DollarSign className="h-10 w-10 mx-auto mb-3 opacity-70" />
                     <p className="font-medium">Managed through Chiamo Connect</p>
                     <p className="mt-1 text-sm text-blue-100/70">
-                      Your Chiamo Connect subscription owns phone billing. Chain does not add a separate VoIP charge.
+                      Your Chiamo Connect subscription owns phone billing. Chain does not add a separate calling charge.
                     </p>
                   </div>
-                ) : !billingSummary?.voipEnabled ? (
+                ) : billingSummary?.billingOwner !== "CHAIN" ? (
+                  <div className="rounded-lg border border-amber-200/30 bg-amber-200/10 p-6 text-center text-amber-50">
+                    <AlertCircle className="mx-auto mb-3 h-10 w-10 opacity-70" />
+                    <p className="font-medium">Billing status unavailable</p>
+                    <p className="mt-1 text-sm text-blue-100/70">{presentation.detail}</p>
+                  </div>
+                ) : !billingSummary.voipEnabled ? (
                   <div className="text-center py-8 text-blue-100/60">
                     <DollarSign className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>VoIP is not enabled</p>
-                    <p className="text-sm">Enable VoIP in Settings to see billing information</p>
+                    <p>{connectShell ? "Calling is not enabled" : "VoIP is not enabled"}</p>
+                    <p className="text-sm">{connectShell ? "Enable calling in Settings to see billing information" : "Enable VoIP in Settings to see billing information"}</p>
                   </div>
                 ) : (
                   <div className="space-y-6">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                       <div className="text-center p-4 bg-white/5 rounded-lg border border-white/10">
                         <div className="text-2xl font-bold text-white">{billingSummary.voipUserCount}</div>
-                        <div className="text-sm text-blue-100/60">VoIP Users</div>
+                        <div className="text-sm text-blue-100/60">{connectShell ? "Calling users" : "VoIP Users"}</div>
                         <div className="text-xs text-blue-100/40 mt-1">
                           ${(billingSummary.costs.usersCostCents / 100).toFixed(2)}/mo
                         </div>

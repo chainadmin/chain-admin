@@ -11,6 +11,7 @@ import { Link } from "wouter";
 import { Loader2, Phone, PhoneCall, PhoneOff, PhoneOutgoing, PhoneIncoming, Mic, MicOff, Volume2, VolumeX, History, LogOut, EyeOff, Building2, Download, Pause, ParkingCircle, UserRound } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Device, Call } from "@twilio/voice-sdk";
+import { isChiamoConnectPhoneShell } from "@/lib/app-detection";
 
 interface VoipCallLog {
   id: string;
@@ -69,6 +70,7 @@ const dialpadButtons = [
 ];
 
 export default function SoftphonePage() {
+  const connectShell = isChiamoConnectPhoneShell();
   const { toast } = useToast();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState<AgentUser | null>(null);
@@ -145,7 +147,7 @@ export default function SoftphonePage() {
       }
 
       if (!data.credential?.voipAccess) {
-        setLoginError("You don't have VoIP access. Please contact your administrator.");
+        setLoginError(connectShell ? "You don't have calling access. Please contact your administrator." : "You don't have VoIP access. Please contact your administrator.");
         setIsLoggingIn(false);
         return;
       }
@@ -597,14 +599,14 @@ export default function SoftphonePage() {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
+      <div className={`min-h-screen flex items-center justify-center p-4 ${connectShell ? "bg-[#062d31] bg-[radial-gradient(circle_at_top_right,_rgba(103,232,249,.2),_transparent_35%),linear-gradient(135deg,#062d31,#084b57)]" : "bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800"}`}>
+        <Card className={`w-full max-w-md ${connectShell ? "border-emerald-100/20 bg-[#f7fbfa] shadow-2xl shadow-black/30" : ""}`}>
           <CardHeader className="text-center">
-            <div className="mx-auto w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mb-4">
+            <div className={`mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full ${connectShell ? "bg-emerald-600 ring-8 ring-emerald-600/15" : "bg-blue-600"}`}>
               <Phone className="h-8 w-8 text-white" />
             </div>
-            <CardTitle className="text-2xl">Agent Softphone</CardTitle>
-            <CardDescription>Sign in to access your phone system</CardDescription>
+            <CardTitle className="text-2xl">{connectShell ? "Chiamo Connect" : "Agent Softphone"}</CardTitle>
+            <CardDescription>{connectShell ? "Sign in to your shared business calling workspace" : "Sign in to access your phone system"}</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleLogin} className="space-y-4" autoComplete="off">
@@ -638,7 +640,7 @@ export default function SoftphonePage() {
                   required
                 />
               </div>
-              <Button type="submit" className="w-full" disabled={isLoggingIn}>
+              <Button type="submit" className={`w-full ${connectShell ? "bg-emerald-600 hover:bg-emerald-700" : ""}`} disabled={isLoggingIn}>
                 {isLoggingIn ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -649,8 +651,8 @@ export default function SoftphonePage() {
                 )}
               </Button>
             </form>
-            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 text-center">
-              <Link href="/install" className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:underline dark:text-blue-400">
+            <div className="mt-4 border-t border-gray-200 pt-4 text-center">
+              <Link href="/install" className={`inline-flex items-center gap-1.5 text-sm hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 ${connectShell ? "text-emerald-700" : "text-blue-600 dark:text-blue-400"}`}>
                 <Download className="h-3.5 w-3.5" />
                 Install app on your phone
               </Link>
@@ -662,7 +664,7 @@ export default function SoftphonePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 p-4">
+    <div className={`min-h-screen p-4 ${connectShell ? "bg-[#e9f5f1] bg-[radial-gradient(circle_at_top_right,_rgba(16,185,129,.16),_transparent_32%)]" : "bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800"}`}>
       {/* Inbound call overlay */}
       {inboundCall && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
@@ -699,23 +701,24 @@ export default function SoftphonePage() {
       )}
 
       <div className="max-w-4xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
+        <div className={`mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl ${connectShell ? "border border-emerald-950/10 bg-[#f7fbfa] p-4 shadow-sm" : ""}`}>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
+            <div className={`flex h-10 w-10 items-center justify-center rounded-full ${connectShell ? "bg-emerald-600" : "bg-blue-600"}`}>
               <Phone className="h-5 w-5 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-gray-900 dark:text-white">Softphone</h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Welcome, {user?.name}</p>
+              <h1 className="text-xl font-bold text-gray-900">{connectShell ? "Chiamo Connect" : "Softphone"}</h1>
+              <p className="text-sm text-gray-500">{connectShell ? `Business calling · ${user?.name}` : `Welcome, ${user?.name}`}</p>
             </div>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2">
               <span className="text-sm text-gray-500">Status:</span>
               <select
                 value={agentStatus}
                 onChange={(e) => setAgentStatus(e.target.value as any)}
-                className="text-sm border rounded-md px-2 py-1 bg-white dark:bg-gray-800"
+                aria-label="Agent availability"
+                className={`rounded-md border px-2 py-1 text-sm ${connectShell ? "border-emerald-900/20 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600" : "bg-white dark:bg-gray-800"}`}
               >
                 <option value="available">Available</option>
                 <option value="busy">Busy</option>
@@ -731,7 +734,7 @@ export default function SoftphonePage() {
                 }`}
               />
             </div>
-            <Button variant="outline" size="sm" onClick={handleLogout}>
+            <Button variant="outline" size="sm" onClick={handleLogout} className={connectShell ? "border-emerald-900/20 hover:bg-emerald-50" : ""}>
               <LogOut className="h-4 w-4 mr-2" /> Sign Out
             </Button>
           </div>

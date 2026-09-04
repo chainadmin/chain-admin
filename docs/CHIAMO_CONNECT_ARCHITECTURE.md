@@ -11,14 +11,14 @@ Requests served on a Chiamo hostname are restricted at the API boundary to authe
 | Capability | Existing source | Reuse decision |
 | --- | --- | --- |
 | Browser softphone | `client/src/pages/softphone.tsx` | Reused directly at `/softphone`; the Twilio Device/calling engine is unchanged. |
-| Chain phone administration, call logs, number and user controls | `client/src/pages/phones.tsx` | Chain route remains unchanged. Chiamo presents shared API data through its own shell. |
-| Call initiation from accounts | `client/src/pages/accounts.tsx` | Remains a Chain feature and continues using `/api/voip/call`. |
+| Chain phone administration, call logs, number and user controls | `client/src/pages/phones.tsx` | The shared `/phones` route presents Chiamo Connect inside Chain while retaining the existing canonical Voice APIs and controls. `VITE_CHIAMO_CONNECT_PHONE_SHELL=false` restores the legacy Chain presentation. |
+| Call initiation from accounts | `client/src/pages/accounts.tsx` | Continues using the shared `/api/voip/call` action and directs users to Chiamo Connect for call management. |
 | Voice API/routes | Voice section of `server/routes.ts` | Shared routes retained; a centralized entitlement middleware was added. |
 | Phone numbers and call-log persistence | `server/voipStorage.ts`, `shared/schema.ts` | Reused without duplicate tables or repositories. Tenant scoping remains in storage queries. |
 | Provider integration | `server/twilioVoiceService.ts` | Reused unchanged for tokens, calls, TwiML, number provisioning, recordings, and hangup. |
 | Authentication | `client/src/hooks/useAuth.ts`, agency JWT login and `server/authMiddleware.ts` | Shared. Chiamo supplies its own login presentation and requests a Chiamo product login. |
 | Tenant/company architecture | `tenants`, `agency_credentials` in `shared/schema.ts` | Extended with product entitlements; existing `voip_enabled` and per-user `voip_access` remain authoritative. |
-| Chain navigation and routes | `client/src/App.tsx` and existing page layouts | Preserved. Hostname detection selects a separate Chiamo router before Chain tenant routing. |
+| Chain navigation and routes | `client/src/App.tsx`, `client/src/lib/app-detection.ts`, and existing page layouts | Chain navigation labels `/phones` as Chiamo Connect by default. The Chiamo hostname always remains Chiamo; only the Chain presentation can be rolled back with `VITE_CHIAMO_CONNECT_PHONE_SHELL=false`. |
 | Host/subdomain handling | `client/src/lib/app-detection.ts`, `server/middleware/subdomain.ts`, `client/src/App.tsx` | Existing Chain behavior is preserved; centralized Chiamo brand detection handles its apex/app domains and local override. |
 | Frontend deployment | Vite SPA served by the Express application (`server/vite.ts`, `server/index.ts`) | One build supports both brands by hostname; no second backend deployment is required. |
 
