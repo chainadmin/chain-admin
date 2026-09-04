@@ -28,6 +28,7 @@ export interface EmailOptions {
   tenantId?: string; // For usage tracking
   consumerId?: string; // For conversation tracking - link email to consumer
   useBroadcastStream?: boolean; // Use broadcast stream for marketing/bulk emails (automations, campaigns)
+  useTenantDeliveryConfig?: boolean; // Set false for platform-issued mail whose brand/sender must not be tenant-overridden
   attachments?: Array<{ name: string; content: Buffer; contentType: string }>;
 }
 
@@ -59,8 +60,11 @@ export class EmailService {
     try {
       let fromEmail = options.from || DEFAULT_FROM_EMAIL;
       
-      // If tenantId is provided, check for custom sender email
-      const tenant = await this.getTenantDeliveryConfig(options.tenantId);
+      // Platform-issued messages (such as invoices) can retain tenantId for
+      // audit logging while explicitly bypassing tenant sender/server overrides.
+      const tenant = options.useTenantDeliveryConfig === false
+        ? null
+        : await this.getTenantDeliveryConfig(options.tenantId);
         
       if (tenant) {
         // Priority: customSenderEmail > slug-based email > provided from > default

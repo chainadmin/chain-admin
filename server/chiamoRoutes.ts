@@ -7,11 +7,13 @@ import { db } from "./db";
 import { emailService } from "./emailService";
 import { sendChiamoLeadEmails } from "./chiamoLeadEmails";
 import { storage } from "./storage";
-import { authenticateUser } from "./authMiddleware";
-import { agencyCredentials, tenantSettings, tenants, voipCallLogs, voipPhoneNumbers, voipRoutingBuckets, voipTenantSettings, voipVoicemails } from "@shared/schema";
+import { authenticateUser, requireOwner } from "./authMiddleware";
+import { agencyCredentials, invoices, tenantSettings, tenants, voipCallLogs, voipPhoneNumbers, voipRoutingBuckets, voipTenantSettings, voipVoicemails } from "@shared/schema";
 import { chiamoLeads, chiamoServiceConfigurations, chiamoSubscriptions, chiamoUsageSettings } from "@shared/chiamo-schema";
 import { calculateChiamoMonthlyService, CHIAMO_SUPPORT_EMAIL, chiamoBillingStatuses, chiamoLeadStatuses, chiamoPlans, chiamoSmsStatuses, chiamoTestStatuses } from "@shared/chiamo";
 import { findCanonicalTenant, getPhoneBillingReconciliationInventory, lockCompanyIdentity, normalizeCompanyEmail, upsertChiamoPhoneEntitlement } from "./phoneProductEntitlement";
+import { generateInvoicePdf } from "./invoicePdf";
+import { INVOICE_BRANDS } from "./invoiceBranding";
 
 const leadInput = z.object({
   firstName: z.string().trim().min(1).max(100), lastName: z.string().trim().min(1).max(100), businessName: z.string().trim().min(1).max(200),
@@ -63,6 +65,22 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
     const [{ count: numberCount }] = await db.select({ count: sql<number>`count(*)::int` }).from(voipPhoneNumbers).where(and(eq(voipPhoneNumbers.tenantId, tenant.id), eq(voipPhoneNumbers.isActive, true)));
     const calculation = subscription ? calculateChiamoMonthlyService(subscription.planId, userCount, subscription.smsAddonEnabled, subscription) : null;
     res.json({ tenant: { name: tenant.name, chiamoSmsEnabled: service?.smsEnabled === true }, service, subscription, userCount, numberCount, calculation, supportEmail: CHIAMO_SUPPORT_EMAIL });
+  });
+  app.get("/api/chiamo/invoices", authenticateUser, requireOwner, async (req: any, res) => {
+    const [tenant] = await db.select().from(tenants).where(eq(tenants.id, req.user.tenantId)).limit(1);
+    if (!tenant?.chiamoConnectEnabled || tenant.chainCoreEnabled) return res.status(403).json({ message: "Chiamo-only invoice access is not enabled." });
+    res.json(await db.select().from(invoices).where(and(eq(invoices.tenantId, tenant.id), eq(invoices.issuer, "CHIAMO"))).orderBy(desc(invoices.periodEnd)));
+  });
+  app.get("/api/chiamo/invoices/:invoiceId/pdf", authenticateUser, requireOwner, async (req: any, res) => {
+    const [row] = await db.select({ invoice: invoices, tenantName: tenants.name, chainCoreEnabled: tenants.chainCoreEnabled, chiamoConnectEnabled: tenants.chiamoConnectEnabled })
+      .from(invoices).innerJoin(tenants, eq(invoices.tenantId, tenants.id))
+      .where(and(eq(invoices.id, req.params.invoiceId), eq(invoices.tenantId, req.user.tenantId), eq(invoices.issuer, "CHIAMO"))).limit(1);
+    if (!row || !row.chiamoConnectEnabled || row.chainCoreEnabled) return res.status(404).json({ message: "Invoice not found" });
+    const pdf = generateInvoicePdf({ ...row.invoice, issuer: "CHIAMO", tenantName: row.tenantName, status: row.invoice.status || "pending" });
+    const safeNumber = row.invoice.invoiceNumber.replace(/[^a-zA-Z0-9_-]/g, "_");
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${INVOICE_BRANDS.CHIAMO.filePrefix}-${safeNumber}.pdf"`);
+    res.send(pdf);
   });
 
   app.get("/api/chiamo/messages", authenticateUser, async (req: any, res) => {
@@ -169,7 +187,7 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
     res.status(201).json({ tenantId:result.tenant.id, invitationSent:notification.success });
   });
   app.put("/api/admin/chiamo/tenants/:tenantId/billing", isPlatformAdmin, async (req, res) => {
-    const value = z.object({ planId: z.enum(["starter", "business", "professional", "enterprise"]), customBasePriceCents: z.number().int().min(0).nullable().optional(), includedUsers: z.number().int().positive().nullable().optional(), additionalUserPriceCents: z.number().int().min(0).nullable().optional(), additionalNumberPriceCents: z.number().int().min(0).optional(), smsAddonEnabled: z.boolean(), smsAllowance: z.number().int().min(0).optional(), smsOverageMicros: z.number().int().min(0).optional(), customCharges: z.array(z.object({ name: z.string(), cents: z.number().int() })).optional(), discounts: z.array(z.object({ name: z.string(), cents: z.number().int() })).optional(), billingStatus: z.enum(chiamoBillingStatuses), startDate: z.string().nullable().optional(), nextBillingDate: z.string().nullable().optional(), notes: z.string().nullable().optional() }).parse(req.body);
+    const value = z.object({ planId: z.enum(["starter", "business", "professional", "enterprise"]), customBasePriceCents: z.number().int().min(0).nullable().optional(), includedUsers: z.number().int().positive().nullable().optional(), additionalUserPriceCents: z.number().int().min(0).nullable().optional(), additionalNumberPriceCents: z.number().int().min(0).optional(), smsAddonEnabled: z.boolean(), smsAllowance: z.number().int().min(0).optional(), smsOverageMicros: z.number().int().min(0).optional(), customCharges: z.array(z.object({ name: z.string(), cents: z.number().int().min(0) })).optional(), discounts: z.array(z.object({ name: z.string(), cents: z.number().int().min(0) })).optional(), billingStatus: z.enum(chiamoBillingStatuses), startDate: z.string().nullable().optional(), nextBillingDate: z.string().nullable().optional(), notes: z.string().nullable().optional() }).parse(req.body);
     const [subscription] = await db.transaction(async tx => {
       const [saved] = await tx.insert(chiamoSubscriptions).values({ tenantId: req.params.tenantId, ...value }).onConflictDoUpdate({ target: chiamoSubscriptions.tenantId, set: { ...value, updatedAt: new Date() } }).returning();
       const [current] = await tx.select({ voiceEnabled: chiamoServiceConfigurations.voiceEnabled }).from(chiamoServiceConfigurations).where(eq(chiamoServiceConfigurations.tenantId, req.params.tenantId)).limit(1);

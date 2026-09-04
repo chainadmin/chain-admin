@@ -4,7 +4,7 @@ import { voipStorage } from "./voipStorage";
 import { autoResponseUsage, consumers, subscriptionPlans } from "@shared/schema";
 import { and, eq, sql, gte, lte } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { isChainPhoneBillingEligible } from "./phoneProductEntitlement";
+import { getEffectivePhoneProductEntitlement, isChainPhoneBillingEligible } from "./phoneProductEntitlement";
 import {
   A_LA_CARTE_SERVICE_PRICE,
   A_LA_CARTE_CORE_SERVICES,
@@ -51,6 +51,21 @@ export interface ComputedBill {
 }
 
 const round2 = (n: number) => Number(n.toFixed(2));
+export const CHIAMO_SEPARATE_BILLING_NOTE = "Chiamo Connect phone service billed separately; not in Chain invoice.";
+
+export function addPhoneOwnershipNotation(
+  lineItems: InvoiceLineItem[],
+  owner: "CHAIN" | "CHIAMO" | null | undefined,
+): InvoiceLineItem[] {
+  return owner === "CHIAMO" && !lineItems.some(item => item.description === CHIAMO_SEPARATE_BILLING_NOTE)
+    ? [...lineItems.filter(item => !/voip|phone system/i.test(item.description)), { description: CHIAMO_SEPARATE_BILLING_NOTE, amountCents: 0 }]
+    : lineItems;
+}
+
+async function applyPhoneOwnershipNotation(tenantId: string, lineItems: InvoiceLineItem[]) {
+  const entitlement = await getEffectivePhoneProductEntitlement(tenantId);
+  return addPhoneOwnershipNotation(lineItems, entitlement?.billingOwner);
+}
 
 /** Count AI auto-response (non-test) usage for a tenant within a period. */
 async function countAiResponses(tenantId: string, periodStart: Date, periodEnd: Date): Promise<number> {
@@ -227,7 +242,7 @@ export async function computeALaCarteBill(
       mobileAppBrandingFee: mobileAppFee,
     },
     voipDetails,
-    lineItems,
+    lineItems: await applyPhoneOwnershipNotation(tenantId, lineItems),
   };
 }
 
@@ -343,7 +358,7 @@ export async function computeSubscriptionBill(
       mobileAppBrandingFee: mobileAppFee,
     },
     voipDetails: null,
-    lineItems,
+    lineItems: await applyPhoneOwnershipNotation(tenantId, lineItems),
   };
 }
 

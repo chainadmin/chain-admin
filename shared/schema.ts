@@ -1191,8 +1191,18 @@ export const invoices = pgTable("invoices", {
   paidAt: timestamp("paid_at"),
   stripePaymentIntentId: text("stripe_payment_intent_id"),
   lineItems: jsonb("line_items").$type<Array<{ description: string; amountCents: number; quantity?: number; unitLabel?: string }>>(),
+  issuer: text("issuer", { enum: ["CHAIN", "CHIAMO"] }).notNull().default("CHAIN"),
+  recipientEmail: text("recipient_email"),
+  deliveryStatus: text("delivery_status", { enum: ["pending", "sending", "sent", "failed"] }).notNull().default("pending"),
+  deliveryAttemptedAt: timestamp("delivery_attempted_at"),
+  emailedAt: timestamp("emailed_at"),
+  deliveryLastError: text("delivery_last_error"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => ({
+  tenantIssuerPeriodIdx: uniqueIndex("invoices_tenant_issuer_period_idx")
+    .on(table.tenantId, table.issuer, table.periodStart, table.periodEnd)
+    .where(sql`issuer = 'CHIAMO'`),
+}));
 
 // Service activation requests (for à la carte service approvals)
 export const serviceActivationRequests = pgTable("service_activation_requests", {

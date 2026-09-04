@@ -33,15 +33,16 @@ export function calculateChiamoMonthlyService(planId: string, users: number, tex
   const plan = chiamoPlans.find(item => item.id === planId) || (planId === "enterprise" ? { id:"enterprise", name:"Enterprise", monthlyPriceCents:0, includedUsers:1, additionalUserPriceCents:2500, includedNumbers:0, features:["Negotiated service configuration"] } : undefined);
   if (!plan) return null;
   const options = typeof overrides === "number" ? { customBasePriceCents: overrides } : (overrides || {});
-  const basePriceCents = options.customBasePriceCents ?? plan.monthlyPriceCents;
-  const includedUsers = options.includedUsers ?? plan.includedUsers;
-  const additionalUsers = Math.max(0, users - includedUsers);
-  const additionalUserChargeCents = additionalUsers * (options.additionalUserPriceCents ?? plan.additionalUserPriceCents);
+  const nonNegative = (value: number) => Math.max(0, value);
+  const basePriceCents = nonNegative(options.customBasePriceCents ?? plan.monthlyPriceCents);
+  const includedUsers = nonNegative(options.includedUsers ?? plan.includedUsers);
+  const additionalUsers = Math.max(0, nonNegative(users) - includedUsers);
+  const additionalUserChargeCents = additionalUsers * nonNegative(options.additionalUserPriceCents ?? plan.additionalUserPriceCents);
   const textingChargeCents = texting ? chiamoTextingAddon.monthlyPriceCents : 0;
-  const customChargesCents = (options.customCharges || []).reduce((sum, charge) => sum + charge.cents, 0);
-  const creditsCents = (options.discounts || []).reduce((sum, credit) => sum + credit.cents, 0);
-  const smsOverageCents = options.smsOverageCents || 0;
-  const additionalNumberChargeCents = options.additionalNumberChargeCents || 0;
+  const customChargesCents = (options.customCharges || []).reduce((sum, charge) => sum + nonNegative(charge.cents), 0);
+  const creditsCents = (options.discounts || []).reduce((sum, credit) => sum + nonNegative(credit.cents), 0);
+  const smsOverageCents = nonNegative(options.smsOverageCents || 0);
+  const additionalNumberChargeCents = nonNegative(options.additionalNumberChargeCents || 0);
   const totalCents = Math.max(0, basePriceCents + additionalUserChargeCents + textingChargeCents + smsOverageCents + additionalNumberChargeCents + customChargesCents - creditsCents);
   return { plan, basePriceCents, includedUsers, additionalUsers, additionalUserChargeCents, textingChargeCents, smsOverageCents, additionalNumberChargeCents, customChargesCents, creditsCents, totalCents };
 }

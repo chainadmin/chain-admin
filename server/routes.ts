@@ -1,5 +1,6 @@
 import type { Express, Response } from "express";
 import { createServer, type Server } from "http";
+import { timingSafeEqual } from "node:crypto";
 import { SignedDocumentRetentionError, storage, type IStorage } from "./storage";
 import { ACCOUNT_STATUSES, isAccountStatus } from "../shared/constants";
 import { ANDROID_APP_URL, IOS_APP_URL } from "../shared/constants/appStoreLinks";
@@ -115,6 +116,7 @@ import {
 } from "@shared/billing-plans";
 import { computeALaCarteBill, computeSubscriptionBill, generateInvoiceNumber } from "./billing";
 import { generateInvoicePdf } from "./invoicePdf";
+import { INVOICE_BRANDS, resolveInvoiceRecipient, sanitizeDeliveryError } from "./invoiceBranding";
 import { canActivateUser } from "@shared/enterpriseCapacity";
 import { findMatchingDmpPayment, isPostedDmpPayment, normalizeDmpPayment } from "./dmpPaymentReconciliation";
 
@@ -1603,9 +1605,21 @@ function escapeHtml(unsafe: any): string {
     .replace(/'/g, '&#39;');
 }
 
+function requireInternalCron(req: any, res: any, next: any) {
+  const expected = String(req.app.locals.internalCronToken || "");
+  const supplied = String(req.get("x-internal-cron-token") || "");
+  const expectedBytes = Buffer.from(expected);
+  const suppliedBytes = Buffer.from(supplied);
+  if (!expected || expectedBytes.length !== suppliedBytes.length || !timingSafeEqual(expectedBytes, suppliedBytes)) {
+    return res.status(403).json({ message: "Internal scheduler authorization required." });
+  }
+  next();
+}
+
 // Shared invoice email sender (subscription + à la carte). Failures are logged but
 // never block invoice persistence or period rollover.
 async function sendChainInvoiceEmail(params: {
+  invoiceId?: string;
   tenantId: string;
   tenantName?: string | null;
   tenantEmail?: string | null;
@@ -1618,7 +1632,22 @@ async function sendChainInvoiceEmail(params: {
   lineItems: Array<{ description: string; amountCents: number; quantity?: number; unitLabel?: string }>;
 }): Promise<void> {
   try {
-    if (!params.tenantEmail) {
+    // Claim before constructing/sending. A concurrent job can never send the
+    // same persisted invoice once this worker has moved it to `sending`.
+    let recipient = resolveInvoiceRecipient('CHAIN', params.tenantEmail);
+    if (params.invoiceId) {
+      const now = new Date();
+      const [claim] = await db.update(invoices).set({ deliveryStatus: 'sending', deliveryAttemptedAt: now, deliveryLastError: null })
+        .where(and(eq(invoices.id, params.invoiceId), eq(invoices.issuer, 'CHAIN'), or(
+          eq(invoices.deliveryStatus, 'pending'),
+          eq(invoices.deliveryStatus, 'failed'),
+          and(eq(invoices.deliveryStatus, 'sending'), lte(invoices.deliveryAttemptedAt, new Date(now.getTime() - 60 * 60 * 1000))),
+        ))).returning({ recipientEmail: invoices.recipientEmail });
+      if (!claim) return;
+      recipient = claim.recipientEmail;
+    }
+    if (!recipient) {
+      if (params.invoiceId) await db.update(invoices).set({ deliveryStatus: 'failed', deliveryLastError: 'No valid billing email is on file.' }).where(eq(invoices.id, params.invoiceId));
       console.log(`⚠️  No email on file for tenant ${params.tenantId} - invoice ${params.invoiceNumber} created but email not sent`);
       return;
     }
@@ -1663,6 +1692,7 @@ async function sendChainInvoiceEmail(params: {
       </div>
     `;
     const invoicePdf = generateInvoicePdf({
+      issuer: 'CHAIN',
       invoiceNumber: params.invoiceNumber,
       tenantName: params.tenantName || 'Customer',
       status: 'pending',
@@ -1672,19 +1702,25 @@ async function sendChainInvoiceEmail(params: {
       totalAmountCents: Math.round(params.totalBill * 100),
       lineItems: params.lineItems,
     });
-    await emailService.sendEmail({
-      to: params.tenantEmail,
+    const result = await emailService.sendEmail({
+      to: recipient,
+      from: INVOICE_BRANDS.CHAIN.sender,
+      replyTo: INVOICE_BRANDS.CHAIN.replyTo,
       subject: `Chain Invoice ${params.invoiceNumber} - $${params.totalBill.toFixed(2)} Due ${params.dueDate.toLocaleDateString()}`,
       html: emailHtml,
       tenantId: params.tenantId,
+      useTenantDeliveryConfig: false,
       attachments: [{
         name: `Chain-Invoice-${params.invoiceNumber}.pdf`,
         content: invoicePdf,
         contentType: 'application/pdf',
       }],
     });
-    console.log(`📧 Invoice email sent to ${params.tenantEmail} (${params.invoiceNumber})`);
+    if (!result.success) throw new Error(result.error || 'Postmark delivery failed');
+    if (params.invoiceId) await db.update(invoices).set({ deliveryStatus: 'sent', emailedAt: new Date(), deliveryLastError: null }).where(and(eq(invoices.id, params.invoiceId), eq(invoices.deliveryStatus, 'sending')));
+    console.log(`📧 Invoice email sent to ${recipient} (${params.invoiceNumber})`);
   } catch (emailErr) {
+    if (params.invoiceId) await db.update(invoices).set({ deliveryStatus: 'failed', deliveryLastError: sanitizeDeliveryError(emailErr) }).where(eq(invoices.id, params.invoiceId));
     console.error(`❌ Failed to send invoice email for tenant ${params.tenantId}:`, emailErr);
   }
 }
@@ -19831,8 +19867,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const invoices = await storage.getInvoicesByTenant(tenantId);
-      res.json(invoices);
+      const tenantInvoices = await db.select().from(invoices).where(and(eq(invoices.tenantId, tenantId), eq(invoices.issuer, 'CHAIN'))).orderBy(desc(invoices.createdAt));
+      res.json(tenantInvoices);
     } catch (error) {
       console.error("Error fetching invoices:", error);
       res.status(500).json({ message: "Failed to fetch invoices" });
@@ -19848,12 +19884,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .select({ invoice: invoices, tenantName: tenants.name })
         .from(invoices)
         .innerJoin(tenants, eq(invoices.tenantId, tenants.id))
-        .where(and(eq(invoices.id, req.params.invoiceId), eq(invoices.tenantId, tenantId)))
+        .where(and(eq(invoices.id, req.params.invoiceId), eq(invoices.tenantId, tenantId), eq(invoices.issuer, 'CHAIN')))
         .limit(1);
       if (!result) return res.status(404).json({ message: "Invoice not found" });
 
       const pdf = generateInvoicePdf({
         ...result.invoice,
+        issuer: result.invoice.issuer,
         tenantName: result.tenantName,
         status: result.invoice.status || 'pending',
         lineItems: result.invoice.lineItems,
@@ -20033,7 +20070,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Process subscription renewals (called by cron job)
-  app.post('/api/billing/process-renewals', async (req, res) => {
+  app.post('/api/billing/process-renewals', requireInternalCron, async (req, res) => {
     try {
       console.log('🔄 Processing subscription renewals...');
       const { addMonths } = await import('date-fns');
@@ -20058,6 +20095,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
           const tenant = await storage.getTenant(subscription.tenantId);
           if (!tenant) continue;
+          if (tenant.chiamoConnectEnabled && !tenant.chainCoreEnabled) continue;
 
           // Wallet (pay-as-you-go) tenants are not billed via subscription invoices
           if (tenant.billingMode === 'wallet') continue;
@@ -20096,12 +20134,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
               }
 
               const existing = await tx.select().from(invoices).where(and(
+                eq(invoices.issuer, 'CHAIN'),
                 eq(invoices.subscriptionId, subscription.id),
                 eq(invoices.periodStart, locked.currentPeriodStart),
                 eq(invoices.periodEnd, locked.currentPeriodEnd),
               )).limit(1);
 
-              let invoiceInfo: { invoiceNumber: string; dueDate: Date; bill: Awaited<ReturnType<typeof computeSubscriptionBill>> } | null = null;
+              let invoiceInfo: { invoiceId: string; invoiceNumber: string; dueDate: Date; bill: Awaited<ReturnType<typeof computeSubscriptionBill>> } | null = null;
 
               if (existing.length === 0) {
                 const bill = await computeSubscriptionBill(subscription.tenantId, plan ?? null, loopPeriodStart, loopPeriodEnd, counters);
@@ -20109,7 +20148,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 const dueDate = new Date(now);
                 dueDate.setDate(dueDate.getDate() + 15);
 
-                await tx.insert(invoices).values({
+                const [savedInvoice] = await tx.insert(invoices).values({
                   tenantId: subscription.tenantId,
                   subscriptionId: subscription.id,
                   invoiceNumber,
@@ -20123,8 +20162,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   dueDate,
                   paidAt: null,
                   lineItems: bill.lineItems,
-                });
-                invoiceInfo = { invoiceNumber, dueDate, bill };
+                  issuer: 'CHAIN',
+                  recipientEmail: resolveInvoiceRecipient('CHAIN', tenant.email, subscription.billingEmail),
+                  deliveryStatus: 'pending',
+                }).returning({ id: invoices.id });
+                invoiceInfo = { invoiceNumber, dueDate, bill, invoiceId: savedInvoice.id };
               } else {
                 console.log(`⏭️  Invoice already exists for tenant ${subscription.tenantId} (${existing[0].invoiceNumber}) - skipping creation`);
               }
@@ -20156,9 +20198,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
               console.log(`✅ Invoice created for tenant ${subscription.tenantId}: $${result.invoiceInfo.bill.totalBill} (${result.invoiceInfo.invoiceNumber})`);
               // Send email AFTER commit (never inside the transaction)
               await sendChainInvoiceEmail({
+                invoiceId: result.invoiceInfo.invoiceId,
                 tenantId: subscription.tenantId,
                 tenantName: tenant.name,
-                tenantEmail: tenant.email,
+                tenantEmail: subscription.billingEmail || tenant.email,
                 invoiceNumber: result.invoiceInfo.invoiceNumber,
                 planName: plan?.name ?? 'Subscription',
                 periodStart: loopPeriodStart,
@@ -20199,7 +20242,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Generate invoices for tenants whose billing period has ended - runs daily, idempotent
-  app.post('/api/billing/generate-monthly-invoices', async (req, res) => {
+  app.post('/api/billing/generate-monthly-invoices', requireInternalCron, async (req, res) => {
     try {
       console.log('📊 Checking for tenants with ended billing periods to invoice...');
       let invoicesSent = 0;
@@ -20224,6 +20267,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // block below must NOT double-bill these.
       const tenantIdsWithRealSub = new Set<string>();
 
+      // Delivery is independent of invoice creation. Retry only persisted
+      // new-code invoices using their immutable recipient snapshot; sent rows
+      // never enter this path.
+      const undeliveredChainInvoices = await db.select({ invoice: invoices, tenantName: tenants.name })
+        .from(invoices).innerJoin(tenants, eq(invoices.tenantId, tenants.id))
+        .where(and(eq(invoices.issuer, 'CHAIN'), or(
+          eq(invoices.deliveryStatus, 'pending'),
+          eq(invoices.deliveryStatus, 'failed'),
+          eq(invoices.deliveryStatus, 'sending'),
+        )));
+      for (const pendingInvoice of undeliveredChainInvoices) {
+        await sendChainInvoiceEmail({
+          invoiceId: pendingInvoice.invoice.id,
+          tenantId: pendingInvoice.invoice.tenantId,
+          tenantName: pendingInvoice.tenantName,
+          tenantEmail: pendingInvoice.invoice.recipientEmail,
+          invoiceNumber: pendingInvoice.invoice.invoiceNumber,
+          planName: 'Chain services',
+          periodStart: pendingInvoice.invoice.periodStart,
+          periodEnd: pendingInvoice.invoice.periodEnd,
+          dueDate: pendingInvoice.invoice.dueDate,
+          totalBill: Number(pendingInvoice.invoice.totalAmountCents) / 100,
+          lineItems: pendingInvoice.invoice.lineItems || [],
+        });
+      }
+
       // ---- SUBSCRIPTION SAFETY NET ----
       // process-renewals is the primary path (with catch-up + period advance). This loop
       // is an idempotent backstop that bills the current ended period without advancing it.
@@ -20231,6 +20300,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
           const tenant = await storage.getTenant(subscription.tenantId);
           if (!tenant) { skipped++; continue; }
+          if (tenant.chiamoConnectEnabled && !tenant.chainCoreEnabled) { skipped++; continue; }
           // Wallet (pay-as-you-go) tenants are not billed via subscription invoices
           if (tenant.billingMode === 'wallet') { skipped++; continue; }
 
@@ -20252,6 +20322,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // If the period was already advanced (by process-renewals), nothing to bill here
             if (lockedEnd > now) return null;
             const existing = await tx.select().from(invoices).where(and(
+              eq(invoices.issuer, 'CHAIN'),
               eq(invoices.subscriptionId, subscription.id),
               eq(invoices.periodStart, locked.currentPeriodStart),
               eq(invoices.periodEnd, locked.currentPeriodEnd),
@@ -20262,7 +20333,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const invoiceNumber = generateInvoiceNumber(subscription.tenantId);
             const dueDate = new Date(now);
             dueDate.setDate(dueDate.getDate() + 15);
-            await tx.insert(invoices).values({
+            const [savedInvoice] = await tx.insert(invoices).values({
               tenantId: subscription.tenantId,
               subscriptionId: subscription.id,
               invoiceNumber,
@@ -20276,8 +20347,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               dueDate,
               paidAt: null,
               lineItems: bill.lineItems,
-            });
-            return { invoiceNumber, dueDate, bill, periodStart: lockedStart, periodEnd: lockedEnd };
+              issuer: 'CHAIN',
+              recipientEmail: resolveInvoiceRecipient('CHAIN', tenant.email, subscription.billingEmail),
+              deliveryStatus: 'pending',
+            }).returning({ id: invoices.id });
+            return { invoiceId: savedInvoice.id, invoiceNumber, dueDate, bill, periodStart: lockedStart, periodEnd: lockedEnd };
           });
 
           if (!created) { skipped++; continue; }
@@ -20285,9 +20359,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           invoicesSent++;
           console.log(`✅ Invoice generated for ${tenant.name}: $${created.bill.totalBill.toFixed(2)} (${created.invoiceNumber})`);
           await sendChainInvoiceEmail({
+            invoiceId: created.invoiceId,
             tenantId: subscription.tenantId,
             tenantName: tenant.name,
-            tenantEmail: tenant.email,
+            tenantEmail: subscription.billingEmail || tenant.email,
             invoiceNumber: created.invoiceNumber,
             planName: plan?.name ?? 'Subscription',
             periodStart: created.periodStart,
@@ -20315,6 +20390,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         try {
           // Real-subscription tenants are billed by the loop above
           if (tenantIdsWithRealSub.has(tenant.id)) continue;
+          if (tenant.chiamoConnectEnabled && !tenant.chainCoreEnabled) continue;
           // Wallet (pay-as-you-go) tenants are not invoiced
           if (tenant.billingMode === 'wallet') continue;
 
@@ -20329,6 +20405,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             if (!locked) return null;
 
             const existing = await tx.select().from(invoices).where(and(
+              eq(invoices.issuer, 'CHAIN'),
               eq(invoices.tenantId, tenant.id),
               eq(invoices.periodStart, alaCartePeriodStart),
               eq(invoices.periodEnd, alaCartePeriodEnd),
@@ -20339,7 +20416,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const invoiceNumber = generateInvoiceNumber(tenant.id);
             const dueDate = new Date(now);
             dueDate.setDate(dueDate.getDate() + 15);
-            await tx.insert(invoices).values({
+            const [savedInvoice] = await tx.insert(invoices).values({
               tenantId: tenant.id,
               subscriptionId: null,
               invoiceNumber,
@@ -20353,8 +20430,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
               dueDate,
               paidAt: null,
               lineItems: bill.lineItems,
-            });
-            return { invoiceNumber, dueDate };
+              issuer: 'CHAIN',
+              recipientEmail: resolveInvoiceRecipient('CHAIN', tenant.email),
+              deliveryStatus: 'pending',
+            }).returning({ id: invoices.id });
+            return { invoiceId: savedInvoice.id, invoiceNumber, dueDate };
           });
 
           if (!created) { skipped++; continue; }
@@ -20362,6 +20442,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           invoicesSent++;
           console.log(`✅ À la carte invoice generated for ${tenant.name}: $${bill.totalBill.toFixed(2)} (${created.invoiceNumber})`);
           await sendChainInvoiceEmail({
+            invoiceId: created.invoiceId,
             tenantId: tenant.id,
             tenantName: tenant.name,
             tenantEmail: tenant.email,
@@ -21541,6 +21622,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!tenant) {
         return res.status(404).json({ message: 'Tenant not found' });
       }
+      if (tenant.chiamoConnectEnabled && !tenant.chainCoreEnabled) {
+        return res.status(409).json({ message: 'Chiamo-only tenants are invoiced by the Chiamo invoice process, not Chain billing.' });
+      }
 
       // Find ALL subscriptions for this tenant, most recently ended first.
       // This covers: active subs whose period ended, downgraded subs (old plan),
@@ -21584,6 +21668,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .select()
           .from(invoices)
           .where(and(
+            eq(invoices.issuer, 'CHAIN'),
             eq(invoices.tenantId, tenantId),
             eq(invoices.periodStart, acPeriodStart),
             eq(invoices.periodEnd, acPeriodEnd),
@@ -21594,6 +21679,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (existing) {
           if (existing.status === 'paid') {
             return res.status(409).json({ message: 'À la carte invoice for this period has already been paid.' });
+          }
+          if (existing.deliveryStatus === 'sent' || existing.deliveryStatus === 'sending' || existing.emailedAt) {
+            return res.status(409).json({ message: 'À la carte invoice for this period has already been emailed and cannot be replaced.' });
           }
           // Replace pending invoice with a recalculated one
           await db.delete(invoices).where(eq(invoices.id, existing.id));
@@ -21618,9 +21706,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
           dueDate,
           paidAt: null,
           lineItems: bill.lineItems,
+          issuer: 'CHAIN',
+          recipientEmail: resolveInvoiceRecipient('CHAIN', tenant.email),
+          deliveryStatus: 'pending',
         }).returning();
 
         await sendChainInvoiceEmail({
+          invoiceId: acInvoice.id,
           tenantId,
           tenantName: tenant.name,
           tenantEmail: tenant.email,
@@ -21655,6 +21747,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           .select()
           .from(invoices)
           .where(and(
+            eq(invoices.issuer, 'CHAIN'),
             eq(invoices.subscriptionId, sub.id),
             eq(invoices.periodStart, sub.currentPeriodStart),
             eq(invoices.periodEnd, sub.currentPeriodEnd)
@@ -21672,6 +21765,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } else {
           // Pending invoice — can replace it with recalculated version
           if (!subscription) {
+            if (existing.deliveryStatus === 'sent' || existing.deliveryStatus === 'sending' || existing.emailedAt) {
+              continue;
+            }
             subscription = sub;
             existingPendingInvoiceId = existing.id;
           }
@@ -21719,6 +21815,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         dueDate,
         paidAt: null,
         lineItems: bill.lineItems,
+        issuer: 'CHAIN',
+        recipientEmail: resolveInvoiceRecipient('CHAIN', tenant.email, subscription.billingEmail),
+        deliveryStatus: 'pending',
       }).returning();
 
       // Advance the billing period for any subscription that isn't cancelled.
@@ -21744,9 +21843,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Send invoice email via the shared helper
       await sendChainInvoiceEmail({
+        invoiceId: invoice.id,
         tenantId,
         tenantName: tenant.name,
-        tenantEmail: tenant.email,
+        tenantEmail: subscription.billingEmail || tenant.email,
         invoiceNumber,
         planName,
         periodStart,

@@ -29,3 +29,11 @@ The repository has recording fields on shared call logs and a permission-protect
 ## Deployment and local development
 
 Point `chiamoconnect.com` and `app.chiamoconnect.com` at the same frontend/API deployment and configure the `CHIAMO_*` variables. The customer hostname stays visible. For local use, `npm run dev:chain` and `npm run dev:chiamo` select the product without DNS changes; `?brand=chiamo` is also supported for frontend review.
+
+## Invoice ownership and branding
+
+Invoices persist an immutable `issuer` (`CHAIN` or `CHIAMO`), recipient snapshot, and delivery state. Customer history and PDF routes filter by both tenant and issuer; a later product-flag change therefore cannot rebrand an existing invoice or expose it on the other product origin.
+
+Chiamo-only tenants (`chiamo_connect_enabled=true`, `chain_core_enabled=false`) are billed only from `chiamo_subscriptions`. Active agency seats, plan overrides, texting add-on, custom charges, and discounts use `shared/chiamo.ts`; phone-number and SMS-usage overages are not inferred. Chiamo does not collect cards automatically. Only ACTIVE subscriptions generate service-period invoices.
+
+Dual-product tenants remain on the Chain invoice cycle. When the authoritative phone entitlement is owned by CHIAMO, Chain removes any phone charge and adds a zero-dollar notice that Chiamo Connect manages and bills phone service separately. The entitlement, rather than legacy product flags, is the fail-closed billing authority.

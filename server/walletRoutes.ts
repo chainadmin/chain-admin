@@ -6,6 +6,7 @@ import { eq, and, desc, sql } from "drizzle-orm";
 import { authenticateUser, requireOwner } from "./authMiddleware";
 import { walletService, InsufficientFundsError } from "./walletService";
 import { storage } from "./storage";
+import { resolveInvoiceRecipient } from "./invoiceBranding";
 
 // 404 if the tenant is not in wallet billing mode. Required by the wallet
 // routing contract — non-wallet tenants should not see wallet endpoints.
@@ -899,13 +900,20 @@ export async function runAddonRenewalCron(): Promise<{ charged: number; invoiced
       addonCode: addons.code,
       addonName: addons.name,
       addonMonthlyPriceCents: addons.monthlyPriceCents,
+      tenantEmail: tenants.email,
+      chainCoreEnabled: tenants.chainCoreEnabled,
+      chiamoConnectEnabled: tenants.chiamoConnectEnabled,
     })
     .from(tenantAddons)
     .innerJoin(addons, eq(addons.id, tenantAddons.addonId))
+    .innerJoin(tenants, eq(tenants.id, tenantAddons.tenantId))
     .where(eq(tenantAddons.status, 'active'));
 
   for (const row of due) {
     if (!row.nextChargeAt || row.nextChargeAt > now) { stats.skipped++; continue; }
+    // Chiamo-only billing is sourced exclusively from chiamoSubscriptions.
+    // Chain wallet/add-on renewal logic must never debit or invoice it.
+    if (row.chiamoConnectEnabled && !row.chainCoreEnabled) { stats.skipped++; continue; }
     const cost = (row.addonMonthlyPriceCents || 0) * (row.quantity || 1);
     if (cost <= 0) { stats.skipped++; continue; }
     const isWallet = await walletService.isWalletMode(row.tenantId);
@@ -945,6 +953,9 @@ export async function runAddonRenewalCron(): Promise<{ charged: number; invoiced
             dueDate,
             status: 'pending',
             lineItems: [lineItem],
+            issuer: 'CHAIN',
+            recipientEmail: resolveInvoiceRecipient('CHAIN', row.tenantEmail),
+            deliveryStatus: 'pending',
           } as any);
           stats.invoiced++;
         } catch (e: any) {
@@ -952,7 +963,11 @@ export async function runAddonRenewalCron(): Promise<{ charged: number; invoiced
           const [existing] = await db
             .select({ id: invoices.id, lineItems: invoices.lineItems, totalAmountCents: invoices.totalAmountCents })
             .from(invoices)
-            .where(eq(invoices.tenantId, row.tenantId))
+            .where(and(
+              eq(invoices.tenantId, row.tenantId),
+              eq(invoices.issuer, 'CHAIN'),
+              eq(invoices.deliveryStatus, 'pending'),
+            ))
             .orderBy(desc(invoices.createdAt))
             .limit(1);
           if (existing) {

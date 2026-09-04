@@ -3,10 +3,13 @@ import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { runMigrations } from "./migrations";
 import cron from "node-cron";
+import { runChiamoInvoicePass } from "./chiamoInvoices";
+import { randomBytes } from "node:crypto";
 
 const app = express();
 
-async function createServer() {
+async function createServer(internalCronToken: string) {
+  app.locals.internalCronToken = internalCronToken;
   const server = await registerRoutes(app);
 
   const isProduction = process.env.NODE_ENV === "production";
@@ -47,18 +50,19 @@ async function main() {
   // Run database migrations automatically on startup (Railway deployments)
   await runMigrations();
   
-  const server = await createServer();
+  const internalCronToken = randomBytes(32).toString("hex");
+  const server = await createServer(internalCronToken);
   const PORT = Number(process.env.PORT) || 5000;
   server.listen(PORT, "0.0.0.0", () => {
     log(`serving on port ${PORT}`);
     
     // Set up scheduled tasks (cron jobs)
-    setupScheduledTasks(PORT);
+    setupScheduledTasks(PORT, internalCronToken);
   });
 }
 
 // Setup scheduled tasks (cron jobs)
-function setupScheduledTasks(port: number) {
+function setupScheduledTasks(port: number, internalCronToken: string) {
   const baseUrl = `http://localhost:${port}`;
   
   // Process scheduled payments daily at 8:00 AM Eastern Time
@@ -125,7 +129,8 @@ function setupScheduledTasks(port: number) {
     console.log('🕒 [CRON] Running subscription renewal processor...');
     try {
       const response = await fetch(`${baseUrl}/api/billing/process-renewals`, {
-        method: 'POST'
+        method: 'POST',
+        headers: { 'x-internal-cron-token': internalCronToken },
       });
       const result = await response.json();
       console.log('✅ [CRON] Subscription renewal processing complete:', result);
@@ -142,7 +147,8 @@ function setupScheduledTasks(port: number) {
     console.log('🕒 [CRON] Running invoice generator (daily check for ended billing periods)...');
     try {
       const response = await fetch(`${baseUrl}/api/billing/generate-monthly-invoices`, {
-        method: 'POST'
+        method: 'POST',
+        headers: { 'x-internal-cron-token': internalCronToken },
       });
       const result = await response.json();
       console.log('✅ [CRON] Invoice generation complete:', result);
@@ -152,6 +158,14 @@ function setupScheduledTasks(port: number) {
   }, {
     timezone: 'America/New_York'
   });
+
+  cron.schedule('30 1 * * *', async () => {
+    try {
+      await runChiamoInvoicePass();
+    } catch (error) {
+      console.error('❌ [CRON] Chiamo invoice processing failed:', error);
+    }
+  }, { timezone: 'America/New_York' });
   
   // Delete expired returned accounts daily at 2:00 AM ET
   cron.schedule('0 2 * * *', async () => {

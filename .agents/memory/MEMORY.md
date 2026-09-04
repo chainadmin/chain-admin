@@ -3,3 +3,4 @@
 - [Signed legal records](signed-legal-records.md) — finalized e-sign artifacts are hash-verified and retained; lifecycle deletion and competing status transitions must never destroy or contradict them.
 - [Global Admin credentials](global-admin-credentials.md) — bootstrap access requires server-enforced rotation; version sessions and atomically reserve login attempts in shared storage.
 - [Cross-product account linking](cross-product-account-linking.md) — matching an existing tenant never proves ownership; product activation requires verified owner control.
+- [Invoice delivery claims](invoice-delivery-claims.md) — atomically claim invoice email work; provider acceptance and DB completion still form an unavoidable crash boundary.

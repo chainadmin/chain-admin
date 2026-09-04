@@ -718,19 +718,33 @@ export async function runMigrations() {
     } catch (err) {
       console.log('  ⚠ invoices (already exists)');
     }
+    await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS issuer TEXT NOT NULL DEFAULT 'CHAIN'`);
+    await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS recipient_email TEXT`);
+    // Existing invoices predate delivery tracking. Mark them legacy-sent rather
+    // than ever treating them as a new email queue.
+    await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS delivery_status TEXT NOT NULL DEFAULT 'sent'`);
+    await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS delivery_attempted_at TIMESTAMP`);
+    await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS emailed_at TIMESTAMP`);
+    await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS delivery_last_error TEXT`);
+    await client.query(`ALTER TABLE invoices ADD COLUMN IF NOT EXISTS line_items JSONB`);
+    await client.query(`UPDATE invoices SET delivery_status = 'sent' WHERE delivery_status IS NULL`);
+    await client.query(`ALTER TABLE invoices ALTER COLUMN delivery_status SET DEFAULT 'pending'`);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS invoices_tenant_issuer_period_idx
+      ON invoices (tenant_id, issuer, period_start, period_end)
+      WHERE issuer = 'CHIAMO'
+    `);
     
-    // Add unique constraint to prevent duplicate invoices per billing period
+    // Install issuer-aware indexes before removing the legacy narrower indexes.
+    // If creation fails, startup fails and the existing protection remains.
     console.log('Adding unique constraint to invoices...');
-    try {
-      await client.query(`
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_subscription_period
-        ON invoices(subscription_id, period_start, period_end)
+    await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_subscription_issuer_period
+        ON invoices(tenant_id, issuer, subscription_id, period_start, period_end)
         WHERE subscription_id IS NOT NULL
-      `);
-      console.log('  ✓ invoices unique constraint (subscription_id, period_start, period_end)');
-    } catch (err) {
-      console.log('  ⚠ invoices unique constraint (already exists)');
-    }
+    `);
+    await client.query(`DROP INDEX IF EXISTS idx_invoices_subscription_period`);
+    console.log('  ✓ issuer-aware invoices unique constraint');
 
     // Allow null subscription_id for à la carte tenants (add-ons only, no base subscription)
     console.log('Making invoices.subscription_id nullable for à la carte tenants...');
@@ -741,18 +755,15 @@ export async function runMigrations() {
       console.log('  ⚠ invoices.subscription_id nullable (already nullable or error)');
     }
 
-    // Add unique constraint for à la carte invoices (no subscription) on (tenant_id, period_start, period_end)
+    // Add issuer-aware uniqueness for invoices without a Chain subscription.
     console.log('Adding à la carte invoices unique constraint...');
-    try {
-      await client.query(`
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_tenant_period_alacarte
-        ON invoices(tenant_id, period_start, period_end)
+    await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_tenant_issuer_period_alacarte
+        ON invoices(tenant_id, issuer, period_start, period_end)
         WHERE subscription_id IS NULL
-      `);
-      console.log('  ✓ à la carte invoices unique constraint (tenant_id, period_start, period_end)');
-    } catch (err) {
-      console.log('  ⚠ à la carte invoices unique constraint (already exists)');
-    }
+    `);
+    await client.query(`DROP INDEX IF EXISTS idx_invoices_tenant_period_alacarte`);
+    console.log('  ✓ issuer-aware à la carte invoices unique constraint');
 
     try {
       await client.query(`
