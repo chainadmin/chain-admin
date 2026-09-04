@@ -5,7 +5,7 @@ import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
 import { db } from "./db";
 import { emailService } from "./emailService";
-import { buildChiamoLeadEmails } from "./chiamoLeadEmails";
+import { sendChiamoLeadEmails } from "./chiamoLeadEmails";
 import { storage } from "./storage";
 import { authenticateUser } from "./authMiddleware";
 import { agencyCredentials, tenants, voipCallLogs, voipPhoneNumbers, voipRoutingBuckets, voipTenantSettings, voipVoicemails } from "@shared/schema";
@@ -22,12 +22,7 @@ const leadInput = z.object({
 });
 
 async function sendLeadEmails(lead: typeof chiamoLeads.$inferSelect) {
-  const emails = buildChiamoLeadEmails(lead);
-  const [admin, customer] = await Promise.all([
-    emailService.sendEmail(emails.admin),
-    emailService.sendEmail(emails.customer),
-  ]);
-  return { admin, customer };
+  return sendChiamoLeadEmails(lead, email => emailService.sendEmail(email));
 }
 
 export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandler) {

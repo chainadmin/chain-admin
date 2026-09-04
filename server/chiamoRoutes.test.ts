@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildChiamoLeadEmails } from "./chiamoLeadEmails";
+import { buildChiamoLeadEmails, sendChiamoLeadEmails } from "./chiamoLeadEmails";
 
 const lead = {
   businessName: "Acme & Sons",
@@ -16,7 +16,10 @@ const lead = {
 test("buildChiamoLeadEmails creates an admin registration notification", () => {
   const { admin } = buildChiamoLeadEmails(lead);
 
-  assert.equal(admin.to, "support@chiamoconnect.com");
+  assert.deepEqual(admin.to.split(","), [
+    "support@chiamoconnect.com",
+    "support@chainsoftwaregroup.com",
+  ]);
   assert.equal(admin.from, "support@chiamoconnect.com");
   assert.equal(admin.replyTo, "support@chiamoconnect.com");
   assert.match(admin.subject, /New Chiamo Connect Company Registration/);
@@ -34,5 +37,23 @@ test("buildChiamoLeadEmails creates a branded customer welcome email", () => {
   assert.equal(customer.subject, "Thank you for registering with Chiamo Connect");
   assert.match(customer.html, /Our team will reach out soon/);
   assert.match(customer.html, /support@chiamoconnect\.com/);
+  assert.doesNotMatch(customer.to, /support@chainsoftwaregroup\.com/);
   assert.equal(customer.tag, "chiamo-welcome-email");
+});
+
+test("sendChiamoLeadEmails attempts both messages and reports either failure", async () => {
+  const attemptedRecipients: string[] = [];
+  const result = await sendChiamoLeadEmails(lead, async email => {
+    attemptedRecipients.push(email.to);
+    if (email.tag === "chiamo-lead") throw new Error("Internal notification failed");
+    return { messageId: "welcome-id", success: true };
+  });
+
+  assert.deepEqual(attemptedRecipients, [
+    "support@chiamoconnect.com,support@chainsoftwaregroup.com",
+    lead.businessEmail,
+  ]);
+  assert.equal(result.admin.success, false);
+  assert.equal(result.admin.error, "Internal notification failed");
+  assert.equal(result.customer.success, true);
 });

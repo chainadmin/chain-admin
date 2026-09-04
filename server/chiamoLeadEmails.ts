@@ -1,4 +1,4 @@
-import { CHIAMO_SUPPORT_EMAIL } from "@shared/chiamo";
+import { CHIAMO_REGISTRATION_NOTIFICATION_RECIPIENTS, CHIAMO_SUPPORT_EMAIL } from "@shared/chiamo";
 import type { EmailOptions } from "./emailService";
 
 export interface ChiamoLeadEmailDetails {
@@ -29,7 +29,7 @@ export function buildChiamoLeadEmails(lead: ChiamoLeadEmailDetails): { admin: Em
 
   return {
     admin: {
-      to: CHIAMO_SUPPORT_EMAIL,
+      to: CHIAMO_REGISTRATION_NOTIFICATION_RECIPIENTS.join(","),
       from: CHIAMO_SUPPORT_EMAIL,
       replyTo: CHIAMO_SUPPORT_EMAIL,
       subject: `New Chiamo Connect Company Registration: ${lead.businessName}`,
@@ -69,4 +69,34 @@ export function buildChiamoLeadEmails(lead: ChiamoLeadEmailDetails): { admin: Em
       tag: "chiamo-welcome-email",
     },
   };
+}
+
+export type ChiamoEmailDeliveryResult = {
+  messageId: string;
+  success: boolean;
+  error?: string;
+};
+
+export async function sendChiamoLeadEmails(
+  lead: ChiamoLeadEmailDetails,
+  sendEmail: (email: EmailOptions) => Promise<ChiamoEmailDeliveryResult>,
+) {
+  const emails = buildChiamoLeadEmails(lead);
+  const safeSend = async (email: EmailOptions): Promise<ChiamoEmailDeliveryResult> => {
+    try {
+      return await sendEmail(email);
+    } catch (error) {
+      return {
+        messageId: "",
+        success: false,
+        error: error instanceof Error ? error.message : "Postmark delivery failed",
+      };
+    }
+  };
+
+  const [admin, customer] = await Promise.all([
+    safeSend(emails.admin),
+    safeSend(emails.customer),
+  ]);
+  return { admin, customer };
 }
