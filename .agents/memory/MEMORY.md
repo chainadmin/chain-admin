@@ -6,3 +6,4 @@
 - [Invoice delivery claims](invoice-delivery-claims.md) — atomically claim invoice email work; provider acceptance and DB completion still form an unavoidable crash boundary.
 - [Provider onboarding retries](provider-onboarding-retries.md) — provision external resources outside DB transactions using durable claims, deterministic lookup, and incremental persistence.
 - [Tenant removal safety](tenant-removal-safety.md) — preserve retained evidence and opposite-product access; audit before mutation and fence post-commit cleanup leases.
+- [Removal preflight schema drift](removal-preflight-schema-drift.md) — optional history relations must be probed before counting, and async preflight failures must return JSON instead of escaping Express.
