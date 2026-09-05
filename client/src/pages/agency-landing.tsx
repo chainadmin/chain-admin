@@ -186,10 +186,12 @@ export default function AgencyLanding() {
   };
   const primaryAction = {
     backgroundColor: accentColor,
+    backgroundImage: "none",
     color: brandForeground,
   };
   const secondaryAction = {
     backgroundColor: accentSecondary,
+    backgroundImage: "none",
     color: getContrastTextColor(accentSecondary),
   };
   const brandStyles = {

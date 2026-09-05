@@ -12,6 +12,7 @@ test("agency landing applies resolved company branding to prominent elements", (
   assert.match(source, /resolveBrandColor\(resolvedBranding\.secondaryColor/);
   assert.match(source, /style=\{primaryAction\}/);
   assert.match(source, /style=\{secondaryAction\}/);
+  assert.match(source, /backgroundImage: "none"/);
   assert.match(source, /style=\{accentGradient\}/);
   assert.match(source, /resolvedBranding\.landingPageHeadline/);
   assert.match(source, /resolvedBranding\.landingPageSubheadline/);
