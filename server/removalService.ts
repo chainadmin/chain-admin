@@ -132,7 +132,11 @@ export function normalizePreflight(
 }
 
 export function validateRemovalConfirmation(targetName: string, typedName: unknown, reason: unknown): string | null {
-  if (typeof typedName !== "string" || typedName !== targetName) return "The target name must match exactly.";
+  if (
+    typeof typedName !== "string"
+    || !targetName.trim()
+    || typedName.trim() !== targetName.trim()
+  ) return "The target name must match exactly.";
   if (typeof reason !== "string" || reason.trim().length < 10) return "A reason of at least 10 characters is required.";
   return null;
 }

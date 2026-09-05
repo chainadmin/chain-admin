@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Database, Loader2, LockKeyhole, RefreshCw, ShieldAlert } from "lucide-react";
 import { ApiError, apiRequest, isTransientGatewayError, queryClient } from "@/lib/queryClient";
+import { matchesRemovalTargetName, normalizedRemovalTargetName } from "@/lib/removalConfirmation";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -85,6 +86,13 @@ export function RemovalConfirmation({ open, onOpenChange, target, onSuccess }: P
       queryClient.invalidateQueries({ queryKey: ["/api/admin/chiamo/customers"] });
       onSuccess?.();
     },
+    onError: (error) => {
+      const { code } = errorDetails(error);
+      if (code === "PREFLIGHT_CHANGED" || code === "DATABASE_CONFLICT") {
+        setPreflight(null);
+        void query.refetch();
+      }
+    },
   });
   const retryCleanup = useMutation({
     mutationFn: async () => {
@@ -93,7 +101,8 @@ export function RemovalConfirmation({ open, onOpenChange, target, onSuccess }: P
     },
     onSuccess: setCleanupResult,
   });
-  const exact = typedName === (current?.target.name || target.name);
+  const confirmationName = normalizedRemovalTargetName(current?.target.name || target.name);
+  const exact = matchesRemovalTargetName(typedName, confirmationName);
   const canExecute = Boolean(current && exact && reason.trim().length >= 10 && password && !execute.isPending);
   const classificationLabel = current?.classification === "PERMANENT_DELETE" ? "Permanent deletion"
     : current?.classification === "PRODUCT_DEACTIVATE" ? "Product deactivation"
@@ -133,7 +142,7 @@ export function RemovalConfirmation({ open, onOpenChange, target, onSuccess }: P
         {current.logos?.length > 0 && <p className="text-xs text-slate-500">A logo URL is an external reference and is not a database blocker. Only owned assets are considered for cleanup.</p>}
         {current.blockers?.length > 0 && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><p className="font-bold">Retained history that prevents permanent deletion</p><p className="mb-2 text-xs">These records will be preserved by the archive or product-deactivation action shown above.</p>{current.blockers.map(blocker => <p key={`${blocker.category}-${blocker.label}`}>{blocker.label} · {blocker.count}</p>)}</div>}
         <div className="grid gap-3 sm:grid-cols-2">
-          <label><Label>Type the target name exactly</Label><Input className="mt-1" value={typedName} onChange={event => setTypedName(event.target.value)} placeholder={current.target.name} /></label>
+          <label><Label>Type the target name exactly</Label><Input className="mt-1" value={typedName} onChange={event => setTypedName(event.target.value)} placeholder={confirmationName} /></label>
           <label><Label>Reason required (at least 10 characters)</Label><Input className="mt-1" value={reason} onChange={event => setReason(event.target.value)} placeholder="Document the authorization" /></label>
           <label className="sm:col-span-2"><Label>Current Global Admin password</Label><div className="relative mt-1"><LockKeyhole className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><Input className="pl-9" type="password" value={password} onChange={event => setPassword(event.target.value)} autoComplete="current-password" /></div></label>
         </div>

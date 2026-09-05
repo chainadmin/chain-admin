@@ -325,6 +325,11 @@ export default function Settings() {
         description: "Your settings have been saved successfully.",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/settings"] });
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          typeof query.queryKey[0] === "string"
+          && query.queryKey[0].startsWith("/api/public/agency-branding?slug="),
+      });
     },
     onError: (error) => {
       toast({

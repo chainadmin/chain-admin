@@ -188,6 +188,10 @@ export default function AgencyLanding() {
     backgroundColor: accentColor,
     color: brandForeground,
   };
+  const secondaryAction = {
+    backgroundColor: accentSecondary,
+    color: getContrastTextColor(accentSecondary),
+  };
   const brandStyles = {
     "--brand-primary": accentColor,
     "--brand-secondary": accentSecondary,
@@ -265,7 +269,7 @@ export default function AgencyLanding() {
               </Button>
               <Button
                 className="rounded-full px-6 transition-opacity hover:opacity-90"
-                style={primaryAction}
+                style={secondaryAction}
                 onClick={() => setLocation(`/consumer-register/${resolvedBranding.agencySlug}`)}
                 data-testid="button-register"
               >
@@ -304,8 +308,8 @@ export default function AgencyLanding() {
                 </Button>
                 <Button
                   size="lg"
-                  variant="outline"
-                  className="h-12 rounded-full border-white/30 bg-white/5 px-8 text-base text-white hover:bg-white/10"
+                  className="h-12 rounded-full px-8 text-base font-medium transition-opacity hover:opacity-90"
+                  style={secondaryAction}
                   onClick={() => setLocation(`/consumer-register/${resolvedBranding.agencySlug}`)}
                   data-testid="button-consumer-register"
                 >

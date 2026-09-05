@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   classifyRemoval, makePreflight, retryCleanupTask, sanitizeProviderError,
-  normalizePreflight,
+  normalizePreflight, validateRemovalConfirmation,
 } from "./removalService";
 import { tenantOwnedLogoKey } from "./r2Storage";
 
@@ -28,6 +28,12 @@ test("public preflight follows the admin-removal frontend contract", () => {
   assert.deepEqual(publicResult.products, { chain:true, chiamo:false });
   assert.equal(publicResult.selectedProduct, "CHAIN");
   assert.ok(Array.isArray(publicResult.blockers));
+});
+
+test("removal confirmation tolerates surrounding stored whitespace but remains case-sensitive", () => {
+  assert.equal(validateRemovalConfirmation("Perimeter ", "Perimeter", "Authorized removal"), null);
+  assert.equal(validateRemovalConfirmation("Perimeter ", "perimeter", "Authorized removal"), "The target name must match exactly.");
+  assert.equal(validateRemovalConfirmation("   ", "", "Authorized removal"), "The target name must match exactly.");
 });
 
 test("signed legal records block a Chain permanent deletion", () => {

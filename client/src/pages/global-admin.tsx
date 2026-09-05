@@ -3733,7 +3733,12 @@ export default function GlobalAdmin() {
             setDeleteAgencyDialogOpen(open);
             if (!open) setSelectedAgencyForDeletion(null);
           }}
-          target={{ id: String(selectedAgencyForDeletion.id), name: selectedAgencyForDeletion.name, kind: "tenant", product: "CHAIN" }}
+          target={{
+            id: String(selectedAgencyForDeletion.id),
+            name: selectedAgencyForDeletion.name,
+            kind: "tenant",
+            product: selectedAgencyForDeletion.chainCoreEnabled ? "CHAIN" : "CHIAMO",
+          }}
         />
       )}
       
