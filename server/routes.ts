@@ -74,6 +74,10 @@ import { downloadVoiceGreeting, uploadVoiceGreeting } from "./voiceObjectStorage
 import externalApiRouter from "./external-api";
 import { registerWalletRoutes } from "./walletRoutes";
 import { registerChiamoRoutes } from "./chiamoRoutes";
+import { resolveChiamoBaseUrl } from "./chiamoOnboarding";
+import { CHIAMO_SUPPORT_EMAIL } from "@shared/chiamo";
+import { chiamoServiceConfigurations } from "@shared/chiamo-schema";
+import { hashPasswordResetToken, isChainActivationReset, passwordResetProduct } from "./passwordResetPolicy";
 import {
   findCanonicalTenant,
   getEffectivePhoneEntitlement,
@@ -8034,7 +8038,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
            const activationToken = `chain-activation-${crypto.randomBytes(32).toString("hex")}`;
            await tx.execute(sql`
              INSERT INTO password_reset_tokens (credential_id, token, expires_at)
-             VALUES (${existingOwners[0].id}, ${activationToken}, ${new Date(Date.now() + 60 * 60 * 1000)})
+             VALUES (${existingOwners[0].id}, ${hashPasswordResetToken(activationToken)}, ${new Date(Date.now() + 60 * 60 * 1000)})
            `);
            return {
              mode: "chiamo_handoff" as const,
@@ -8257,9 +8261,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (req.body.product === 'chiamo' && tenant.chiamoConnectEnabled !== true) {
         return res.status(403).json({ message: "Chiamo Connect is not enabled for this organization." });
       }
+      if (req.body.product !== 'chiamo' && tenant.chainCoreEnabled !== true) {
+        return res.status(403).json({ message: "Use the Chiamo Connect sign-in page for this account." });
+      }
+
+       if (req.body.product === 'chiamo') {
+         const [service] = await db.select({
+           accountActive:chiamoServiceConfigurations.accountActive,
+           customerLoginEnabled:chiamoServiceConfigurations.customerLoginEnabled,
+           postmarkStatus:chiamoServiceConfigurations.postmarkStatus,
+           voiceEnabled:chiamoServiceConfigurations.voiceEnabled,
+           voiceProviderStatus:chiamoServiceConfigurations.voiceProviderStatus,
+         }).from(chiamoServiceConfigurations)
+           .where(eq(chiamoServiceConfigurations.tenantId, credentials.tenantId)).limit(1);
+         const ready = service?.accountActive === true
+           && service.customerLoginEnabled === true
+           && service.postmarkStatus === "READY"
+           && Boolean(tenant.postmarkServerId && tenant.postmarkServerToken)
+           && (!service.voiceEnabled || (
+             service.voiceProviderStatus === "READY"
+             && tenant.twilioAccountSid
+             && tenant.twilioApiKeySid
+             && tenant.twilioApiKeySecret
+             && tenant.twilioTwimlAppSid
+           ));
+         if (!ready) {
+           return res.status(403).json({ message:"Chiamo Connect setup is not ready. Contact your administrator." });
+         }
+       }
       
       // Update last login time
       await storage.updateAgencyLoginTime(credentials.id);
+      if (req.body.product === 'chiamo') {
+        await db.update(chiamoServiceConfigurations).set({
+           loginConfirmedAt:new Date(), readinessStatus:"READY",
+          setupChecklist:sql`setup_checklist || '{"customerLoginConfirmed":true}'::jsonb`,
+          updatedAt:new Date(),
+        }).where(eq(chiamoServiceConfigurations.tenantId, credentials.tenantId));
+      }
       
       // Store session data
       if (!req.session) {
@@ -8321,58 +8360,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Agency forgot password - request password reset email
   app.post('/api/agency/forgot-password', async (req, res) => {
+    const genericMessage = "If an account exists with that username or email, a password reset link will be sent.";
     try {
-      const { email } = req.body;
-      
-      if (!email) {
-        return res.status(400).json({ message: "Email is required" });
+      const parsed = z.object({ email:z.string().trim().email().max(254), product:z.enum(["chain","chiamo"]).optional() }).safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message:"Enter a valid email address.", code:"VALIDATION_ERROR", issues:parsed.error.flatten().fieldErrors });
+      const normalizedEmail = parsed.data.email.toLowerCase();
+      // Product and brand are derived from the credential's tenant. The client
+      // hint is deliberately ignored so it cannot switch an account's product.
+      const matches = await db.select({ credential:agencyCredentials, tenant:tenants })
+        .from(agencyCredentials).innerJoin(tenants, eq(tenants.id, agencyCredentials.tenantId))
+        .where(sql`lower(trim(${agencyCredentials.email})) = ${normalizedEmail}`).limit(2);
+      if (matches.length !== 1 || !matches[0].credential.isActive) return res.json({ message:genericMessage });
+      const { credential:credentials, tenant } = matches[0];
+      const isChiamoOnly = passwordResetProduct(tenant) === "chiamo";
+      if (isChiamoOnly && (!tenant.postmarkServerId || !tenant.postmarkServerToken)) {
+        throw new Error("Chiamo tenant email provider is not configured");
       }
-      
-      const normalizedEmail = email.trim().toLowerCase();
-      
-      // Find credentials by email
-      const credentials = await storage.getAgencyCredentialsByEmail(normalizedEmail);
-      
-      // Always return success to prevent user enumeration attacks
-      if (!credentials || !credentials.email) {
-        console.log(`Password reset requested for unknown email: ${normalizedEmail}`);
-        return res.json({ 
-          message: "If an account exists with that username or email, a password reset link will be sent." 
-        });
-      }
-      
-      // Check if account is active
-      if (!credentials.isActive) {
-        console.log(`Password reset requested for deactivated account: ${credentials.username}`);
-        return res.json({ 
-          message: "If an account exists with that username or email, a password reset link will be sent." 
-        });
-      }
-      
-      // Generate secure token
+
       const token = crypto.randomBytes(32).toString('hex');
       const resetCode = token.slice(0, 6).toUpperCase();
-      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour expiration
-      
-      // Store token
-      await storage.createPasswordResetToken(credentials.id, token, expiresAt);
-      
-      // Get tenant for branding (optional)
-      const tenant = await storage.getTenant(credentials.tenantId);
-      
-      // Build reset URL - use the main domain for the reset page
-      const baseUrl = process.env.BASE_URL || 'https://chainsoftwaregroup.com';
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+      const requestHostname = req.hostname.toLowerCase();
+      const configuredChiamoHostname = (() => {
+        try {
+          const configured = process.env.CHIAMO_BASE_URL || process.env.CHIAMO_DOMAIN;
+          return configured ? new URL(configured.includes("://") ? configured : `https://${configured}`).hostname.toLowerCase() : null;
+        } catch {
+          return null;
+        }
+      })();
+      const verifiedChiamoOrigin = requestHostname === "chiamoconnect.com"
+        || requestHostname.endsWith(".chiamoconnect.com")
+        || (configuredChiamoHostname !== null && requestHostname === configuredChiamoHostname)
+        ? `https://${requestHostname}`
+        : undefined;
+      const baseUrl = isChiamoOnly
+        ? resolveChiamoBaseUrl(process.env, verifiedChiamoOrigin)
+        : (process.env.BASE_URL || 'https://chainsoftwaregroup.com').replace(/\/+$/, '');
       const resetUrl = `${baseUrl}/agency/reset-password?token=${token}`;
-      
-      // Send password reset email
+      await db.execute(sql`update password_reset_tokens set used_at = now() where credential_id = ${credentials.id} and used_at is null`);
+      await storage.createPasswordResetToken(credentials.id, token, expiresAt);
+      const productName = isChiamoOnly ? "Chiamo Connect" : "Chain";
+      const color = isChiamoOnly ? "#047857" : "#1e3a5f";
       const emailHtml = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%); padding: 30px; text-align: center;">
-            <h1 style="color: white; margin: 0;">Password Reset Request</h1>
+          <div style="background:${color}; padding:30px; text-align:center;">
+            <h1 style="color:white; margin:0;">${productName} Password Reset</h1>
           </div>
           <div style="padding: 30px; background: #f9f9f9;">
             <p>Hello${credentials.firstName ? ` ${credentials.firstName}` : ''},</p>
-            <p>We received a request to reset the password for your Chain account${tenant ? ` (${tenant.name})` : ''}.</p>
+            <p>We received a request to reset the password for your ${productName} account (${tenant.name}).</p>
             <p><strong>Username:</strong> ${credentials.username}</p>
             <p>Your reset code is:</p>
             <div style="text-align: center; margin: 20px 0; font-size: 24px; letter-spacing: 4px; font-weight: bold; color: #1e3a5f;">
@@ -8380,7 +8417,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             </div>
             <p>Click the button below to set a new password:</p>
             <div style="text-align: center; margin: 30px 0;">
-              <a href="${resetUrl}" style="background: #1e3a5f; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; display: inline-block; font-weight: bold;">Reset Password</a>
+              <a href="${resetUrl}" style="background:${color}; color:white; padding:15px 30px; text-decoration:none; border-radius:5px; display:inline-block; font-weight:bold;">Reset Password</a>
             </div>
             <p style="color: #666; font-size: 14px;">This link will expire in 1 hour for security reasons.</p>
             <p style="color: #666; font-size: 14px;">If you didn't request this password reset, you can safely ignore this email. Your password will remain unchanged.</p>
@@ -8391,22 +8428,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         </div>
       `;
       
-      await emailService.sendEmail({
+      const delivery = await emailService.sendEmail({
+        tenantId: isChiamoOnly ? credentials.tenantId : undefined,
+        preserveExplicitSender: isChiamoOnly,
+        from: isChiamoOnly ? `Chiamo Connect <${CHIAMO_SUPPORT_EMAIL}>` : undefined,
+        replyTo: isChiamoOnly ? CHIAMO_SUPPORT_EMAIL : undefined,
         to: credentials.email,
-        subject: 'Password Reset Code - Chain',
+        subject: `Password Reset Code - ${productName}`,
         html: emailHtml,
-        tag: 'password-reset',
+        tag: isChiamoOnly ? 'chiamo-password-reset' : 'password-reset',
       });
-      
-      console.log(`Password reset email sent to ${credentials.email} for user ${credentials.username}`);
-      
-      res.json({ 
-        message: "If an account exists with that username or email, a password reset link will be sent." 
-      });
-      
+      if (!delivery.success) console.error("Password reset delivery failed", { tenantId:credentials.tenantId, product:productName });
+      res.json({ message:genericMessage });
     } catch (error) {
-      console.error("Error during password reset request:", error);
-      res.status(500).json({ message: "Failed to process password reset request" });
+      console.error("Password reset request could not be completed", { errorType:error instanceof Error ? error.name : "UnknownError" });
+      // Keep provider/configuration failures indistinguishable from an unknown
+      // account. Operators retain the server-side error for remediation.
+      res.json({ message:genericMessage });
     }
   });
 
@@ -8431,7 +8469,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const tokenResult = await tx.execute(sql`
           SELECT id, credential_id, expires_at, used_at
           FROM password_reset_tokens
-          WHERE token = ${token}
+           WHERE token = ${hashPasswordResetToken(token)}
+              OR (token = ${token} AND expires_at > NOW())
           FOR UPDATE
         `);
         const resetToken = tokenResult.rows?.[0] as any;
@@ -8453,7 +8492,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         await tx.update(agencyCredentials).set({ passwordHash, updatedAt: new Date() })
           .where(eq(agencyCredentials.id, credentials.id));
-        const chainActivated = token.startsWith("chain-activation-");
+        const chainActivated = isChainActivationReset(token);
         if (chainActivated) {
           await tx.update(tenants).set({ chainCoreEnabled: true })
             .where(eq(tenants.id, credentials.tenantId));

@@ -4,6 +4,7 @@ import { emailLogs, tenants, tenantSettings } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 import { smaxService } from './smaxService';
 import { storage } from './storage';
+import { decryptCredential } from './credentialCrypto';
 
 // Postmark client will be validated at server startup, not module load
 // This allows Docker build to succeed without runtime env vars
@@ -29,6 +30,7 @@ export interface EmailOptions {
   consumerId?: string; // For conversation tracking - link email to consumer
   useBroadcastStream?: boolean; // Use broadcast stream for marketing/bulk emails (automations, campaigns)
   useTenantDeliveryConfig?: boolean; // Set false for platform-issued mail whose brand/sender must not be tenant-overridden
+  preserveExplicitSender?: boolean; // Use tenant provider/token but retain an explicitly supplied From address
   attachments?: Array<{ name: string; content: Buffer; contentType: string }>;
 }
 
@@ -66,7 +68,7 @@ export class EmailService {
         ? null
         : await this.getTenantDeliveryConfig(options.tenantId);
         
-      if (tenant) {
+      if (tenant && !(options.preserveExplicitSender && options.from)) {
         // Priority: customSenderEmail > slug-based email > provided from > default
         if (tenant.customSenderEmail) {
           fromEmail = tenant.customSenderEmail;
@@ -108,7 +110,10 @@ export class EmailService {
         ? tenant?.postmarkBroadcastStream || getBroadcastStreamId()
         : tenant?.postmarkTransactionalStream || process.env.POSTMARK_TRANSACTIONAL_STREAM || 'outbound';
       
-      const activeClient = tenant?.postmarkServerToken ? new Client(tenant.postmarkServerToken) : postmarkClient;
+      const tenantToken = tenant?.postmarkServerToken
+        ? (tenant.postmarkServerToken.startsWith('enc:v1:') ? decryptCredential(tenant.postmarkServerToken) : tenant.postmarkServerToken)
+        : null;
+      const activeClient = tenantToken ? new Client(tenantToken) : postmarkClient;
       const result = await activeClient.sendEmail(emailPayload);
 
       // Log email to database if tenantId is provided
@@ -206,7 +211,10 @@ export class EmailService {
         console.log(`📧 Sending batch of ${batchMessages.length} emails via broadcast stream...`);
         const batchTenantId = batch.find(email => email.tenantId)?.tenantId;
         const batchTenant = batchTenantId ? tenantConfigs.get(batchTenantId) : null;
-        const activeClient = batchTenant?.postmarkServerToken ? new Client(batchTenant.postmarkServerToken) : postmarkClient;
+        const batchTenantToken = batchTenant?.postmarkServerToken
+          ? (batchTenant.postmarkServerToken.startsWith('enc:v1:') ? decryptCredential(batchTenant.postmarkServerToken) : batchTenant.postmarkServerToken)
+          : null;
+        const activeClient = batchTenantToken ? new Client(batchTenantToken) : postmarkClient;
         const batchResult = await activeClient.sendEmailBatch(batchMessages);
         
         // Process batch results

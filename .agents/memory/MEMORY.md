@@ -4,3 +4,4 @@
 - [Global Admin credentials](global-admin-credentials.md) — bootstrap access requires server-enforced rotation; version sessions and atomically reserve login attempts in shared storage.
 - [Cross-product account linking](cross-product-account-linking.md) — matching an existing tenant never proves ownership; product activation requires verified owner control.
 - [Invoice delivery claims](invoice-delivery-claims.md) — atomically claim invoice email work; provider acceptance and DB completion still form an unavoidable crash boundary.
+- [Provider onboarding retries](provider-onboarding-retries.md) — provision external resources outside DB transactions using durable claims, deterministic lookup, and incremental persistence.

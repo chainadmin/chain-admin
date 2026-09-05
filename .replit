@@ -54,6 +54,9 @@ integrations = ["javascript_supabase:1.0.0", "javascript_object_storage:1.0.0", 
 
 [userenv.shared]
 CHAIN_AUTHNET_SANDBOX = "false"
+CHIAMO_APP_DOMAIN = "app.chiamoconnect.com"
+CHIAMO_BASE_URL = "https://chiamoconnect.com"
+CHIAMO_DOMAIN = "chiamoconnect.com"
 
 [postMerge]
 path = "scripts/post-merge.sh"

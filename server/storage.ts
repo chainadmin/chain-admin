@@ -1,3 +1,4 @@
+import { hashPasswordResetToken } from "./passwordResetPolicy";
 import {
   users,
   tenants,
@@ -891,7 +892,7 @@ export class DatabaseStorage implements IStorage {
   async createPasswordResetToken(credentialId: string, token: string, expiresAt: Date): Promise<void> {
     await db.execute(sql`
       INSERT INTO password_reset_tokens (credential_id, token, expires_at)
-      VALUES (${credentialId}, ${token}, ${expiresAt})
+       VALUES (${credentialId}, ${hashPasswordResetToken(token)}, ${expiresAt})
     `);
   }
 
@@ -899,7 +900,8 @@ export class DatabaseStorage implements IStorage {
     const result = await db.execute(sql`
       SELECT id, credential_id, token, expires_at, used_at
       FROM password_reset_tokens
-      WHERE token = ${token}
+       WHERE token = ${hashPasswordResetToken(token)}
+          OR (token = ${token} AND expires_at > NOW())
     `);
     
     if (!result.rows || result.rows.length === 0) {
@@ -920,7 +922,8 @@ export class DatabaseStorage implements IStorage {
     await db.execute(sql`
       UPDATE password_reset_tokens
       SET used_at = NOW()
-      WHERE token = ${token}
+       WHERE token = ${hashPasswordResetToken(token)}
+          OR (token = ${token} AND expires_at > NOW())
     `);
   }
 

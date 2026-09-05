@@ -10,6 +10,7 @@ import { Mail, ArrowLeft, CheckCircle } from "lucide-react";
 import { z } from "zod";
 import { useState } from "react";
 import AgencyAuthLayout from "@/components/agency-auth-layout";
+import { detectBrand } from "@/config/brands";
 
 const forgotPasswordSchema = z.object({
   email: z.string().email("Enter a valid email address"),
@@ -18,6 +19,7 @@ const forgotPasswordSchema = z.object({
 type ForgotPasswordData = z.infer<typeof forgotPasswordSchema>;
 
 export default function AgencyForgotPassword() {
+  const isChiamo = detectBrand() === "chiamo";
   const { toast } = useToast();
   const [emailSent, setEmailSent] = useState(false);
 
@@ -30,7 +32,7 @@ export default function AgencyForgotPassword() {
 
   const forgotPasswordMutation = useMutation({
     mutationFn: async (data: ForgotPasswordData) => {
-      const response = await apiRequest("POST", "/api/agency/forgot-password", data);
+      const response = await apiRequest("POST", "/api/agency/forgot-password", { ...data, product: isChiamo ? "chiamo" : "chain" });
       return await response.json();
     },
     onSuccess: () => {

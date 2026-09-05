@@ -13,6 +13,7 @@ export type CompanyTwilioAccount = {
 
 export type AccountProvisioner = {
   createCompanySubaccount(name: string): Promise<{ sid: string; authToken?: string; status?: string }>;
+  findCompanySubaccount?(name: string): Promise<{ sid: string; authToken?: string; status?: string } | null>;
 };
 
 export type CompanyTwilioVoiceConfiguration = {
@@ -42,6 +43,9 @@ export type VoiceProvisioner = {
     friendlyName: string,
     voiceUrl: string,
   ): Promise<{ sid: string }>;
+  findCompanyTwimlApp?(subaccountSid: string, friendlyName: string): Promise<{ sid: string } | null>;
+  findCompanyApiKey?(subaccountSid: string, friendlyName: string): Promise<{ sid: string } | null>;
+  deleteCompanyApiKey?(subaccountSid: string, sid: string): Promise<void>;
 };
 
 export type VoiceConfigurationStore = {
@@ -62,16 +66,15 @@ export const COMPANY_TWILIO_VOICE_FIELDS = {
 
 /**
  * Resolve the one Twilio subaccount belonging to a company. Existing SMS account
- * SIDs always win; creation only occurs while holding a DB advisory lock so two
- * concurrent onboarding requests cannot create duplicate subaccounts.
+ * SIDs always win. Initial onboarding is serialized by the durable Chiamo stage
+ * claim; deterministic provider names let a retry recover a resource created
+ * immediately before a process or persistence failure.
  */
 export async function resolveCompanyTwilioAccount(
   tenantId: string,
   options: { createIfMissing?: boolean; provisioner?: AccountProvisioner } = {},
 ): Promise<CompanyTwilioAccount> {
-  return db.transaction(async (tx) => {
-    await tx.execute(`select pg_advisory_xact_lock(hashtext('${tenantId.replaceAll("'", "''")}'))`);
-    const [tenant] = await tx.select({
+  const [tenant] = await db.select({
       id: tenants.id,
       name: tenants.name,
       businessName: tenants.businessName,
@@ -80,14 +83,15 @@ export async function resolveCompanyTwilioAccount(
       status: tenants.twilioSubaccountStatus,
     }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
 
-    if (!tenant) throw new Error('Organization not found');
-    if (tenant.sid) {
-      return { tenantId, subaccountSid: tenant.sid, status: tenant.status || 'active', reused: true };
-    }
-    if (!options.createIfMissing) throw new Error('Organization has no Twilio subaccount');
-
-    const provisioner = options.provisioner || masterAccountProvisioner();
-    const created = await provisioner.createCompanySubaccount(tenant.businessName || tenant.name);
+  if (!tenant) throw new Error('Organization not found');
+  if (tenant.sid) return { tenantId, subaccountSid: tenant.sid, status: tenant.status || 'active', reused: true };
+  if (!options.createIfMissing) throw new Error('Organization has no Twilio subaccount');
+  const provisioner = options.provisioner || masterAccountProvisioner();
+  const friendlyName = `Chiamo ${tenantId} ${(tenant.businessName || tenant.name).slice(0, 35)}`.slice(0, 64);
+  const created = await provisioner.findCompanySubaccount?.(friendlyName) || await provisioner.createCompanySubaccount(friendlyName);
+  await db.transaction(async tx => {
+    const [current] = await tx.select({ sid:tenants.twilioAccountSid }).from(tenants).where(eq(tenants.id,tenantId)).limit(1);
+    if (current?.sid) return;
     await tx.update(tenants).set({
       twilioAccountSid: created.sid,
       // Kept for the existing tenant-isolated SMS client. New Voice operations use
@@ -95,8 +99,9 @@ export async function resolveCompanyTwilioAccount(
       twilioAuthToken: created.authToken ? encryptCredential(created.authToken) : tenant.authToken,
       twilioSubaccountStatus: created.status || 'active',
     }).where(eq(tenants.id, tenantId));
-    return { tenantId, subaccountSid: created.sid, status: created.status || 'active', reused: false };
   });
+  const [persisted] = await db.select({ sid:tenants.twilioAccountSid, status:tenants.twilioSubaccountStatus }).from(tenants).where(eq(tenants.id,tenantId)).limit(1);
+  return { tenantId, subaccountSid: persisted?.sid || created.sid, status:persisted?.status || created.status || "active", reused:Boolean(persisted?.sid && persisted.sid !== created.sid) };
 }
 
 function masterAccountProvisioner(): AccountProvisioner {
@@ -108,6 +113,11 @@ function masterAccountProvisioner(): AccountProvisioner {
     async createCompanySubaccount(name) {
       const account = await client.api.v2010.accounts.create({ friendlyName: name });
       return { sid: account.sid, authToken: account.authToken, status: account.status };
+    },
+    async findCompanySubaccount(name) {
+      const accounts = await client.api.v2010.accounts.list({ friendlyName:name, limit:1 });
+      const account = accounts[0];
+      return account ? { sid:account.sid, status:account.status } : null;
     },
   };
 }
@@ -156,6 +166,18 @@ function masterVoiceProvisioner(): VoiceProvisioner {
       });
       return { sid: app.sid };
     },
+    async findCompanyTwimlApp(subaccountSid, friendlyName) {
+      const apps = await scopedClient(subaccountSid).applications.list({ friendlyName, limit:1 });
+      return apps[0] ? { sid:apps[0].sid } : null;
+    },
+    async findCompanyApiKey(subaccountSid, friendlyName) {
+      const keys = await scopedClient(subaccountSid).keys.list({ limit:100 });
+      const key = keys.find(item => item.friendlyName === friendlyName);
+      return key ? { sid:key.sid } : null;
+    },
+    async deleteCompanyApiKey(subaccountSid, sid) {
+      await scopedClient(subaccountSid).keys(sid).remove();
+    },
   };
 }
 
@@ -165,6 +187,7 @@ export async function provisionMissingCompanyVoiceResources(
   current: CompanyVoiceConfigurationRecord,
   provisioner: VoiceProvisioner,
   webhookUrl: string,
+  saveProgress?: (configuration: CompanyVoiceConfigurationRecord) => Promise<void>,
 ): Promise<ProvisionedCompanyVoiceResources> {
   let apiKeySid = current.apiKeySid;
   let apiKeySecret = current.apiKeySecret;
@@ -174,13 +197,18 @@ export async function provisionMissingCompanyVoiceResources(
   // Twilio only returns the secret when a key is created. An incomplete stored
   // key therefore has to be replaced rather than silently using a master key.
   if (!apiKeySid || !apiKeySecret) {
+    const matchingKey = !apiKeySecret ? await provisioner.findCompanyApiKey?.(subaccountSid, `${friendlyName} API Key`.slice(0, 64)) : null;
+    if (!apiKeySecret && (apiKeySid || matchingKey?.sid)) await provisioner.deleteCompanyApiKey?.(subaccountSid, apiKeySid || matchingKey!.sid);
     const key = await provisioner.createCompanyApiKey(subaccountSid, `${friendlyName} API Key`.slice(0, 64));
     apiKeySid = key.sid;
     apiKeySecret = key.secret;
+    await saveProgress?.({ apiKeySid, apiKeySecret, twimlAppSid });
   }
   if (!twimlAppSid) {
-    const app = await provisioner.createCompanyTwimlApp(subaccountSid, `${friendlyName} TwiML App`.slice(0, 64), webhookUrl);
+    const app = await provisioner.findCompanyTwimlApp?.(subaccountSid, `${friendlyName} TwiML App`.slice(0, 64))
+      || await provisioner.createCompanyTwimlApp(subaccountSid, `${friendlyName} TwiML App`.slice(0, 64), webhookUrl);
     twimlAppSid = app.sid;
+    await saveProgress?.({ apiKeySid, apiKeySecret, twimlAppSid });
   }
 
   return {
@@ -192,9 +220,9 @@ export async function provisionMissingCompanyVoiceResources(
 
 /**
  * Resolve and, when necessary, provision the tenant's Voice API key and TwiML
- * app. Production uses a DB advisory lock. An injectable store/provisioner is
- * supported for focused tests; custom stores must provide equivalent
- * serialization if used outside tests.
+ * app. Chiamo onboarding serializes initial work with a durable stage claim.
+ * An injectable store/provisioner is supported for focused tests; custom callers
+ * must provide equivalent serialization if used outside tests.
  */
 export async function resolveCompanyTwilioVoiceConfiguration(
   tenantId: string,
@@ -221,11 +249,9 @@ export async function resolveCompanyTwilioVoiceConfiguration(
     return { tenantId, subaccountSid: account.subaccountSid, ...next };
   }
 
-  return db.transaction(async (tx) => {
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`twilio-voice:${tenantId}`}))`);
-    let rows: unknown;
+  let rows: unknown;
     try {
-      rows = await tx.execute(sql`
+      rows = await db.execute(sql`
         select name, business_name, twilio_api_key_sid, twilio_api_key_secret, twilio_twiml_app_sid
         from tenants
         where id = ${tenantId}
@@ -237,10 +263,19 @@ export async function resolveCompanyTwilioVoiceConfiguration(
         { cause: error },
       );
     }
-    const tenant = (rows as Array<Record<string, unknown>>)[0];
+  const tenant = (rows as Array<Record<string, unknown>>)[0];
     if (!tenant) throw new Error('Organization not found');
 
-    const next = await provisionMissingCompanyVoiceResources(
+  const saveProgress = async (configuration: CompanyVoiceConfigurationRecord) => {
+    await db.execute(sql`
+      update tenants set
+        twilio_api_key_sid = ${configuration.apiKeySid},
+        twilio_api_key_secret = ${configuration.apiKeySecret ? encryptCredential(configuration.apiKeySecret) : null},
+        twilio_twiml_app_sid = ${configuration.twimlAppSid}
+      where id = ${tenantId}
+    `);
+  };
+  const next = await provisionMissingCompanyVoiceResources(
       account.subaccountSid,
       String(tenant.business_name || tenant.name || tenantId),
       {
@@ -251,15 +286,15 @@ export async function resolveCompanyTwilioVoiceConfiguration(
         twimlAppSid: tenant.twilio_twiml_app_sid ? String(tenant.twilio_twiml_app_sid) : null,
       },
       provisioner,
-      webhookUrl,
-    );
-    await tx.execute(sql`
+    webhookUrl,
+    saveProgress,
+  );
+  await db.execute(sql`
       update tenants
       set twilio_api_key_sid = ${next.apiKeySid},
           twilio_api_key_secret = ${encryptCredential(next.apiKeySecret)},
           twilio_twiml_app_sid = ${next.twimlAppSid}
       where id = ${tenantId}
-    `);
-    return { tenantId, subaccountSid: account.subaccountSid, ...next };
-  });
+  `);
+  return { tenantId, subaccountSid: account.subaccountSid, ...next };
 }

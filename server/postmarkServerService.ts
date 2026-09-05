@@ -56,12 +56,12 @@ class PostmarkServerService {
       });
 
       if (!response.ok) {
-        const errorData = await response.text();
-        console.error('Postmark server creation failed:', response.status, errorData);
+        await response.text();
+        console.error('Postmark server creation failed:', response.status);
         
         return {
           success: false,
-          error: `Failed to create Postmark server: ${response.status} ${errorData}`
+          error: `Failed to create Postmark server: HTTP ${response.status}`
         };
       }
 
@@ -80,6 +80,25 @@ class PostmarkServerService {
     }
   }
 
+  async findServerByName(name: string): Promise<PostmarkServerResult> {
+    try {
+      const response = await fetch(`${this.baseUrl}/servers?count=500&offset=0`, {
+        headers: { 'Accept': 'application/json', 'X-Postmark-Account-Token': this.accountToken },
+      });
+      if (!response.ok) return { success: false, error: `Failed to list Postmark servers: ${response.status}` };
+      const data = await response.json() as { Servers?: PostmarkServer[] };
+      const summary = (data.Servers || []).find(server => server.Name === name);
+      if (!summary) return { success: true };
+
+      // The list endpoint may omit ApiTokens. Always load the full server
+      // record before treating a deterministic-name match as reusable.
+      return this.getServer(summary.ID);
+    } catch (error) {
+      console.error('Error listing Postmark servers:', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error occurred' };
+    }
+  }
+
   async getServer(serverId: number): Promise<PostmarkServerResult> {
     try {
       const response = await fetch(`${this.baseUrl}/servers/${serverId}`, {
@@ -91,10 +110,10 @@ class PostmarkServerService {
       });
 
       if (!response.ok) {
-        const errorData = await response.text();
+        await response.text();
         return {
           success: false,
-          error: `Failed to get Postmark server: ${response.status} ${errorData}`
+          error: `Failed to get Postmark server: HTTP ${response.status}`
         };
       }
 

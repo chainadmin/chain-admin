@@ -48,6 +48,28 @@ test('provisions only missing company Voice resources', async () => {
   assert.deepEqual(calls, []);
 });
 
+test('replaces an unrecoverable API key and persists progress before TwiML work', async () => {
+  const { provisionMissingCompanyVoiceResources } = await import('./companyTwilioService');
+  const calls: string[] = [];
+  const progress: any[] = [];
+  const provisioner = {
+    async createCompanyApiKey() { calls.push('create-key'); return { sid:'SK-new', secret:'new-secret' }; },
+    async createCompanyTwimlApp() { calls.push('create-app'); return { sid:'AP-new' }; },
+    async findCompanyApiKey() { calls.push('find-key'); return { sid:'SK-old' }; },
+    async deleteCompanyApiKey(_account: string, sid: string) { calls.push(`delete:${sid}`); },
+  };
+  const result = await provisionMissingCompanyVoiceResources(
+    'AC-company', 'Company', { apiKeySid:'SK-old', apiKeySecret:null, twimlAppSid:null },
+    provisioner, 'https://company.example/api/voice/outbound',
+    async value => { progress.push({ ...value }); },
+  );
+  assert.equal(result.apiKeySid, 'SK-new');
+  assert.deepEqual(calls, ['find-key', 'delete:SK-old', 'create-key', 'create-app']);
+  assert.equal(progress.length, 2);
+  assert.equal(progress[0].apiKeySecret, 'new-secret');
+  assert.equal(progress[1].twimlAppSid, 'AP-new');
+});
+
 test('Voice token uses company credentials and a tenant/user-bound identity', async () => {
   const { buildTenantVoiceIdentity, generateVoiceToken } = await import('./twilioVoiceService');
   const token = await generateVoiceToken('same-user', 'tenant-a', async () => ({

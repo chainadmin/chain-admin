@@ -2410,6 +2410,15 @@ export async function runMigrations() {
       await client.query(`CREATE INDEX IF NOT EXISTS consumers_tenant_name_search_idx ON consumers (tenant_id, LOWER(last_name), LOWER(first_name), id)`);
       await client.query(`CREATE INDEX IF NOT EXISTS accounts_tenant_consumer_idx ON accounts (tenant_id, consumer_id)`);
       await client.query(`CREATE INDEX IF NOT EXISTS agency_credentials_tenant_active_idx ON agency_credentials (tenant_id, is_active)`);
+      const plaintextPostmarkTokens = await client.query(`
+        SELECT id, postmark_server_token FROM tenants
+        WHERE postmark_server_token IS NOT NULL AND postmark_server_token NOT LIKE 'enc:v1:%'
+      `);
+      for (const row of plaintextPostmarkTokens.rows) {
+        await client.query(`UPDATE tenants SET postmark_server_token = $2 WHERE id = $1`, [
+          row.id, encryptCredential(row.postmark_server_token),
+        ]);
+      }
       console.log('  ✓ enterprise user/Postmark columns and contact indexes');
     } catch (err: any) {
       console.log(`  ⚠ enterprise capacity migration: ${err.message}`);
@@ -2659,6 +2668,22 @@ export async function runMigrations() {
         login_confirmed_at TIMESTAMP,
         updated_at TIMESTAMP NOT NULL DEFAULT NOW()
       )
+    `);
+    await client.query(`
+      ALTER TABLE chiamo_service_configurations
+        ADD COLUMN IF NOT EXISTS core_conversion_status TEXT NOT NULL DEFAULT 'PENDING',
+        ADD COLUMN IF NOT EXISTS core_conversion_error TEXT,
+        ADD COLUMN IF NOT EXISTS core_conversion_attempted_at TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS postmark_status TEXT NOT NULL DEFAULT 'NOT_STARTED',
+        ADD COLUMN IF NOT EXISTS postmark_error TEXT,
+        ADD COLUMN IF NOT EXISTS postmark_attempted_at TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS voice_provider_status TEXT NOT NULL DEFAULT 'NOT_REQUESTED',
+        ADD COLUMN IF NOT EXISTS voice_provider_error TEXT,
+        ADD COLUMN IF NOT EXISTS voice_provider_attempted_at TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS invitation_status TEXT NOT NULL DEFAULT 'NOT_SENT',
+        ADD COLUMN IF NOT EXISTS invitation_error TEXT,
+        ADD COLUMN IF NOT EXISTS invitation_attempted_at TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS readiness_status TEXT NOT NULL DEFAULT 'NOT_READY'
     `);
     // A tenant can have exactly one phone product entitlement. This intentionally
     // records ownership without touching historical invoices or joining tenants.

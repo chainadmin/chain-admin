@@ -286,6 +286,7 @@ function Router() {
         <Route path="/get-started" component={ChiamoGetStarted} />
         <Route path="/" component={ChiamoLanding} />
         <Route path="/agency/forgot-password" component={AgencyForgotPassword} />
+        <Route path="/agency/reset-password" component={AgencyResetPassword} />
         <Route path="/privacy-policy" component={PrivacyPolicy} />
         <Route path="/terms-of-service" component={TermsOfService} />
         <Route path="/:rest*" component={ChiamoLanding} />
