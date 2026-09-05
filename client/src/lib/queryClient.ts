@@ -22,7 +22,7 @@ export class ApiError extends Error {
   }
 }
 
-async function parseErrorResponse(res: Response): Promise<unknown> {
+export async function parseErrorResponse(res: Response): Promise<unknown> {
   const contentType = res.headers.get("content-type") ?? "";
 
   if (contentType.includes("application/json")) {
@@ -34,6 +34,19 @@ async function parseErrorResponse(res: Response): Promise<unknown> {
     }
   }
 
+  if (contentType.includes("text/html")) {
+    try {
+      await res.text();
+    } catch (error) {
+      console.error("Failed to read HTML error response body", error);
+    }
+    return {
+      message: res.status >= 500
+        ? "The server is temporarily unavailable. No changes were made; please try again."
+        : res.statusText || `Request failed with status ${res.status}`,
+    };
+  }
+
   try {
     const text = await res.text();
     return text || null;
@@ -41,6 +54,10 @@ async function parseErrorResponse(res: Response): Promise<unknown> {
     console.error("Failed to read error response body", error);
     return null;
   }
+}
+
+export function isTransientGatewayError(error: unknown): boolean {
+  return error instanceof ApiError && [502, 503, 504].includes(error.status);
 }
 
 async function throwIfResNotOk(res: Response) {

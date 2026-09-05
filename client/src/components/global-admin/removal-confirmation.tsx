@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Database, Loader2, LockKeyhole, RefreshCw, ShieldAlert } from "lucide-react";
-import { ApiError, apiRequest, queryClient } from "@/lib/queryClient";
+import { ApiError, apiRequest, isTransientGatewayError, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -61,7 +61,8 @@ export function RemovalConfirmation({ open, onOpenChange, target, onSuccess }: P
       return await response.json() as Preflight;
     },
     enabled: open,
-    retry: false,
+    retry: (failureCount, error) => failureCount < 2 && isTransientGatewayError(error),
+    retryDelay: attempt => Math.min(750 * 2 ** attempt, 3000),
   });
   const current = preflight || query.data;
   const execute = useMutation({
