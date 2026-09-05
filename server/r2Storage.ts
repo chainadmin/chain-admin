@@ -11,6 +11,33 @@ const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL; // e.g., https://logos.yourdoma
 // Initialize R2 client (S3-compatible)
 let r2Client: S3Client | null = null;
 
+/** Return an R2 logo key only when the URL is unambiguously owned by tenant. */
+export function tenantOwnedLogoKey(logoUrl: unknown, tenantId: string, publicUrl = R2_PUBLIC_URL): string | null {
+  if (typeof logoUrl !== "string" || !tenantId || !publicUrl) return null;
+  try {
+    const base = new URL(publicUrl);
+    const candidate = new URL(logoUrl);
+    if (candidate.origin !== base.origin || candidate.username || candidate.password) return null;
+    const basePath = base.pathname.replace(/\/+$/, "");
+    const encodedPath = candidate.pathname;
+    // URL normalisation hides ../, so reject encoded traversal before decoding.
+    if (/%2e|%2f|%5c|%25/i.test(encodedPath)) return null;
+    const path = decodeURIComponent(encodedPath);
+    const prefix = `${basePath}/logos/${tenantId}/`.replace(/^\/+/, "");
+    const key = path.replace(/^\/+/, "");
+    if (!key.startsWith(prefix)) return null;
+    const remainder = key.slice(prefix.length);
+    if (!remainder || remainder.includes("/") || remainder === "." || remainder === "..") return null;
+    return key;
+  } catch {
+    return null;
+  }
+}
+
+export function isTenantOwnedLogoUrl(logoUrl: unknown, tenantId: string, publicUrl = R2_PUBLIC_URL): boolean {
+  return tenantOwnedLogoKey(logoUrl, tenantId, publicUrl) !== null;
+}
+
 function getR2Client(): S3Client | null {
   if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY) {
     console.warn('Cloudflare R2 credentials not configured. Logo upload will not work.');
@@ -83,13 +110,15 @@ export async function deleteLogo(logoPath: string): Promise<boolean> {
   }
 
   try {
-    // Extract path from URL if needed
+    // Callers that have a tenant must use deleteTenantOwnedLogo. Keep this
+    // compatibility method for legacy paths, but never accept traversal.
     let path = logoPath;
     if (logoPath.includes('://')) {
       // Extract path from full URL
       const url = new URL(logoPath);
       path = url.pathname.substring(1); // Remove leading slash
     }
+    if (!/^logos\/[^/]+\/[^/]+$/.test(path)) return false;
 
     const command = new DeleteObjectCommand({
       Bucket: R2_BUCKET_NAME,
@@ -102,6 +131,12 @@ export async function deleteLogo(logoPath: string): Promise<boolean> {
     console.error('Error deleting logo from R2:', error);
     return false;
   }
+}
+
+/** Safely delete only a current tenant's own logo object. */
+export async function deleteTenantOwnedLogo(logoUrl: unknown, tenantId: string): Promise<boolean> {
+  const key = tenantOwnedLogoKey(logoUrl, tenantId);
+  return key ? deleteLogo(key) : false;
 }
 
 // Generate a presigned URL for direct client-side upload (optional, for future use)

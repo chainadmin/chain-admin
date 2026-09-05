@@ -17,6 +17,7 @@ import { PlatformAnnouncementsPanel } from "@/components/global-admin/platform-a
 import { CommunicationsPanel } from "@/components/global-admin/communications-panel";
 import { DOCUMENT_SIGNING_ADDON_PRICE, AI_AUTO_RESPONSE_ADDON_PRICE } from "@shared/billing-plans";
 import { ChiamoAdminModule } from "@/pages/chiamo-admin";
+import { RemovalConfirmation } from "@/components/global-admin/removal-confirmation";
 // Simple currency formatter
 const formatCurrency = (amount: number) => {
   return new Intl.NumberFormat('en-US', {
@@ -560,30 +561,6 @@ export default function GlobalAdmin() {
       toast({
         title: "Error",
         description: "Failed to send test email",
-        variant: "destructive",
-      });
-    }
-  });
-
-  // Mutation to delete agency
-  const deleteAgencyMutation = useMutation({
-    mutationFn: async (agencyId: string) => {
-      return apiRequest('DELETE', `/api/admin/agencies/${agencyId}`, {});
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/tenants'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/admin/stats'] });
-      setDeleteAgencyDialogOpen(false);
-      setSelectedAgencyForDeletion(null);
-      toast({
-        title: "Agency Deleted",
-        description: "The agency and all associated data have been permanently deleted",
-      });
-    },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to delete agency",
         variant: "destructive",
       });
     }
@@ -3746,75 +3723,16 @@ export default function GlobalAdmin() {
         isPlatformAdmin={isPlatformAdmin}
       />
 
-      {/* Delete Agency Confirmation Dialog */}
-      <Dialog open={deleteAgencyDialogOpen} onOpenChange={setDeleteAgencyDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center text-red-600">
-              <AlertTriangle className="h-5 w-5 mr-2" />
-              Delete Agency
-            </DialogTitle>
-          </DialogHeader>
-          {selectedAgencyForDeletion && (
-            <div className="space-y-4">
-              <div className="bg-red-50 p-4 rounded-lg">
-                <p className="text-sm text-red-800 font-medium">
-                  ⚠️ WARNING: This action cannot be undone!
-                </p>
-                <p className="text-sm text-red-800 mt-2">
-                  This will permanently delete the agency and ALL associated data including:
-                </p>
-                <ul className="text-sm text-red-800 mt-2 list-disc list-inside">
-                  <li>All consumers and their accounts</li>
-                  <li>All payment records</li>
-                  <li>All communication history</li>
-                  <li>All settings and configurations</li>
-                </ul>
-              </div>
-              <div>
-                <p className="text-sm text-gray-600 font-medium">Agency Details:</p>
-                <p className="font-medium mt-1">{selectedAgencyForDeletion.name}</p>
-                <p className="text-sm text-gray-600">{selectedAgencyForDeletion.email}</p>
-                <p className="text-sm text-gray-600">Slug: {selectedAgencyForDeletion.slug}</p>
-                <p className="text-sm text-gray-600 mt-2">
-                  {selectedAgencyForDeletion.stats?.consumerCount || 0} consumers • {selectedAgencyForDeletion.stats?.accountCount || 0} accounts
-                </p>
-              </div>
-              <div className="flex gap-2 justify-end">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setDeleteAgencyDialogOpen(false);
-                    setSelectedAgencyForDeletion(null);
-                  }}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="destructive"
-                  onClick={() => {
-                    deleteAgencyMutation.mutate(selectedAgencyForDeletion.id);
-                  }}
-                  disabled={deleteAgencyMutation.isPending}
-                  data-testid="button-confirm-delete-agency"
-                >
-                  {deleteAgencyMutation.isPending ? (
-                    <>
-                      <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2" />
-                      Deleting...
-                    </>
-                  ) : (
-                    <>
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Delete Agency
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {selectedAgencyForDeletion && (
+        <RemovalConfirmation
+          open={deleteAgencyDialogOpen}
+          onOpenChange={(open) => {
+            setDeleteAgencyDialogOpen(open);
+            if (!open) setSelectedAgencyForDeletion(null);
+          }}
+          target={{ id: String(selectedAgencyForDeletion.id), name: selectedAgencyForDeletion.name, kind: "tenant", product: "CHAIN" }}
+        />
+      )}
       
       {/* SMS Configuration Dialog */}
       <Dialog open={smsConfigDialogOpen} onOpenChange={setSmsConfigDialogOpen}>

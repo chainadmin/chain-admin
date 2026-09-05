@@ -18,6 +18,8 @@ import {
   platformUsers,
   globalAdminCredentials,
   globalAdminLoginAttempts,
+  adminRemovalAudits,
+  adminRemovalCleanupTasks,
   tenants,
   tenantSettings,
   consumers,
@@ -45,9 +47,24 @@ import {
   voipTenantSettings,
   voipVoicemails,
   voipSuspendedCalls,
+  phoneProductEntitlements,
+  voipCallLogs,
+  emailReplies,
+  smsReplies,
+  documents,
+  signatureRequests,
+  signedDocuments,
+  signatureAuditTrail,
+  tenantAgreements,
+  paymentProcessingLogs,
+  paymentApprovals,
+  communicationAutomations,
+  automationExecutions,
   tenantSmsConfigurations,
   manualArrangements,
   manualPayments,
+  walletLedger,
+  campaignLogs,
   pushDevices,
   type Account,
   type Consumer,
@@ -69,14 +86,14 @@ import { smsService } from "./smsService";
 import { smaxService } from "./smaxService";
 import { dmpService } from "./dmpService";
 import { eventService } from "./eventService";
-import { uploadLogo } from "./r2Storage";
+import { deleteTenantOwnedLogo, tenantOwnedLogoKey, uploadLogo } from "./r2Storage";
 import { downloadVoiceGreeting, uploadVoiceGreeting } from "./voiceObjectStorage";
 import externalApiRouter from "./external-api";
 import { registerWalletRoutes } from "./walletRoutes";
 import { registerChiamoRoutes } from "./chiamoRoutes";
 import { resolveChiamoBaseUrl } from "./chiamoOnboarding";
 import { CHIAMO_SUPPORT_EMAIL } from "@shared/chiamo";
-import { chiamoServiceConfigurations } from "@shared/chiamo-schema";
+import { chiamoLeads, chiamoServiceConfigurations, chiamoSubscriptions } from "@shared/chiamo-schema";
 import { hashPasswordResetToken, isChainActivationReset, passwordResetProduct } from "./passwordResetPolicy";
 import {
   findCanonicalTenant,
@@ -96,6 +113,8 @@ import {
 import { walletService, InsufficientFundsError } from "./walletService";
 import { AuthnetService } from "./authnetService";
 import bcrypt from "bcryptjs";
+import { makePreflight, normalizePreflight, sanitizeProviderError, validateRemovalConfirmation } from "./removalService";
+import { suspendCompanyTwilioSubaccount } from "./companyTwilioService";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import {
@@ -11634,6 +11653,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Update custom branding with logo URL
       const customBranding = (currentSettings?.customBranding as any) || {};
+      const priorLogoUrl = customBranding.logoUrl;
       customBranding.logoUrl = logoUrl;
       
       // Update tenant settings
@@ -11653,6 +11673,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
       
       const updatedSettings = await storage.upsertTenantSettings(settingsData);
+      // Persistence is the boundary: a failed old-object cleanup must never
+      // undo the newly saved logo. Ownership validation prevents external or
+      // malformed URL deletion.
+      if (priorLogoUrl && priorLogoUrl !== logoUrl) {
+        void deleteTenantOwnedLogo(priorLogoUrl, tenantId).then(deleted => {
+          if (!deleted) console.warn("Previous tenant logo cleanup was not completed", { tenantId });
+        }).catch(() => console.warn("Previous tenant logo cleanup failed", { tenantId }));
+      }
       
       res.json({ 
         message: "Logo uploaded successfully",
@@ -20942,6 +20970,527 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Platform removal is deliberately kept here, next to the Global Admin
+  // credential gate. Provider work is queued, never part of the DB decision.
+  const removalCounts = async (tx: any, tenantId: string) => {
+    // A single aggregate query is intentional. node-postgres transaction
+    // clients cannot execute Promise.all queries concurrently without risking
+    // protocol errors. Proposed arrangements require an account, so an older
+    // development schema without that optional table is still conservatively
+    // blocked by the account count.
+    const result = await tx.execute(sql`
+      SELECT
+        (SELECT count(*)::int FROM agency_credentials WHERE tenant_id=${tenantId}) AS users,
+        (SELECT count(*)::int FROM consumers WHERE tenant_id=${tenantId}) AS consumers,
+        (SELECT count(*)::int FROM accounts WHERE tenant_id=${tenantId}) AS accounts,
+        (SELECT count(*)::int FROM invoices WHERE tenant_id=${tenantId}) AS invoices,
+        (SELECT count(*)::int FROM payments WHERE tenant_id=${tenantId}) AS payments,
+        (SELECT count(*)::int FROM manual_payments WHERE tenant_id=${tenantId}) AS manual_payments,
+        (SELECT count(*)::int FROM manual_arrangements WHERE tenant_id=${tenantId}) AS arrangements,
+        (SELECT count(*)::int FROM payment_schedules WHERE tenant_id=${tenantId}) AS payment_schedules,
+        (SELECT count(*)::int FROM payment_processing_logs WHERE tenant_id=${tenantId}) AS processing,
+        (SELECT count(*)::int FROM payment_approvals WHERE tenant_id=${tenantId}) AS approvals,
+        (SELECT count(*)::int FROM wallet_ledger WHERE tenant_id=${tenantId}) AS wallet_ledger,
+        (SELECT count(*)::int FROM documents WHERE tenant_id=${tenantId}) AS documents,
+        (SELECT count(*)::int FROM signature_requests WHERE tenant_id=${tenantId}) AS signature_requests,
+        (SELECT count(*)::int FROM signed_documents WHERE tenant_id=${tenantId}) AS signed_documents,
+        (
+          SELECT count(*)::int
+          FROM signature_audit_trail sat
+          INNER JOIN signature_requests sr ON sr.id=sat.signature_request_id
+          WHERE sr.tenant_id=${tenantId}
+        ) AS signature_audit,
+        (SELECT count(*)::int FROM tenant_agreements WHERE tenant_id=${tenantId}) AS agreements,
+        (SELECT count(*)::int FROM email_logs WHERE tenant_id=${tenantId}) AS email_logs,
+        (SELECT count(*)::int FROM email_replies WHERE tenant_id=${tenantId}) AS email_replies,
+        (SELECT count(*)::int FROM sms_tracking WHERE tenant_id=${tenantId}) AS sms_tracking,
+        (SELECT count(*)::int FROM sms_replies WHERE tenant_id=${tenantId}) AS sms_replies,
+        (SELECT count(*)::int FROM messaging_usage_events WHERE tenant_id=${tenantId}) AS messaging_usage,
+        (SELECT count(*)::int FROM voip_suspended_calls WHERE tenant_id=${tenantId}) AS suspended_calls,
+        (SELECT count(*)::int FROM voip_voicemails WHERE tenant_id=${tenantId}) AS voicemails,
+        (SELECT count(*)::int FROM voip_call_logs WHERE tenant_id=${tenantId}) AS call_logs,
+        (SELECT count(*)::int FROM campaign_logs WHERE tenant_id=${tenantId}) AS campaign_history,
+        (
+          SELECT count(*)::int
+          FROM automation_executions ae
+          INNER JOIN communication_automations ca ON ca.id=ae.automation_id
+          WHERE ca.tenant_id=${tenantId}
+        ) AS automation_history,
+        (
+          SELECT count(*)::int
+          FROM communication_sequence_enrollments cse
+          INNER JOIN communication_sequences cs ON cs.id=cse.sequence_id
+          WHERE cs.tenant_id=${tenantId}
+        ) AS sequence_history,
+        (SELECT count(*)::int FROM chiamo_leads WHERE converted_tenant_id=${tenantId}) AS converted_leads
+    `);
+    const row = (result as any).rows?.[0] || {};
+    const number = (key: string) => Number(row[key] || 0);
+    return {
+      users: number("users"),
+      consumers: number("consumers"),
+      accounts: number("accounts"),
+      invoices: number("invoices"),
+      payments: number("payments") + number("manual_payments"),
+      signedLegalRecords: number("signed_documents") + number("signature_audit") + number("agreements"),
+      calls: number("suspended_calls") + number("voicemails") + number("call_logs"),
+      messages: number("email_logs") + number("email_replies") + number("sms_tracking") + number("sms_replies"),
+      paymentSchedules: number("payment_schedules"),
+      manualPayments: number("manual_payments"),
+      arrangements: number("arrangements"),
+      processing: number("processing"),
+      approvals: number("approvals"),
+      walletLedger: number("wallet_ledger"),
+      documents: number("documents"),
+      signatureRequests: number("signature_requests"),
+      signedDocuments: number("signed_documents"),
+      signatureAudit: number("signature_audit"),
+      agreements: number("agreements"),
+      emailLogs: number("email_logs"),
+      emailReplies: number("email_replies"),
+      smsReplies: number("sms_replies"),
+      tracking: number("sms_tracking"),
+      messagingUsage: number("messaging_usage"),
+      voicemails: number("voicemails"),
+      callLogs: number("call_logs"),
+      campaignHistory: number("campaign_history"),
+      automationHistory: number("automation_history"),
+      sequenceHistory: number("sequence_history"),
+      convertedLeads: number("converted_leads"),
+    };
+  };
+  const tenantPreflight = async (tx: any, tenantId: string, product: "CHAIN" | "CHIAMO") => {
+    const [tenant] = await tx.select().from(tenants).where(eq(tenants.id, tenantId)).for("update").limit(1);
+    if (!tenant) return null;
+    const [settings] = await tx.select().from(tenantSettings).where(eq(tenantSettings.tenantId, tenantId)).limit(1);
+    const [phoneEntitlement] = await tx.select({
+      billingOwner: phoneProductEntitlements.billingOwner,
+    }).from(phoneProductEntitlements).where(eq(phoneProductEntitlements.tenantId, tenantId)).limit(1);
+    const counts = await removalCounts(tx, tenantId);
+    const logos = [(settings?.customBranding as any)?.logoUrl, (tenant.brand as any)?.logoUrl].filter((x): x is string => typeof x === "string");
+    return makePreflight({
+      target: { id: tenant.id, name: tenant.name, chainCoreEnabled: tenant.chainCoreEnabled, chiamoConnectEnabled: tenant.chiamoConnectEnabled },
+      product, counts, logoReferences: logos,
+      providerResources: {
+        twilioSubaccountSid: tenant.twilioAccountSid || null,
+        postmarkServerId: tenant.postmarkServerId || null,
+        phoneBillingOwner: phoneEntitlement?.billingOwner ?? (tenant.chiamoConnectEnabled ? "CHIAMO" : "CHAIN"),
+      },
+    });
+  };
+  const publicTenantPreflight = (preflight: any) => normalizePreflight(preflight, "TENANT", preflight.logoReferences.map((url: string, index: number) => {
+    const key = tenantOwnedLogoKey(url, preflight.target.id);
+    return { source: index === 0 ? "tenant_settings.custom_branding.logoUrl" : "tenants.brand.logoUrl", url, owned: Boolean(key), ...(key ? { key } : {}) };
+  }));
+  const selectedProductActive = (preflight: any) => preflight.product === "CHAIN" ? preflight.target.chainCoreEnabled : preflight.target.chiamoConnectEnabled;
+  const verifyRemovalPassword = async (password: unknown) => {
+    if (typeof password !== "string") return false;
+    const [credential] = await db.select().from(globalAdminCredentials).where(eq(globalAdminCredentials.id, "primary")).limit(1);
+    return Boolean(credential && await bcrypt.compare(password, credential.passwordHash));
+  };
+  const attemptCleanupTask = async (task: any) => {
+    try {
+      if (task.task_type === "TWILIO_SUSPEND") await suspendCompanyTwilioSubaccount(task.payload.subaccountSid);
+      else if (task.task_type === "POSTMARK_DELETE") {
+        const outcome = await postmarkServerService.deleteServer(Number(task.payload.serverId));
+        if (!outcome.success) throw new Error(outcome.error);
+      } else if (task.task_type === "LOGO_DELETE") {
+        if (!await deleteTenantOwnedLogo(task.payload.logoUrl, task.payload.tenantId)) throw new Error("Logo object deletion was not completed");
+      } // retained/unknown work is an intentional SKIPPED decision.
+      const status = task.task_type === "POSTMARK_RETAINED" || !["TWILIO_SUSPEND", "POSTMARK_DELETE", "LOGO_DELETE"].includes(task.task_type) ? "SKIPPED" : "SUCCEEDED";
+      await db.execute(sql`UPDATE admin_removal_cleanup_tasks SET status=${status}, completed_at=NOW(), updated_at=NOW(), last_error=NULL WHERE id=${task.id}`);
+      return { id: task.id, type: task.task_type, status };
+    } catch (error) {
+      const message = sanitizeProviderError(error);
+      await db.execute(sql`UPDATE admin_removal_cleanup_tasks SET status='FAILED', last_error=${message}, updated_at=NOW() WHERE id=${task.id}`);
+      return { id: task.id, type: task.task_type, status: "FAILED", error: message };
+    }
+  };
+  const claimCleanupTasks = async (auditId: string) => {
+    const claimed = await db.execute(sql`
+      WITH candidates AS (
+        SELECT id
+        FROM admin_removal_cleanup_tasks
+        WHERE audit_id = ${auditId}
+          AND (
+            status IN ('PENDING', 'FAILED')
+            OR (status = 'RUNNING' AND claimed_at < NOW() - INTERVAL '10 minutes')
+          )
+        ORDER BY created_at
+        FOR UPDATE SKIP LOCKED
+      )
+      UPDATE admin_removal_cleanup_tasks AS task
+      SET status = 'RUNNING',
+          attempts = task.attempts + 1,
+          claimed_at = NOW(),
+          updated_at = NOW()
+      FROM candidates
+      WHERE task.id = candidates.id
+      RETURNING task.*
+    `);
+    return (claimed as any).rows || [];
+  };
+  const refreshCleanupResult = async (auditId: string) => {
+    const rows = await db.select({
+      id: adminRemovalCleanupTasks.id,
+      type: adminRemovalCleanupTasks.taskType,
+      status: adminRemovalCleanupTasks.status,
+      error: adminRemovalCleanupTasks.lastError,
+    }).from(adminRemovalCleanupTasks).where(eq(adminRemovalCleanupTasks.auditId, auditId));
+    const errors = rows.flatMap(row => row.error ? [row.error] : []);
+    const cleanupStatus = rows.some(row => row.status === "FAILED")
+      ? "FAILED"
+      : rows.some(row => row.status === "PENDING" || row.status === "RUNNING")
+        ? "PENDING"
+        : rows.length ? "COMPLETE" : "NOT_REQUIRED";
+    await db.update(adminRemovalAudits).set({
+      cleanupStatus,
+      cleanupError: errors[0] || null,
+    }).where(eq(adminRemovalAudits.id, auditId));
+    return { status: cleanupStatus, tasks: rows, errors };
+  };
+  const stopChainProduct = async (tx: any, tenantId: string) => {
+    const now = new Date();
+    await tx.update(subscriptions).set({ status: "cancelled", updatedAt: now }).where(eq(subscriptions.tenantId, tenantId));
+    await tx.execute(sql`UPDATE tenant_addons SET status='cancelled', cancelled_at=COALESCE(cancelled_at, NOW()), next_charge_at=NULL WHERE tenant_id=${tenantId} AND status <> 'cancelled'`);
+    await tx.execute(sql`UPDATE payment_schedules SET status='cancelled', updated_at=NOW() WHERE tenant_id=${tenantId} AND status IN ('active','paused')`);
+    await tx.execute(sql`UPDATE email_campaigns SET status='cancelled' WHERE tenant_id=${tenantId} AND status IN ('pending','sending')`);
+    await tx.execute(sql`UPDATE sms_campaigns SET status='cancelled' WHERE tenant_id=${tenantId} AND status IN ('pending','pending_approval','sending')`);
+    await tx.execute(sql`UPDATE campaign_logs SET status='failed' WHERE tenant_id=${tenantId} AND status IN ('pending','sending')`);
+    await tx.update(communicationAutomations).set({ isActive: false, nextExecution: null, updatedAt: now }).where(eq(communicationAutomations.tenantId, tenantId));
+    await tx.execute(sql`UPDATE communication_sequences SET is_active=false, updated_at=NOW() WHERE tenant_id=${tenantId}`);
+    await tx.execute(sql`
+      UPDATE communication_sequence_enrollments
+      SET status='cancelled', next_message_at=NULL
+      WHERE status IN ('active','paused')
+        AND sequence_id IN (SELECT id FROM communication_sequences WHERE tenant_id=${tenantId})
+    `);
+  };
+  const stopChiamoProduct = async (tx: any, tenantId: string) => {
+    await tx.update(chiamoServiceConfigurations).set({
+      accountActive: false,
+      customerLoginEnabled: false,
+      voiceEnabled: false,
+      inboundEnabled: false,
+      outboundEnabled: false,
+      smsEnabled: false,
+      updatedAt: new Date(),
+    }).where(eq(chiamoServiceConfigurations.tenantId, tenantId));
+    await tx.update(chiamoSubscriptions).set({
+      billingStatus: "CANCELLED",
+      nextBillingDate: null,
+      updatedAt: new Date(),
+    }).where(eq(chiamoSubscriptions.tenantId, tenantId));
+  };
+  const cancelSelectedPhoneEntitlement = async (tx: any, tenantId: string, product: "CHAIN" | "CHIAMO") => {
+    await tx.update(phoneProductEntitlements).set({
+      lifecycleStatus: "CANCELLED",
+      enabled: false,
+      disabledAt: new Date(),
+      updatedAt: new Date(),
+    }).where(and(
+      eq(phoneProductEntitlements.tenantId, tenantId),
+      eq(phoneProductEntitlements.billingOwner, product),
+    ));
+  };
+  app.get("/api/admin/removals/tenants/:tenantId/preflight", isPlatformAdmin, async (req: any, res) => {
+    const product = req.query.product;
+    if (product !== "CHAIN" && product !== "CHIAMO") return res.status(400).json({ code: "VALIDATION_ERROR", message: "product must be CHAIN or CHIAMO" });
+    const result = await db.transaction(tx => tenantPreflight(tx, req.params.tenantId, product));
+    if (!result) return res.status(404).json({ message: "Tenant not found" });
+    if (!selectedProductActive(result)) return res.status(409).json({ code: "PRODUCT_NOT_ACTIVE", message: "The selected product is not active for this tenant." });
+    return res.json(publicTenantPreflight(result));
+  });
+  app.post("/api/admin/removals/tenants/:tenantId", isPlatformAdmin, async (req: any, res) => {
+    const product = req.body?.product;
+    if (product !== "CHAIN" && product !== "CHIAMO") {
+      return res.status(400).json({ code: "VALIDATION_ERROR", message: "product must be CHAIN or CHIAMO" });
+    }
+    if (!(await verifyRemovalPassword(req.body?.password))) {
+      return res.status(401).json({ code: "INVALID_CREDENTIALS", message: "Current Global Admin password is required." });
+    }
+    let auditId: string | null = null;
+    try {
+      // First capture the authorized decision in a tenant-independent audit row.
+      // The actual mutation runs in a separate transaction, so a restrictive FK
+      // or other rollback can never erase evidence of the failed attempt.
+      const prepared = await db.transaction(async tx => {
+        const snapshot = await tenantPreflight(tx, req.params.tenantId, product);
+        if (!snapshot) throw Object.assign(new Error("Tenant not found"), { status: 404, code: "NOT_FOUND" });
+        if (!selectedProductActive(snapshot)) {
+          throw Object.assign(new Error("The selected product is not active for this tenant."), { status: 409, code: "PRODUCT_NOT_ACTIVE" });
+        }
+        const confirmation = validateRemovalConfirmation(snapshot.target.name, req.body?.typedName, req.body?.reason);
+        if (confirmation) throw Object.assign(new Error(confirmation), { status: 400, code: "VALIDATION_ERROR" });
+        if (req.body?.preflightFingerprint !== snapshot.fingerprint) {
+          throw Object.assign(new Error("The removal preflight changed. Review it and try again."), { status: 409, code: "PREFLIGHT_CHANGED" });
+        }
+        return snapshot;
+      });
+      const action = prepared.classification === "PERMANENT_DELETE"
+        ? "DELETE_TENANT"
+        : prepared.classification === "ARCHIVE" ? "ARCHIVE_TENANT" : "DEACTIVATE_PRODUCT";
+      const [audit] = await db.insert(adminRemovalAudits).values({
+        targetType: "TENANT",
+        targetId: req.params.tenantId,
+        actorId: "primary",
+        actorCredentialVersion: req.globalAdminClaims?.credentialVersion || null,
+        product,
+        classification: prepared.classification,
+        action,
+        reason: req.body.reason.trim(),
+        targetSnapshot: prepared.target,
+        dependencySnapshot: prepared,
+        outcome: "PENDING",
+        cleanupStatus: "NOT_REQUIRED",
+      }).returning();
+      auditId = audit.id;
+
+      const result = await db.transaction(async tx => {
+        const preflight = await tenantPreflight(tx, req.params.tenantId, product);
+        if (!preflight) throw Object.assign(new Error("Tenant not found"), { status: 404, code: "NOT_FOUND" });
+        if (!selectedProductActive(preflight)) {
+          throw Object.assign(new Error("The selected product is no longer active for this tenant."), { status: 409, code: "PREFLIGHT_CHANGED" });
+        }
+        if (preflight.fingerprint !== prepared.fingerprint || preflight.fingerprint !== req.body?.preflightFingerprint) {
+          throw Object.assign(new Error("The removal preflight changed. Review it and try again."), { status: 409, code: "PREFLIGHT_CHANGED" });
+        }
+        const confirmation = validateRemovalConfirmation(preflight.target.name, req.body?.typedName, req.body?.reason);
+        if (confirmation) throw Object.assign(new Error(confirmation), { status: 400, code: "VALIDATION_ERROR" });
+
+        await tx.execute(sql`DELETE FROM sessions WHERE sess -> 'agencyUser' ->> 'tenantId' = ${req.params.tenantId}`);
+        const phoneBillingOwner = preflight.providerResources.phoneBillingOwner;
+        if (preflight.classification === "PERMANENT_DELETE") {
+          // Only known non-retained configuration/identity rows are removed
+          // explicitly. Any missed or newly-added retained FK aborts safely.
+          await tx.delete(chiamoServiceConfigurations).where(eq(chiamoServiceConfigurations.tenantId, req.params.tenantId));
+          await tx.delete(chiamoSubscriptions).where(eq(chiamoSubscriptions.tenantId, req.params.tenantId));
+          await tx.delete(phoneProductEntitlements).where(eq(phoneProductEntitlements.tenantId, req.params.tenantId));
+          await tx.delete(tenantSmsConfigurations).where(eq(tenantSmsConfigurations.tenantId, req.params.tenantId));
+          await tx.delete(tenantSettings).where(eq(tenantSettings.tenantId, req.params.tenantId));
+          await tx.delete(agencyCredentials).where(eq(agencyCredentials.tenantId, req.params.tenantId));
+          const deleted = await tx.delete(tenants).where(eq(tenants.id, req.params.tenantId)).returning({ id: tenants.id });
+          if (deleted.length !== 1) throw new Error("Tenant delete did not affect exactly one row");
+        } else if (preflight.classification === "PRODUCT_DEACTIVATE") {
+          if (product === "CHAIN") {
+            await stopChainProduct(tx, req.params.tenantId);
+            await tx.update(tenants).set({
+              chainCoreEnabled: false,
+              emailServiceEnabled: false,
+              smsServiceEnabled: false,
+              portalAccessEnabled: false,
+              paymentProcessingEnabled: false,
+              ...(phoneBillingOwner === "CHAIN" ? { voipEnabled: false } : {}),
+            }).where(eq(tenants.id, req.params.tenantId));
+          } else {
+            await stopChiamoProduct(tx, req.params.tenantId);
+            await tx.update(tenants).set({
+              chiamoConnectEnabled: false,
+              ...(phoneBillingOwner === "CHIAMO" ? { voipEnabled: false } : {}),
+            }).where(eq(tenants.id, req.params.tenantId));
+          }
+          await cancelSelectedPhoneEntitlement(tx, req.params.tenantId, product);
+        } else {
+          if (product === "CHAIN") await stopChainProduct(tx, req.params.tenantId);
+          else await stopChiamoProduct(tx, req.params.tenantId);
+          await cancelSelectedPhoneEntitlement(tx, req.params.tenantId, product);
+          await tx.update(tenants).set({
+            isActive: false,
+            chainCoreEnabled: product === "CHAIN" ? false : preflight.target.chainCoreEnabled,
+            chiamoConnectEnabled: product === "CHIAMO" ? false : preflight.target.chiamoConnectEnabled,
+            suspendedAt: new Date(),
+            suspensionReason: req.body.reason.trim(),
+            emailServiceEnabled: false,
+            smsServiceEnabled: false,
+            portalAccessEnabled: false,
+            paymentProcessingEnabled: false,
+            voipEnabled: false,
+          }).where(eq(tenants.id, req.params.tenantId));
+          await tx.update(agencyCredentials).set({ isActive: false, updatedAt: new Date() }).where(eq(agencyCredentials.tenantId, req.params.tenantId));
+        }
+
+        const tasks: any[] = [];
+        const maySuspendSelectedTwilio = preflight.classification !== "PRODUCT_DEACTIVATE"
+          || phoneBillingOwner === product;
+        if (preflight.providerResources.twilioSubaccountSid && maySuspendSelectedTwilio) {
+          tasks.push({ auditId: audit.id, taskType: "TWILIO_SUSPEND", payload: { subaccountSid: preflight.providerResources.twilioSubaccountSid } });
+        }
+        if (preflight.classification === "PERMANENT_DELETE" && preflight.providerResources.postmarkServerId) {
+          tasks.push({ auditId: audit.id, taskType: "POSTMARK_DELETE", payload: { serverId: preflight.providerResources.postmarkServerId } });
+        }
+        if (preflight.classification !== "PERMANENT_DELETE" && preflight.providerResources.postmarkServerId) {
+          tasks.push({
+            auditId: audit.id,
+            taskType: "POSTMARK_RETAINED",
+            payload: { serverId: preflight.providerResources.postmarkServerId, decision: "SKIPPED_RETENTION" },
+            status: "SKIPPED",
+            completedAt: new Date(),
+          });
+        }
+        if (preflight.classification === "PERMANENT_DELETE") for (const logoUrl of preflight.logoReferences) {
+          if (tenantOwnedLogoKey(logoUrl, req.params.tenantId)) tasks.push({ auditId: audit.id, taskType: "LOGO_DELETE", payload: { tenantId: req.params.tenantId, logoUrl } });
+        }
+        if (tasks.length) await tx.insert(adminRemovalCleanupTasks).values(tasks);
+        const hasPendingCleanup = tasks.some(task => !task.status || task.status === "PENDING");
+        const initialCleanupStatus = hasPendingCleanup ? "PENDING" : tasks.length ? "COMPLETE" : "NOT_REQUIRED";
+        await tx.update(adminRemovalAudits).set({
+          outcome: "SUCCEEDED",
+          cleanupStatus: initialCleanupStatus,
+          completedAt: new Date(),
+        }).where(eq(adminRemovalAudits.id, audit.id));
+        return { auditId: audit.id, classification: preflight.classification };
+      });
+
+      const claimed = await claimCleanupTasks(result.auditId);
+      await Promise.all(claimed.map(attemptCleanupTask));
+      const cleanup = await refreshCleanupResult(result.auditId);
+      return res.json({
+        success: true,
+        message: cleanup.status === "FAILED"
+          ? "The database decision completed, but provider or object cleanup needs a retry."
+          : "Removal database decision completed.",
+        auditId: result.auditId,
+        classification: result.classification,
+        cleanup,
+      });
+    } catch (error: any) {
+      const status = error?.status || 409;
+      const code = error?.code || "DATABASE_CONFLICT";
+      const message = error?.status
+        ? error.message
+        : "The tenant could not be removed because dependent records require review.";
+      if (auditId) {
+        try {
+          await db.update(adminRemovalAudits).set({
+            outcome: "FAILED",
+            outcomeError: `${code}: ${sanitizeProviderError(message)}`,
+            cleanupStatus: "NOT_REQUIRED",
+            completedAt: new Date(),
+          }).where(eq(adminRemovalAudits.id, auditId));
+        } catch (auditError) {
+          console.error("Failed to finalize removal audit", { auditId, error: sanitizeProviderError(auditError) });
+        }
+      }
+      return res.status(status).json({ code, message, ...(auditId ? { auditId } : {}) });
+    }
+  });
+  app.get("/api/admin/chiamo/leads/:leadId/removal-preflight", isPlatformAdmin, async (req, res) => {
+    const [lead] = await db.select().from(chiamoLeads).where(eq(chiamoLeads.id, req.params.leadId)).limit(1);
+    if (!lead) return res.status(404).json({ message: "Lead not found" });
+    if (lead.convertedTenantId) {
+      const tenantResult = await db.transaction(tx => tenantPreflight(tx, lead.convertedTenantId!, "CHIAMO"));
+      if (!tenantResult) return res.status(409).json({ code: "CONVERTED_TENANT_MISSING", message: "The converted customer requires manual review." });
+      if (!selectedProductActive(tenantResult)) return res.status(409).json({ code: "PRODUCT_NOT_ACTIVE", message: "Chiamo is not active for this converted customer." });
+      const preflight = makePreflight({ ...tenantResult, target: { ...tenantResult.target, id: lead.id, name: lead.businessName, convertedTenantId: lead.convertedTenantId } } as any);
+      return res.json(normalizePreflight(preflight, "CHIAMO_LEAD", tenantResult.logoReferences.map((url: string) => ({ source: "converted_tenant_logo", url, owned: false }))));
+    }
+    const target = { id: lead.id, name: lead.businessName, chainCoreEnabled: false, chiamoConnectEnabled: false, unconvertedLead: true };
+    const preflight = makePreflight({ target, product: "CHIAMO", counts: { users: 0, consumers: 0, accounts: 0, invoices: 0, payments: 0, signedLegalRecords: 0, calls: 0, messages: 0 }, providerResources: {}, logoReferences: [] });
+    return res.json(normalizePreflight(preflight, "CHIAMO_LEAD", []));
+  });
+  app.post("/api/admin/chiamo/leads/:leadId/remove", isPlatformAdmin, async (req: any, res) => {
+    if (!(await verifyRemovalPassword(req.body?.password))) return res.status(401).json({ code: "INVALID_CREDENTIALS", message: "Current Global Admin password is required." });
+    let auditId: string | null = null;
+    try {
+      const prepared = await db.transaction(async tx => {
+        const [lead] = await tx.select().from(chiamoLeads).where(eq(chiamoLeads.id, req.params.leadId)).for("update").limit(1);
+        if (!lead) throw Object.assign(new Error("Lead not found"), { status: 404, code: "NOT_FOUND" });
+        if (lead.convertedTenantId) {
+          throw Object.assign(
+            new Error("This lead is a converted customer. Use the Chiamo customer removal control so its tenant history is archived safely."),
+            { status: 409, code: "CONVERTED_CUSTOMER_REQUIRES_TENANT_REMOVAL", tenantId: lead.convertedTenantId },
+          );
+        }
+        const preflight = makePreflight({
+          target: { id: lead.id, name: lead.businessName, chainCoreEnabled: false, chiamoConnectEnabled: false, unconvertedLead: true },
+          product: "CHIAMO",
+          counts: { users: 0, consumers: 0, accounts: 0, invoices: 0, payments: 0, signedLegalRecords: 0, calls: 0, messages: 0 },
+          providerResources: {},
+          logoReferences: [],
+        });
+        const confirmation = validateRemovalConfirmation(lead.businessName, req.body?.typedName, req.body?.reason);
+        if (confirmation) throw Object.assign(new Error(confirmation), { status: 400, code: "VALIDATION_ERROR" });
+        if (req.body?.preflightFingerprint !== preflight.fingerprint) throw Object.assign(new Error("The removal preflight changed. Review it and try again."), { status: 409, code: "PREFLIGHT_CHANGED" });
+        return { lead, preflight };
+      });
+
+      const [audit] = await db.insert(adminRemovalAudits).values({
+        targetType: "CHIAMO_LEAD",
+        targetId: prepared.lead.id,
+        actorId: "primary",
+        actorCredentialVersion: req.globalAdminClaims?.credentialVersion || null,
+        product: "CHIAMO",
+        classification: "PERMANENT_DELETE",
+        action: "DELETE_LEAD",
+        reason: req.body.reason.trim(),
+        targetSnapshot: prepared.preflight.target,
+        dependencySnapshot: prepared.preflight,
+        outcome: "PENDING",
+        cleanupStatus: "NOT_REQUIRED",
+      }).returning();
+      auditId = audit.id;
+
+      await db.transaction(async tx => {
+        const [lead] = await tx.select().from(chiamoLeads).where(eq(chiamoLeads.id, req.params.leadId)).for("update").limit(1);
+        if (!lead || lead.convertedTenantId) {
+          throw Object.assign(new Error("The lead changed while the preflight was open."), { status: 409, code: "PREFLIGHT_CHANGED" });
+        }
+        const current = makePreflight({
+          target: { id: lead.id, name: lead.businessName, chainCoreEnabled: false, chiamoConnectEnabled: false, unconvertedLead: true },
+          product: "CHIAMO",
+          counts: { users: 0, consumers: 0, accounts: 0, invoices: 0, payments: 0, signedLegalRecords: 0, calls: 0, messages: 0 },
+          providerResources: {},
+          logoReferences: [],
+        });
+        if (current.fingerprint !== prepared.preflight.fingerprint) {
+          throw Object.assign(new Error("The lead changed while the preflight was open."), { status: 409, code: "PREFLIGHT_CHANGED" });
+        }
+        const deleted = await tx.delete(chiamoLeads).where(eq(chiamoLeads.id, lead.id)).returning({ id: chiamoLeads.id });
+        if (deleted.length !== 1) throw new Error("Lead delete did not affect exactly one row");
+        await tx.update(adminRemovalAudits).set({
+          outcome: "SUCCEEDED",
+          completedAt: new Date(),
+        }).where(eq(adminRemovalAudits.id, audit.id));
+      });
+      return res.json({
+        success: true,
+        message: "The unconverted Chiamo lead was permanently deleted.",
+        auditId,
+        classification: "PERMANENT_DELETE",
+        cleanup: { status: "NOT_REQUIRED", tasks: [], errors: [] },
+      });
+    } catch (error: any) {
+      const status = error?.status || 409;
+      const code = error?.code || "DATABASE_CONFLICT";
+      const message = error?.status ? error.message : "The lead could not be removed because dependent records require review.";
+      if (auditId) {
+        try {
+          await db.update(adminRemovalAudits).set({
+            outcome: "FAILED",
+            outcomeError: `${code}: ${sanitizeProviderError(message)}`,
+            completedAt: new Date(),
+          }).where(eq(adminRemovalAudits.id, auditId));
+        } catch (auditError) {
+          console.error("Failed to finalize lead removal audit", { auditId, error: sanitizeProviderError(auditError) });
+        }
+      }
+      return res.status(status).json({ code, message, ...(auditId ? { auditId } : {}), ...(error?.tenantId ? { tenantId: error.tenantId } : {}) });
+    }
+  });
+  app.post("/api/admin/removals/:auditId/retry-cleanup", isPlatformAdmin, async (req, res) => {
+    const [audit] = await db.select({ id: adminRemovalAudits.id, cleanupStatus: adminRemovalAudits.cleanupStatus, cleanupError: adminRemovalAudits.cleanupError }).from(adminRemovalAudits).where(eq(adminRemovalAudits.id, req.params.auditId)).limit(1);
+    if (!audit) return res.status(404).json({ message: "Removal audit not found" });
+    const claimed = await claimCleanupTasks(req.params.auditId);
+    await Promise.all(claimed.map(attemptCleanupTask));
+    const cleanup = await refreshCleanupResult(req.params.auditId);
+    return res.json({
+      success: true,
+      message: claimed.length ? "Cleanup retry completed." : "No cleanup retry is required.",
+      auditId: req.params.auditId,
+      cleanup,
+    });
+  });
+
   const seedPlans = async (_req: any, res: any) => {
     try {
       const { seedSubscriptionPlans } = await import('./seed-subscription-plans');
@@ -22785,13 +23334,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/admin/agencies/:id', isPlatformAdmin, async (req: any, res) => {
     try {
       const { id } = req.params;
-      
-      // Delete the tenant (cascade will handle related records)
-      await db.delete(tenants).where(eq(tenants.id, id));
-      
-      res.json({ 
-        success: true, 
-        message: "Agency deleted successfully" 
+      const [tenant] = await db.select({ id: tenants.id }).from(tenants).where(eq(tenants.id, id)).limit(1);
+      if (!tenant) return res.status(404).json({ message: "Agency not found" });
+      return res.status(409).json({
+        code: "SAFE_REMOVAL_REQUIRED",
+        message: "Use the admin removal preflight and confirmed removal endpoint; direct deletion is disabled.",
       });
     } catch (error) {
       console.error("Error deleting agency:", error);

@@ -5,6 +5,7 @@ import { ApiError, apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { chiamoLeadStatuses } from "@shared/chiamo";
+import { RemovalConfirmation } from "@/components/global-admin/removal-confirmation";
 
 const sections = [["dashboard","Dashboard",LayoutDashboard],["leads","Leads",Bell],["customers","Customers",Users],["setup","Setup Queue",Settings2],["voice","Voice Services",Phone],["sms","SMS Services",MessageSquare],["numbers","Phone Numbers",Hash],["billing","Billing",CreditCard],["usage","Usage & Cost",Gauge],["support","Support / Notes",StickyNote]] as const;
 const money=(v:number)=>new Intl.NumberFormat("en-US",{style:"currency",currency:"USD"}).format((v||0)/100);
@@ -29,7 +30,8 @@ function AdminSection({section}:{section:string}){
  if(section==="usage")return <Table heads={["Organization","Revenue","Minutes","Voice Cost","Number Cost","Recording Cost","Gross Margin","Level"]} rows={(usage.data?.organizations||[]).map((x:any)=>[x.organization,money(x.revenue),x.totalMinutes,money(x.estimatedVoiceProviderCostCents),money(x.estimatedPhoneNumberCostCents),money(x.estimatedRecordingCostCents),money(x.estimatedGrossMarginCents),x.usageLevel])}/>;
  const rows=customers.data||[];
  if(!rows.length)return <EmptyState message="No Chiamo customers match this view." />;
- if(section==="setup")return <SetupQueue rows={rows}/>;
+  if(section==="customers")return <CustomerDirectory rows={rows}/>;
+  if(section==="setup")return <SetupQueue rows={rows}/>;
  if(section==="voice")return <CustomerServices rows={rows} kind="voice"/>;
  if(section==="sms")return <CustomerServices rows={rows} kind="sms"/>;
  if(section==="numbers")return <Table heads={["Organization","Assigned Numbers","Assignment Status","Voice"]} rows={rows.map(x=>[x.tenant.name,x.numbers,x.numbers?"ASSIGNED":"AWAITING ASSIGNMENT",x.tenant.voipEnabled?"READY":x.service?.voiceEnabled?"REQUESTED / NOT READY":"DISABLED"])}/>;
@@ -49,7 +51,21 @@ function MutationFailure({error}:{error:unknown}){
  return <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800"><p className="font-bold">Request failed{api?` (HTTP ${api.status})`:""}{code?` · ${code}`:""}</p><p className="mt-1">{api?.message||(error instanceof Error?error.message:"The request could not be completed.")}</p>{issues.length>0&&<ul className="mt-2 list-disc pl-5">{issues.map(issue=><li key={issue}>{issue}</li>)}</ul>}</div>
 }
 function EmptyState({message}:{message:string}){return <Panel><p className="py-6 text-center text-slate-500">{message}</p></Panel>}
-function Leads({leads}:{leads:any[]}){const [search,setSearch]=useState("");const [status,setStatus]=useState("ALL");const [converting,setConverting]=useState<any>(null);const shown=useMemo(()=>leads.filter(x=>(status==="ALL"||x.status===status)&&`${x.businessName} ${x.firstName} ${x.lastName} ${x.businessEmail} ${x.businessPhone}`.toLowerCase().includes(search.toLowerCase())),[leads,search,status]);const patch=useMutation({mutationFn:({id,body}:{id:string,body:any})=>apiRequest("PATCH",`/api/admin/chiamo/leads/${id}`,body),onSuccess:()=>queryClient.invalidateQueries({queryKey:["/api/admin/chiamo/leads"]})});const resend=useMutation({mutationFn:(id:string)=>apiRequest("POST",`/api/admin/chiamo/leads/${id}/resend-notification`,{}),onSuccess:()=>queryClient.invalidateQueries({queryKey:["/api/admin/chiamo/leads"]})});return <>{converting&&<ConversionWizard lead={converting} onClose={()=>setConverting(null)}/>}<div className="mb-4 flex gap-3"><Input className="max-w-md bg-white" placeholder="Search business, contact, email, or phone" value={search} onChange={e=>setSearch(e.target.value)}/><select className="rounded-md border bg-white px-3" value={status} onChange={e=>setStatus(e.target.value)}><option>ALL</option>{chiamoLeadStatuses.map(x=><option key={x}>{x}</option>)}</select></div><div className="space-y-4">{shown.map(x=><Panel key={x.id}><div className="flex flex-wrap justify-between gap-4"><div><h3 className="text-lg font-bold">{x.businessName}</h3><p>{x.firstName} {x.lastName} · {x.businessEmail} · {x.businessPhone}</p><p className="mt-2 text-sm text-slate-500">{x.phoneUsersNeeded} users · {label(x.planInterest)} · SMS: {x.textingInterest?"Interested":"No"} · {new Date(x.createdAt).toLocaleString()}</p><p className="mt-2 text-sm">Provider: {x.currentPhoneProvider||"—"} · New numbers: {x.newNumbersNeeded||0} · Porting: {x.existingNumbersToPort||"—"}</p><p className="text-sm">Features: {x.featuresNeeded||"—"} · Preferred contact: {x.contactPreference||"—"} · Best time: {x.bestContactTime||"—"}</p><p className="text-sm">Customer notes: {x.additionalInformation||"—"}</p></div><div className="min-w-64 space-y-2"><select className="w-full rounded-md border p-2" value={x.status} onChange={e=>patch.mutate({id:x.id,body:{status:e.target.value}})}>{chiamoLeadStatuses.map(s=><option key={s}>{s}</option>)}</select><Input placeholder="Assigned staff" defaultValue={x.assignedTo||""} onBlur={e=>patch.mutate({id:x.id,body:{assignedTo:e.target.value||null}})}/><Input type="date" defaultValue={x.nextFollowUpDate||""} onBlur={e=>patch.mutate({id:x.id,body:{nextFollowUpDate:e.target.value||null}})}/>{!x.convertedTenantId&&<Button className="w-full" onClick={()=>setConverting(x)}>Convert To Chiamo Customer</Button>}{x.notificationStatus==="FAILED"&&<Button variant="destructive" onClick={()=>resend.mutate(x.id)}>Resend Notification</Button>}<p className={`text-xs ${x.notificationStatus==="FAILED"?"text-red-600":"text-slate-500"}`}>Notification: {x.notificationStatus}{x.notificationError?` — ${x.notificationError}`:""}</p></div></div><textarea className="mt-4 min-h-20 w-full rounded-md border p-3 text-sm" placeholder="Internal notes" defaultValue={x.internalNotes||""} onBlur={e=>patch.mutate({id:x.id,body:{internalNotes:e.target.value||null}})}/></Panel>)}</div></>}
+function Leads({leads}:{leads:any[]}){const [search,setSearch]=useState("");const [status,setStatus]=useState("ALL");const [converting,setConverting]=useState<any>(null);const [removing,setRemoving]=useState<any>(null);const shown=useMemo(()=>leads.filter(x=>(status==="ALL"||x.status===status)&&`${x.businessName} ${x.firstName} ${x.lastName} ${x.businessEmail} ${x.businessPhone}`.toLowerCase().includes(search.toLowerCase())),[leads,search,status]);const patch=useMutation({mutationFn:({id,body}:{id:string,body:any})=>apiRequest("PATCH",`/api/admin/chiamo/leads/${id}`,body),onSuccess:()=>queryClient.invalidateQueries({queryKey:["/api/admin/chiamo/leads"]})});const resend=useMutation({mutationFn:(id:string)=>apiRequest("POST",`/api/admin/chiamo/leads/${id}/resend-notification`,{}),onSuccess:()=>queryClient.invalidateQueries({queryKey:["/api/admin/chiamo/leads"]})});return <>{converting&&<ConversionWizard lead={converting} onClose={()=>setConverting(null)}/>} {removing&&<RemovalConfirmation open={Boolean(removing)} onOpenChange={open=>!open&&setRemoving(null)} target={{id:String(removing.convertedTenantId||removing.id),name:removing.businessName,kind:removing.convertedTenantId?"tenant":"lead",product:"CHIAMO"}}/>}<div className="mb-4 flex gap-3"><Input className="max-w-md bg-white" placeholder="Search business, contact, email, or phone" value={search} onChange={e=>setSearch(e.target.value)}/><select className="rounded-md border bg-white px-3" value={status} onChange={e=>setStatus(e.target.value)}><option>ALL</option>{chiamoLeadStatuses.map(x=><option key={x}>{x}</option>)}</select></div><div className="space-y-4">{shown.map(x=><Panel key={x.id}><div className="flex flex-wrap justify-between gap-4"><div><h3 className="text-lg font-bold">{x.businessName}</h3><p>{x.firstName} {x.lastName} · {x.businessEmail} · {x.businessPhone}</p><p className="mt-2 text-sm text-slate-500">{x.phoneUsersNeeded} users · {label(x.planInterest)} · SMS: {x.textingInterest?"Interested":"No"} · {new Date(x.createdAt).toLocaleString()}</p><p className="mt-2 text-sm">Provider: {x.currentPhoneProvider||"—"} · New numbers: {x.newNumbersNeeded||0} · Porting: {x.existingNumbersToPort||"—"}</p><p className="text-sm">Features: {x.featuresNeeded||"—"} · Preferred contact: {x.contactPreference||"—"} · Best time: {x.bestContactTime||"—"}</p><p className="text-sm">Customer notes: {x.additionalInformation||"—"}</p></div><div className="min-w-64 space-y-2"><select className="w-full rounded-md border p-2" value={x.status} onChange={e=>patch.mutate({id:x.id,body:{status:e.target.value}})}>{chiamoLeadStatuses.map(s=><option key={s}>{s}</option>)}</select><Input placeholder="Assigned staff" defaultValue={x.assignedTo||""} onBlur={e=>patch.mutate({id:x.id,body:{assignedTo:e.target.value||null}})}/><Input type="date" defaultValue={x.nextFollowUpDate||""} onBlur={e=>patch.mutate({id:x.id,body:{nextFollowUpDate:e.target.value||null}})}/>{!x.convertedTenantId&&<Button className="w-full" onClick={()=>setConverting(x)}>Convert To Chiamo Customer</Button>}{x.convertedTenantId&&<Button className="w-full" variant="destructive" onClick={()=>setRemoving(x)}>Remove Chiamo customer</Button>}{!x.convertedTenantId&&<Button className="w-full" variant="outline" onClick={()=>setRemoving(x)}>Remove lead</Button>}{x.notificationStatus==="FAILED"&&<Button variant="destructive" onClick={()=>resend.mutate(x.id)}>Resend Notification</Button>}<p className={`text-xs ${x.notificationStatus==="FAILED"?"text-red-600":"text-slate-500"}`}>Notification: {x.notificationStatus}{x.notificationError?` — ${x.notificationError}`:""}</p></div></div><textarea className="mt-4 min-h-20 w-full rounded-md border p-3 text-sm" placeholder="Internal notes" defaultValue={x.internalNotes||""} onBlur={e=>patch.mutate({id:x.id,body:{internalNotes:e.target.value||null}})}/></Panel>)}</div></>}
+
+function CustomerDirectory({ rows }: { rows: any[] }) {
+  const [removing, setRemoving] = useState<any>(null);
+  return <div className="space-y-4">
+    {removing && <RemovalConfirmation open onOpenChange={open => !open && setRemoving(null)} target={{ id: String(removing.tenant.id), name: removing.tenant.name, kind: "tenant", product: "CHIAMO" }} />}
+    {rows.map(customer => <Panel key={customer.tenant.id}>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div><h3 className="font-bold">{customer.tenant.name}</h3><p className="text-sm text-slate-500">{customer.users} users · {customer.numbers} assigned numbers · {label(customer.subscription?.billingStatus)}</p></div>
+        <Button variant="destructive" onClick={() => setRemoving(customer)}>Deactivate / remove Chiamo</Button>
+      </div>
+      <p className="mt-3 text-sm text-slate-600">This control runs a server preflight and makes the resulting archive, deactivation, or permanent deletion explicit before execution.</p>
+    </Panel>)}
+  </div>;
+}
 
 function ConversionWizard({lead,onClose}:{lead:any;onClose:()=>void}){
  const plans:any={starter:[19900,3,2500],business:[39900,7,2500],professional:[69900,15,2000],enterprise:[0,1,2500]};
@@ -72,6 +88,7 @@ function ConversionWizard({lead,onClose}:{lead:any;onClose:()=>void}){
 }
 function Field({label:fieldLabel,children}:{label:string;children:any}){return <label className="mb-3 block"><span className="mb-1 block font-semibold">{fieldLabel}</span>{children}</label>};function NumberField({label:fieldLabel,value,set}:{label:string;value:number;set:(v:number)=>void}){return <Field label={fieldLabel}><Input type="number" min={0} value={value} onChange={e=>set(Number(e.target.value))}/></Field>};function Check({label:fieldLabel,value,set,disabled=false}:{label:string;value:boolean;set:(v:boolean)=>void;disabled?:boolean}){return <label className={`flex items-center gap-3 ${disabled?"text-slate-400":""}`}><input type="checkbox" checked={value} disabled={disabled} onChange={e=>set(e.target.checked)}/>{fieldLabel}</label>}
 function CustomerServices({ rows, kind }: { rows: any[]; kind: "voice" | "sms" }) {
+  const [removing, setRemoving] = useState<any>(null);
   const update = useMutation({
     mutationFn: ({ id, body }: { id: string; body: any }) =>
       apiRequest("PUT", `/api/admin/chiamo/customers/${id}/services`, body),
@@ -80,6 +97,7 @@ function CustomerServices({ rows, kind }: { rows: any[]; kind: "voice" | "sms" }
 
   return (
     <div className="space-y-4">
+      {removing && <RemovalConfirmation open={Boolean(removing)} onOpenChange={open => !open && setRemoving(null)} target={{ id: String(removing.tenant.id), name: removing.tenant.name, kind: "tenant", product: "CHIAMO" }} />}
       {update.isError && <MutationFailure error={update.error} />}
       {rows.map((customer) => {
         const service = customer.service || {};
@@ -98,7 +116,8 @@ function CustomerServices({ rows, kind }: { rows: any[]; kind: "voice" | "sms" }
                     : `Registration: ${label(service.smsStatus)} · Included: ${customer.subscription?.smsAllowance || 3500} segments`}
                 </p>
               </div>
-              <label className="flex shrink-0 items-center gap-2 text-sm font-semibold">
+              <div className="flex shrink-0 flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-sm font-semibold">
                 <input
                   type="checkbox"
                   checked={Boolean(service[kind === "voice" ? "voiceEnabled" : "smsEnabled"])}
@@ -111,6 +130,8 @@ function CustomerServices({ rows, kind }: { rows: any[]; kind: "voice" | "sms" }
                 />
                 {kind === "voice" ? "Voice requested (provider setup required)" : "SMS Messaging Enabled"}
               </label>
+              <Button size="sm" variant="destructive" onClick={() => setRemoving(customer)}>Deactivate / remove Chiamo</Button>
+              </div>
             </div>
 
             {kind === "voice" && (

@@ -131,6 +131,21 @@ export async function getCompanyTwilioClient(tenantId: string, createIfMissing =
   return twilio(masterSid, masterToken, { accountSid: account.subaccountSid });
 }
 
+/** Conservative removal cleanup: suspend only; numbers, recordings and ports stay intact. */
+export async function suspendCompanyTwilioSubaccount(subaccountSid: string): Promise<void> {
+  const masterSid = process.env.TWILIO_ACCOUNT_SID;
+  const masterToken = process.env.TWILIO_AUTH_TOKEN;
+  if (!masterSid || !masterToken) throw new Error("Twilio master credentials are not configured");
+  try {
+    await twilio(masterSid, masterToken).api.v2010.accounts(subaccountSid).update({ status: "suspended" });
+  } catch (error: any) {
+    // Twilio's 20404 means the resource was previously removed; both that and
+    // an already-suspended account are successful terminal cleanup states.
+    if (error?.code === 20404 || error?.status === 404 || /already suspended/i.test(error?.message || "")) return;
+    throw error;
+  }
+}
+
 export function voiceWebhookBaseUrl(): string {
   const configuredBase = process.env.TWILIO_VOICE_WEBHOOK_BASE_URL
     || process.env.APP_BASE_URL

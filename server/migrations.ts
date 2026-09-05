@@ -39,6 +39,47 @@ export async function runMigrations() {
         updated_at TIMESTAMP DEFAULT NOW()
       )
     `);
+    // Removal evidence is deliberately tenant-independent: deleting a tenant
+    // must never erase the platform-admin decision trail or pending cleanup.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS admin_removal_audits (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        target_type TEXT NOT NULL,
+        target_id TEXT NOT NULL,
+        actor_id TEXT NOT NULL,
+        actor_credential_version INTEGER,
+        product TEXT NOT NULL,
+        classification TEXT NOT NULL,
+        action TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        target_snapshot JSONB NOT NULL,
+        dependency_snapshot JSONB NOT NULL,
+        outcome TEXT NOT NULL,
+        outcome_error TEXT,
+        cleanup_status TEXT NOT NULL DEFAULT 'NOT_REQUIRED',
+        cleanup_error TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        completed_at TIMESTAMP
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS admin_removal_cleanup_tasks (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        audit_id UUID NOT NULL REFERENCES admin_removal_audits(id) ON DELETE RESTRICT,
+        task_type TEXT NOT NULL,
+        payload JSONB NOT NULL,
+        status TEXT NOT NULL DEFAULT 'PENDING',
+        attempts INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        claimed_at TIMESTAMP,
+        completed_at TIMESTAMP,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS admin_removal_audits_target_idx ON admin_removal_audits(target_type, target_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS admin_removal_cleanup_tasks_claim_idx ON admin_removal_cleanup_tasks(status, updated_at)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS admin_removal_cleanup_tasks_audit_idx ON admin_removal_cleanup_tasks(audit_id)`);
     const bootstrapUsername = process.env.GLOBAL_ADMIN_USERNAME?.trim();
     const bootstrapPassword = process.env.GLOBAL_ADMIN_BOOTSTRAP_PASSWORD;
     if (bootstrapUsername && bootstrapPassword) {

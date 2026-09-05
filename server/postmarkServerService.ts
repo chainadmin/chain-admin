@@ -142,10 +142,11 @@ class PostmarkServerService {
       });
 
       if (!response.ok) {
-        const errorData = await response.text();
+        await response.text();
+        if (response.status === 404) return { success: true };
         return {
           success: false,
-          error: `Failed to delete Postmark server: ${response.status} ${errorData}`
+          error: `Failed to delete Postmark server: HTTP ${response.status}`
         };
       }
 
@@ -154,7 +155,7 @@ class PostmarkServerService {
       console.error('Error deleting Postmark server:', error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred'
+        error: error instanceof Error ? error.message.slice(0, 500) : 'Unknown error occurred'
       };
     }
   }

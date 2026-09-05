@@ -266,6 +266,48 @@ export const globalAdminLoginAttempts = pgTable("global_admin_login_attempts", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// These records intentionally do not reference tenants. A removal audit must
+// remain available after a tenant (or an unconverted lead) is permanently
+// removed. Application code only updates the narrow cleanup lifecycle fields.
+export const adminRemovalAudits = pgTable("admin_removal_audits", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  targetType: text("target_type").notNull(), // TENANT | CHIAMO_LEAD
+  targetId: text("target_id").notNull(),
+  actorId: text("actor_id").notNull(),
+  actorCredentialVersion: integer("actor_credential_version"),
+  product: text("product").notNull(),
+  classification: text("classification").notNull(),
+  action: text("action").notNull(),
+  reason: text("reason").notNull(),
+  targetSnapshot: jsonb("target_snapshot").notNull(),
+  dependencySnapshot: jsonb("dependency_snapshot").notNull(),
+  outcome: text("outcome").notNull(),
+  outcomeError: text("outcome_error"),
+  cleanupStatus: text("cleanup_status").notNull().default("NOT_REQUIRED"),
+  cleanupError: text("cleanup_error"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  completedAt: timestamp("completed_at"),
+}, (table) => [
+  index("admin_removal_audits_target_idx").on(table.targetType, table.targetId),
+]);
+
+export const adminRemovalCleanupTasks = pgTable("admin_removal_cleanup_tasks", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  auditId: uuid("audit_id").notNull().references(() => adminRemovalAudits.id, { onDelete: "restrict" }),
+  taskType: text("task_type").notNull(), // TWILIO_SUSPEND | POSTMARK_DELETE | LOGO_DELETE ...
+  payload: jsonb("payload").notNull(),
+  status: text("status").notNull().default("PENDING"), // PENDING | RUNNING | FAILED | SUCCEEDED | SKIPPED
+  attempts: integer("attempts").notNull().default(0),
+  lastError: text("last_error"),
+  claimedAt: timestamp("claimed_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  index("admin_removal_cleanup_tasks_claim_idx").on(table.status, table.updatedAt),
+  index("admin_removal_cleanup_tasks_audit_idx").on(table.auditId),
+]);
+
 // Consumers (end users)
 export const consumers = pgTable("consumers", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
