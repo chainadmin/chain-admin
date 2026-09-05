@@ -14,7 +14,7 @@ import { calculateChiamoMonthlyService, CHIAMO_SUPPORT_EMAIL, chiamoBillingStatu
 import { findCanonicalTenant, getPhoneBillingReconciliationInventory, lockCompanyIdentity, normalizeCompanyEmail, upsertChiamoPhoneEntitlement } from "./phoneProductEntitlement";
 import { generateInvoicePdf } from "./invoicePdf";
 import { INVOICE_BRANDS } from "./invoiceBranding";
-import { ensureChiamoVoiceProvider, retryChiamoOnboarding, sendChiamoInvitation } from "./chiamoOnboarding";
+import { ensureChiamoVoiceProvider, retryChiamoOnboarding, sendChiamoInvitation, voiceProviderStatusForConversion } from "./chiamoOnboarding";
 
 const leadInput = z.object({
   firstName: z.string().trim().min(1).max(100), lastName: z.string().trim().min(1).max(100), businessName: z.string().trim().min(1).max(200),
@@ -148,9 +148,11 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
       }
        if (lead.convertedTenantId) {
          const [tenant] = await tx.select().from(tenants).where(eq(tenants.id, lead.convertedTenantId)).limit(1);
-         const credentials = await tx.select().from(agencyCredentials)
+          const credentials = await tx.select().from(agencyCredentials)
            .where(and(eq(agencyCredentials.tenantId, lead.convertedTenantId), eq(agencyCredentials.role, "owner"), sql`lower(trim(${agencyCredentials.email})) = ${email}`)).limit(2);
          const credential = credentials[0];
+          const [existingService] = await tx.select().from(chiamoServiceConfigurations)
+            .where(eq(chiamoServiceConfigurations.tenantId, lead.convertedTenantId)).limit(1);
          if (!tenant || !tenant.chiamoConnectEnabled || tenant.chainCoreEnabled || credentials.length !== 1) throw Object.assign(new Error("The converted customer identity is incomplete and requires manual review."), { status: 409, code: "MANUAL_REVIEW_REQUIRED" });
           await tx.insert(chiamoSubscriptions).values({
             tenantId:tenant.id, planId:input.planId, customBasePriceCents:input.customBasePriceCents,
@@ -172,7 +174,8 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
            recordingEnabled:input.voiceEnabled, routingEnabled:input.voiceEnabled, ivrEnabled:input.voiceEnabled,
            smsEnabled:input.smsEnabled, smsStatus:input.smsStatus, setupStatus:"IN_PROGRESS",
            coreConversionStatus:"COMPLETE", coreConversionAttemptedAt:new Date(),
-           voiceProviderStatus:input.voiceEnabled?"NOT_STARTED":"NOT_REQUESTED", readinessStatus:"NOT_READY",
+            voiceProviderStatus:voiceProviderStatusForConversion(input.voiceEnabled, existingService?.voiceProviderStatus),
+            readinessStatus:existingService?.readinessStatus || "NOT_READY",
             updatedAt:new Date(),
           };
           await tx.insert(chiamoServiceConfigurations).values(retryServiceValues)
@@ -182,9 +185,9 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
               voicemailEnabled:input.voiceEnabled, recordingEnabled:input.voiceEnabled,
               routingEnabled:input.voiceEnabled, ivrEnabled:input.voiceEnabled,
               smsEnabled:input.smsEnabled, smsStatus:input.smsStatus,
-              setupStatus:"IN_PROGRESS", coreConversionStatus:"COMPLETE",
+               setupStatus:existingService?.setupStatus === "COMPLETE" ? "COMPLETE" : "IN_PROGRESS", coreConversionStatus:"COMPLETE",
               coreConversionError:null, coreConversionAttemptedAt:new Date(),
-              voiceProviderStatus:input.voiceEnabled ? "NOT_STARTED" : "NOT_REQUESTED",
+               voiceProviderStatus:voiceProviderStatusForConversion(input.voiceEnabled, existingService?.voiceProviderStatus),
               updatedAt:new Date(),
             } });
          await upsertChiamoPhoneEntitlement(tx, tenant.id, input.billingStatus === "ACTIVE" ? "ACTIVE" : input.billingStatus === "CANCELLED" ? "CANCELLED" : "SUSPENDED", input.voiceEnabled);
@@ -234,7 +237,7 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
       }
       await tx.insert(chiamoSubscriptions).values({ tenantId:tenant.id, planId:input.planId, customBasePriceCents:input.customBasePriceCents, includedUsers:input.includedUsers, additionalUserPriceCents:input.additionalUserPriceCents, smsAddonEnabled:input.smsEnabled, smsAllowance:input.smsAllowance, smsOverageMicros:input.smsOverageMicros, billingStatus:input.billingStatus, startDate:input.startDate, nextBillingDate:input.nextBillingDate, notes:input.billingNotes }).onConflictDoUpdate({ target:chiamoSubscriptions.tenantId, set:{ planId:input.planId, customBasePriceCents:input.customBasePriceCents, includedUsers:input.includedUsers, additionalUserPriceCents:input.additionalUserPriceCents, smsAddonEnabled:input.smsEnabled, smsAllowance:input.smsAllowance, smsOverageMicros:input.smsOverageMicros, billingStatus:input.billingStatus, startDate:input.startDate, nextBillingDate:input.nextBillingDate, notes:input.billingNotes, updatedAt:new Date() } });
        const setupChecklist = { businessVerified:true, planSelected:true, billingConfigured:true, primaryUserCreated:true, additionalUsersCreated:input.initialActiveUsers<=1, phoneNumberAssigned:input.requiredNumberCount===0, portCompleted:!input.numbersToPort, voiceProviderConfigured:false, outboundCallingTested:false, inboundCallingTested:false, voicemailTested:false, recordingTested:false, smsRequested:input.smsStatus!=="NOT_REQUESTED", smsRegistrationComplete:input.smsStatus==="ACTIVE", smsSendingTested:false, smsReceivingTested:false, customerInvitationSent:false, customerLoginConfirmed:false, setupComplete:false };
-       const serviceValues = { accountActive:true, customerLoginEnabled:false, voiceEnabled:input.voiceEnabled, inboundEnabled:input.voiceEnabled, outboundEnabled:input.voiceEnabled, voicemailEnabled:input.voiceEnabled, recordingEnabled:input.voiceEnabled, routingEnabled:input.voiceEnabled, ivrEnabled:input.voiceEnabled, smsEnabled:input.smsEnabled, smsStatus:input.smsStatus, setupStatus:"IN_PROGRESS", setupChecklist, coreConversionStatus:"COMPLETE", coreConversionError:null, coreConversionAttemptedAt:new Date(), voiceProviderStatus:input.voiceEnabled?"NOT_STARTED":"NOT_REQUESTED", readinessStatus:"NOT_READY", updatedAt:new Date() };
+       const serviceValues = { accountActive:true, customerLoginEnabled:false, voiceEnabled:input.voiceEnabled, inboundEnabled:input.voiceEnabled, outboundEnabled:input.voiceEnabled, voicemailEnabled:input.voiceEnabled, recordingEnabled:input.voiceEnabled, routingEnabled:input.voiceEnabled, ivrEnabled:input.voiceEnabled, smsEnabled:input.smsEnabled, smsStatus:input.smsStatus, setupStatus:"IN_PROGRESS", setupChecklist, coreConversionStatus:"COMPLETE", coreConversionError:null, coreConversionAttemptedAt:new Date(), voiceProviderStatus:voiceProviderStatusForConversion(input.voiceEnabled), readinessStatus:"NOT_READY", updatedAt:new Date() };
        await tx.insert(chiamoServiceConfigurations).values({ tenantId:tenant.id, ...serviceValues }).onConflictDoUpdate({ target:chiamoServiceConfigurations.tenantId, set:serviceValues });
        await upsertChiamoPhoneEntitlement(tx, tenant.id, input.billingStatus === "ACTIVE" ? "ACTIVE" : input.billingStatus === "CANCELLED" ? "CANCELLED" : "SUSPENDED", input.voiceEnabled);
        if (input.voiceEnabled) {

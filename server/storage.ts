@@ -901,7 +901,6 @@ export class DatabaseStorage implements IStorage {
       SELECT id, credential_id, token, expires_at, used_at
       FROM password_reset_tokens
        WHERE token = ${hashPasswordResetToken(token)}
-          OR (token = ${token} AND expires_at > NOW())
     `);
     
     if (!result.rows || result.rows.length === 0) {
@@ -923,7 +922,6 @@ export class DatabaseStorage implements IStorage {
       UPDATE password_reset_tokens
       SET used_at = NOW()
        WHERE token = ${hashPasswordResetToken(token)}
-          OR (token = ${token} AND expires_at > NOW())
     `);
   }
 

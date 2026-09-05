@@ -8346,6 +8346,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (req.body.product === 'chiamo') {
         await db.update(chiamoServiceConfigurations).set({
            loginConfirmedAt:new Date(), readinessStatus:"READY",
+           setupStatus:"COMPLETE",
           setupChecklist:sql`setup_checklist || '{"customerLoginConfirmed":true}'::jsonb`,
           updatedAt:new Date(),
         }).where(eq(chiamoServiceConfigurations.tenantId, credentials.tenantId));
@@ -8459,22 +8460,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
             <h1 style="color:white; margin:0;">${productName} Password Reset</h1>
           </div>
           <div style="padding: 30px; background: #f9f9f9;">
-            <p>Hello${credentials.firstName ? ` ${credentials.firstName}` : ''},</p>
-            <p>We received a request to reset the password for your ${productName} account (${tenant.name}).</p>
-            <p><strong>Username:</strong> ${credentials.username}</p>
+            <p>Hello${credentials.firstName ? ` ${escapeHtml(credentials.firstName)}` : ''},</p>
+            <p>We received a request to reset the password for your ${productName} account (${escapeHtml(tenant.name)}).</p>
+            <p><strong>Username:</strong> ${escapeHtml(credentials.username)}</p>
             <p>Your reset code is:</p>
             <div style="text-align: center; margin: 20px 0; font-size: 24px; letter-spacing: 4px; font-weight: bold; color: #1e3a5f;">
               ${resetCode}
             </div>
             <p>Click the button below to set a new password:</p>
             <div style="text-align: center; margin: 30px 0;">
-              <a href="${resetUrl}" style="background:${color}; color:white; padding:15px 30px; text-decoration:none; border-radius:5px; display:inline-block; font-weight:bold;">Reset Password</a>
+              <a href="${escapeHtml(resetUrl)}" style="background:${color}; color:white; padding:15px 30px; text-decoration:none; border-radius:5px; display:inline-block; font-weight:bold;">Reset Password</a>
             </div>
             <p style="color: #666; font-size: 14px;">This link will expire in 1 hour for security reasons.</p>
             <p style="color: #666; font-size: 14px;">If you didn't request this password reset, you can safely ignore this email. Your password will remain unchanged.</p>
             <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
             <p style="color: #999; font-size: 12px;">If the button doesn't work, copy and paste this link into your browser:</p>
-            <p style="color: #999; font-size: 12px; word-break: break-all;">${resetUrl}</p>
+            <p style="color: #999; font-size: 12px; word-break: break-all;">${escapeHtml(resetUrl)}</p>
           </div>
         </div>
       `;
@@ -8520,8 +8521,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const tokenResult = await tx.execute(sql`
           SELECT id, credential_id, expires_at, used_at
           FROM password_reset_tokens
-           WHERE token = ${hashPasswordResetToken(token)}
-              OR (token = ${token} AND expires_at > NOW())
+            WHERE token = ${hashPasswordResetToken(token)}
           FOR UPDATE
         `);
         const resetToken = tokenResult.rows?.[0] as any;

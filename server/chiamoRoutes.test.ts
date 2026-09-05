@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
 import { buildChiamoLeadEmails, sendChiamoLeadEmails } from "./chiamoLeadEmails";
-import { invitationPrerequisites, resolveChiamoBaseUrl, resolveDedicatedPostmarkServer, sanitizeOnboardingError } from "./chiamoOnboarding";
+import { invitationPrerequisites, postmarkTokenForRetry, resolveChiamoBaseUrl, resolveDedicatedPostmarkServer, sanitizeOnboardingError, voiceProviderStatusForConversion } from "./chiamoOnboarding";
+import { encryptCredential } from "./credentialCrypto";
 import { hashPasswordResetToken, isChainActivationReset, passwordResetProduct } from "./passwordResetPolicy";
 
 const lead = {
@@ -63,8 +65,11 @@ test("sendChiamoLeadEmails attempts both messages and reports either failure", a
 test("Chiamo URL selection fails closed and never emits a Chain origin", () => {
   assert.equal(resolveChiamoBaseUrl({ CHIAMO_BASE_URL:"https://app.chiamoconnect.com/" }), "https://app.chiamoconnect.com");
   assert.equal(resolveChiamoBaseUrl({ CHIAMO_DOMAIN:"portal.chiamoconnect.com" }), "https://portal.chiamoconnect.com");
+  assert.equal(resolveChiamoBaseUrl({}, "https://app.chiamoconnect.com"), "https://app.chiamoconnect.com");
   assert.throws(() => resolveChiamoBaseUrl({}), /verified Chiamo base URL/);
   assert.throws(() => resolveChiamoBaseUrl({ CHIAMO_BASE_URL:"https://chainsoftwaregroup.com" }), /invalid/);
+  assert.throws(() => resolveChiamoBaseUrl({ CHIAMO_BASE_URL:"https://unrelated.example" }), /invalid/);
+  assert.throws(() => resolveChiamoBaseUrl({}, "https://unrelated.example"), /verified Chiamo base URL/);
   assert.throws(() => resolveChiamoBaseUrl({ CHIAMO_BASE_URL:"http://chiamoconnect.com" }), /invalid/);
 });
 
@@ -74,10 +79,24 @@ test("invitation readiness requires tenant email and requested Voice providers",
   assert.equal(invitationPrerequisites({ postmarkStatus:"READY", hasPostmarkCredentials:true, voiceRequested:true, voiceProviderStatus:"FAILED" }).reason, "VOICE_NOT_READY");
 });
 
+test("repeated conversion preserves a ready Voice provider stage", () => {
+  assert.equal(voiceProviderStatusForConversion(true, "READY"), "READY");
+  assert.equal(voiceProviderStatusForConversion(true, "FAILED"), "NOT_STARTED");
+  assert.equal(voiceProviderStatusForConversion(false, "READY"), "NOT_REQUESTED");
+});
+
 test("provider errors exposed to Chiamo administrators are sanitized", () => {
   const secret = "AC-secret-account-token";
   assert.doesNotMatch(sanitizeOnboardingError("voice", new Error(secret)), new RegExp(secret));
   assert.doesNotMatch(sanitizeOnboardingError("postmark", new Error(secret)), new RegExp(secret));
+});
+
+test("Postmark retries migrate plaintext but discard malformed encrypted tokens", () => {
+  process.env.JWT_SECRET ||= "synthetic-test-encryption-key";
+  const encrypted = encryptCredential("synthetic-postmark-token");
+  assert.equal(postmarkTokenForRetry("legacy-plaintext-token"), "legacy-plaintext-token");
+  assert.equal(postmarkTokenForRetry(encrypted), encrypted);
+  assert.equal(postmarkTokenForRetry("enc:v1:corrupt"), null);
 });
 
 test("password recovery derives product from tenant and cannot activate Chain with a Chiamo token", () => {
@@ -91,6 +110,13 @@ test("password recovery derives product from tenant and cannot activate Chain wi
   assert.notEqual(stored, raw);
   assert.equal(stored, hashPasswordResetToken(raw));
   assert.match(stored, /^sha256:[a-f0-9]{64}$/);
+});
+
+test("password reset queries accept only hashed tokens", () => {
+  const storageSource = readFileSync(new URL("./storage.ts", import.meta.url), "utf8");
+  const routesSource = readFileSync(new URL("./routes.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(storageSource, /OR \(token = \$\{token\}/);
+  assert.doesNotMatch(routesSource, /OR \(token = \$\{token\}/);
 });
 
 test("dedicated Postmark resolution reuses a matching server and creates only when absent", async () => {

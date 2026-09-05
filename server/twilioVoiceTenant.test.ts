@@ -48,6 +48,44 @@ test('provisions only missing company Voice resources', async () => {
   assert.deepEqual(calls, []);
 });
 
+test('provider readiness accepts only decryptable encrypted secrets', async () => {
+  process.env.JWT_SECRET ||= 'synthetic-test-encryption-key';
+  const { decryptEncryptedCredentialOrNull, encryptCredential, isUsableEncryptedCredential } = await import('./credentialCrypto');
+  assert.equal(isUsableEncryptedCredential('plaintext-provider-secret'), false);
+  assert.equal(isUsableEncryptedCredential('enc:v1:not-valid'), false);
+  assert.equal(isUsableEncryptedCredential(encryptCredential('synthetic-provider-secret')), true);
+  assert.equal(decryptEncryptedCredentialOrNull('enc:v1:not-valid'), null);
+});
+
+test('malformed encrypted Voice secrets enter the controlled API-key replacement flow', async () => {
+  process.env.JWT_SECRET ||= 'synthetic-test-encryption-key';
+  const { decryptEncryptedCredentialOrNull } = await import('./credentialCrypto');
+  const { provisionMissingCompanyVoiceResources } = await import('./companyTwilioService');
+  const calls: string[] = [];
+  const result = await provisionMissingCompanyVoiceResources(
+    'AC-company',
+    'Company',
+    {
+      apiKeySid: 'SK-corrupt',
+      apiKeySecret: decryptEncryptedCredentialOrNull('enc:v1:corrupt'),
+      twimlAppSid: 'AP-existing',
+    },
+    {
+      async findCompanyApiKey() { calls.push('find-key'); return { sid:'SK-corrupt' }; },
+      async deleteCompanyApiKey(_accountSid, keySid) { calls.push(`delete:${keySid}`); },
+      async createCompanyApiKey() { calls.push('create-key'); return { sid:'SK-replacement', secret:'replacement-secret' }; },
+      async createCompanyTwimlApp() { throw new Error('existing TwiML app must be reused'); },
+    },
+    'https://app.chiamoconnect.com/api/voice/outbound',
+  );
+  assert.deepEqual(calls, ['find-key', 'delete:SK-corrupt', 'create-key']);
+  assert.deepEqual(result, {
+    apiKeySid:'SK-replacement',
+    apiKeySecret:'replacement-secret',
+    twimlAppSid:'AP-existing',
+  });
+});
+
 test('replaces an unrecoverable API key and persists progress before TwiML work', async () => {
   const { provisionMissingCompanyVoiceResources } = await import('./companyTwilioService');
   const calls: string[] = [];

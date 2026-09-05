@@ -22,3 +22,17 @@ export function decryptCredential(value: string): string {
   decipher.setAuthTag(Buffer.from(tag, "base64"));
   return Buffer.concat([decipher.update(Buffer.from(encrypted, "base64")), decipher.final()]).toString("utf8");
 }
+
+export function isUsableEncryptedCredential(value: string | null | undefined): value is string {
+  return decryptEncryptedCredentialOrNull(value) !== null;
+}
+
+export function decryptEncryptedCredentialOrNull(value: string | null | undefined): string | null {
+  if (!value?.startsWith(PREFIX)) return null;
+  try {
+    const decrypted = decryptCredential(value);
+    return decrypted.length > 0 ? decrypted : null;
+  } catch {
+    return null;
+  }
+}

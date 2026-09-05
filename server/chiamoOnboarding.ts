@@ -4,7 +4,7 @@ import { agencyCredentials, phoneProductEntitlements, tenants } from "@shared/sc
 import { chiamoServiceConfigurations, chiamoSubscriptions } from "@shared/chiamo-schema";
 import { CHIAMO_SUPPORT_EMAIL } from "@shared/chiamo";
 import { db } from "./db";
-import { encryptCredential } from "./credentialCrypto";
+import { encryptCredential, isUsableEncryptedCredential } from "./credentialCrypto";
 import { postmarkServerService } from "./postmarkServerService";
 import type { PostmarkServer, PostmarkServerConfig, PostmarkServerResult } from "./postmarkServerService";
 import { resolveCompanyTwilioVoiceConfiguration } from "./companyTwilioService";
@@ -14,6 +14,20 @@ import { upsertChiamoPhoneEntitlement } from "./phoneProductEntitlement";
 
 export type ChiamoStageStatus = "READY" | "FAILED" | "NOT_REQUESTED" | "NOT_STARTED" | "SENT" | "IN_PROGRESS";
 const STAGE_CLAIM_STALE_MS = 10 * 60 * 1000;
+
+export function voiceProviderStatusForConversion(
+  voiceEnabled: boolean,
+  existingStatus?: string | null,
+): "READY" | "NOT_STARTED" | "NOT_REQUESTED" {
+  if (!voiceEnabled) return "NOT_REQUESTED";
+  return existingStatus === "READY" ? "READY" : "NOT_STARTED";
+}
+
+export function postmarkTokenForRetry(token: string | null | undefined): string | null {
+  if (!token) return null;
+  if (token.startsWith("enc:v1:") && !isUsableEncryptedCredential(token)) return null;
+  return token;
+}
 
 export function invitationPrerequisites(input: {
   postmarkStatus: string;
@@ -51,7 +65,8 @@ function normalizedHttpsOrigin(value: string): string | null {
   try {
     const url = new URL(value.includes("://") ? value : `https://${value}`);
     if (url.protocol !== "https:" || url.username || url.password || url.pathname !== "/" || url.search || url.hash) return null;
-    if (url.hostname === "chainsoftwaregroup.com" || url.hostname.endsWith(".chainsoftwaregroup.com")) return null;
+    const hostname = url.hostname.toLowerCase();
+    if (hostname !== "chiamoconnect.com" && !hostname.endsWith(".chiamoconnect.com")) return null;
     return url.origin;
   } catch {
     return null;
@@ -89,7 +104,11 @@ export async function ensureChiamoPostmarkServer(tenantId: string): Promise<Chia
   }).from(chiamoServiceConfigurations)
     .innerJoin(tenants, eq(tenants.id, chiamoServiceConfigurations.tenantId))
     .where(eq(chiamoServiceConfigurations.tenantId, tenantId)).limit(1);
-  if (existing?.status === "READY" && existing.serverId && existing.serverToken) return "READY";
+  if (
+    existing?.status === "READY"
+    && existing.serverId
+    && isUsableEncryptedCredential(existing.serverToken)
+  ) return "READY";
   if (existing?.status === "READY") {
     await markStage(tenantId, {
       postmarkStatus:"FAILED",
@@ -115,7 +134,7 @@ export async function ensureChiamoPostmarkServer(tenantId: string): Promise<Chia
     if (!tenant) throw new Error("Organization not found");
     const name = tenant.postmarkServerName || `Chiamo Connect - ${tenantId}`;
     let serverId = tenant.postmarkServerId;
-    let serverToken = tenant.postmarkServerToken;
+    let serverToken = postmarkTokenForRetry(tenant.postmarkServerToken);
     let serverName = name;
     let inboundAddress: string | null = tenant.postmarkInboundAddress;
     if (!serverId || !serverToken) {
@@ -180,7 +199,10 @@ export async function ensureChiamoVoiceProvider(tenantId: string): Promise<Chiam
     return "FAILED";
   }
   const hasPersistedVoiceResources = Boolean(
-    row.twilioAccountSid && row.twilioApiKeySid && row.twilioApiKeySecret && row.twilioTwimlAppSid,
+    row.twilioAccountSid
+    && row.twilioApiKeySid
+    && isUsableEncryptedCredential(row.twilioApiKeySecret)
+    && row.twilioTwimlAppSid,
   );
   if (row.voiceProviderStatus === "READY" && hasPersistedVoiceResources) return "READY";
   if (row.voiceProviderStatus === "READY") {
@@ -254,7 +276,10 @@ export async function sendChiamoInvitation(tenantId: string, verifiedRequestOrig
     const row = { ...base, credential:owners[0] };
     const prerequisites = invitationPrerequisites({
       postmarkStatus:row.service.postmarkStatus,
-      hasPostmarkCredentials:Boolean(row.tenant.postmarkServerId && row.tenant.postmarkServerToken),
+      hasPostmarkCredentials:Boolean(
+        row.tenant.postmarkServerId
+        && isUsableEncryptedCredential(row.tenant.postmarkServerToken),
+      ),
       voiceRequested:row.service.voiceEnabled,
       voiceProviderStatus:row.service.voiceProviderStatus,
     });

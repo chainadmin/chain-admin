@@ -2,7 +2,7 @@ import twilio from 'twilio';
 import { eq, sql } from 'drizzle-orm';
 import { tenants } from '@shared/schema';
 import { db } from './db';
-import { decryptCredential, encryptCredential } from './credentialCrypto';
+import { decryptEncryptedCredentialOrNull, encryptCredential } from './credentialCrypto';
 
 export type CompanyTwilioAccount = {
   tenantId: string;
@@ -278,7 +278,11 @@ export async function resolveCompanyTwilioVoiceConfiguration(
         { cause: error },
       );
     }
-  const tenant = (rows as Array<Record<string, unknown>>)[0];
+  const tenant = (
+    rows && typeof rows === "object" && "rows" in rows
+      ? (rows as { rows?: Array<Record<string, unknown>> }).rows
+      : rows as Array<Record<string, unknown>>
+  )?.[0];
     if (!tenant) throw new Error('Organization not found');
 
   const saveProgress = async (configuration: CompanyVoiceConfigurationRecord) => {
@@ -295,9 +299,9 @@ export async function resolveCompanyTwilioVoiceConfiguration(
       String(tenant.business_name || tenant.name || tenantId),
       {
         apiKeySid: tenant.twilio_api_key_sid ? String(tenant.twilio_api_key_sid) : null,
-        apiKeySecret: tenant.twilio_api_key_secret && String(tenant.twilio_api_key_secret).startsWith('enc:v1:')
-          ? decryptCredential(String(tenant.twilio_api_key_secret))
-          : null,
+        apiKeySecret: decryptEncryptedCredentialOrNull(
+          tenant.twilio_api_key_secret ? String(tenant.twilio_api_key_secret) : null,
+        ),
         twimlAppSid: tenant.twilio_twiml_app_sid ? String(tenant.twilio_twiml_app_sid) : null,
       },
       provisioner,
