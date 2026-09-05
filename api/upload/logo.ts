@@ -1,9 +1,8 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { VercelResponse } from '@vercel/node';
 import { getDb } from '../_lib/db';
-import { withAuth, AuthenticatedRequest, JWT_SECRET } from '../_lib/auth';
-import { tenants, tenantSettings } from '../_lib/schema';
+import { withAuth, AuthenticatedRequest } from '../_lib/auth';
+import { tenantSettings } from '../_lib/schema';
 import { eq } from 'drizzle-orm';
-import jwt from 'jsonwebtoken';
 import { uploadLogo } from '../../server/r2Storage';
 
 export const config = {
@@ -28,17 +27,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   try {
     const db = await getDb();
     
-    // Get tenant ID from JWT token
-    const token = req.headers.authorization?.replace('Bearer ', '') || 
-                  req.headers.cookie?.split(';').find(c => c.trim().startsWith('authToken='))?.split('=')[1];
-    
-    if (!token) {
-      res.status(401).json({ error: 'No token provided' });
-      return;
-    }
-
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
-    const tenantId = decoded.tenantId;
+    const tenantId = req.authClaims?.tenantId;
 
     if (!tenantId) {
       res.status(403).json({ error: 'No tenant access' });
@@ -123,4 +112,4 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   }
 }
 
-export default handler;
+export default withAuth(handler);

@@ -1,16 +1,8 @@
-import { VercelRequest, VercelResponse } from '@vercel/node';
-import jwt from 'jsonwebtoken';
+import { VercelResponse } from '@vercel/node';
 import { getDb } from '../_lib/db';
 import { accounts, consumers, documents } from '../../shared/schema';
 import { eq, and } from 'drizzle-orm';
-import { JWT_SECRET } from '../_lib/auth';
-
-interface AuthenticatedRequest extends VercelRequest {
-  method: string;
-  query: {
-    id: string;
-  };
-}
+import { withAuth, type AuthenticatedRequest } from '../_lib/auth';
 
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   const method = (req.method ?? '').toUpperCase();
@@ -23,24 +15,14 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   try {
     const db = await getDb();
     
-    // Get tenant ID from JWT token
-    const token = req.headers.authorization?.replace('Bearer ', '') || 
-                  req.headers.cookie?.split(';').find(c => c.trim().startsWith('authToken='))?.split('=')[1];
-    
-    if (!token) {
-      res.status(401).json({ error: 'No token provided' });
-      return;
-    }
-
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
-    const tenantId = decoded.tenantId;
+    const tenantId = req.authClaims?.tenantId;
 
     if (!tenantId) {
       res.status(403).json({ error: 'No tenant access' });
       return;
     }
 
-    const { id } = req.query;
+    const id = Array.isArray(req.query.id) ? req.query.id[0] : req.query.id;
     
     if (!id) {
       res.status(400).json({ error: 'Document ID is required' });
@@ -158,4 +140,4 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   }
 }
 
-export default handler;
+export default withAuth(handler);

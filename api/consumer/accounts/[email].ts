@@ -132,6 +132,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       tenantRecord = tenant ?? null;
     }
 
+    if (
+      !tenantRecord ||
+      tenantRecord.isActive !== true ||
+      tenantRecord.chainCoreEnabled !== true ||
+      tenantRecord.portalAccessEnabled !== true
+    ) {
+      return res.status(401).json({ message: 'Consumer portal access is no longer active' });
+    }
+    if (
+      (tokenTenantId && tenantRecord.id !== tokenTenantId) ||
+      consumer.tenantId !== tenantRecord.id ||
+      (decodedToken.consumerId && decodedToken.consumerId !== consumer.id)
+    ) {
+      return res.status(403).json({ message: 'Tenant or consumer mismatch' });
+    }
+    if (consumer.isRegistered !== true) {
+      return res.status(401).json({ message: 'Consumer access is no longer active' });
+    }
+
     // Get accounts
     const accountsData = await db
       .select()
@@ -140,7 +159,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const [settings] = tenantRecord
       ? await db
-          .select()
+          .select({
+            minimumMonthlyPayment: tenantSettings.minimumMonthlyPayment,
+            showPaymentPlans: tenantSettings.showPaymentPlans,
+            showDocuments: tenantSettings.showDocuments,
+            allowSettlementRequests: tenantSettings.allowSettlementRequests,
+            forceArrangement: tenantSettings.forceArrangement,
+            merchantProvider: tenantSettings.merchantProvider,
+            authnetPublicClientKey: tenantSettings.authnetPublicClientKey,
+            authnetApiLoginId: tenantSettings.authnetApiLoginId,
+            useSandbox: tenantSettings.useSandbox,
+          })
           .from(tenantSettings)
           .where(eq(tenantSettings.tenantId, tenantRecord.id))
           .limit(1)
