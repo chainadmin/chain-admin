@@ -8,7 +8,8 @@ import { z } from 'zod';
 
 const loginSchema = z.object({
   username: z.string().min(1),
-  password: z.string()
+  password: z.string(),
+  product: z.enum(['chain', 'chiamo']).default('chain'),
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -22,7 +23,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Invalid login data' });
     }
 
-    const { username, password } = parsed.data;
+    const { username, password, product } = parsed.data;
     const db = await getDb();
 
     // Get agency credentials (username can be either username or email)
@@ -113,9 +114,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!tenant.isActive) {
       return res.status(403).json({ error: 'Agency account is not active' });
     }
+    if (
+      (product === 'chain' && tenant.chainCoreEnabled !== true) ||
+      (product === 'chiamo' && tenant.chiamoConnectEnabled !== true)
+    ) {
+      return res.status(403).json({ error: `${product === 'chain' ? 'Chain' : 'Chiamo'} access is not active` });
+    }
 
     // Generate JWT token with tenant info
-    const token = generateToken(user.id, tenant.id, tenant.slug, tenant.name);
+    const token = generateToken(user.id, tenant.id, tenant.slug, tenant.name, product);
 
     // Set cookie that works across subdomains (only in production with custom domain)
     // Check multiple headers for the domain (Vercel may use different headers)

@@ -5,6 +5,16 @@ import {
   getCompanyMessagingBlockMessage,
   isServiceRestrictedForMember,
 } from "@shared/utils/messagingAccess";
+import { canAgencyProductAccessPath, type AgencyProduct } from "@shared/productRouteAccess";
+
+function enforceProductRoute(req: any, res: any, product: AgencyProduct): boolean {
+  if (canAgencyProductAccessPath(product, req.path)) return true;
+  res.status(403).json({
+    code: "PRODUCT_ROUTE_FORBIDDEN",
+    message: "This API is not available to the signed-in product.",
+  });
+  return false;
+}
 
 // Combined authentication middleware that supports both JWT and Replit auth
 export const authenticateUser: RequestHandler = async (req: any, res, next) => {
@@ -16,21 +26,51 @@ export const authenticateUser: RequestHandler = async (req: any, res, next) => {
     
     try {
       const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key') as any;
-      
+
+      if (!decoded.tenantId) {
+        return res.status(401).json({ message: "Invalid agency token" });
+      }
+
+      const product = decoded.product === undefined ? 'chain' : decoded.product;
+      if (product !== 'chain' && product !== 'chiamo') {
+        return res.status(401).json({ message: "Invalid agency token product" });
+      }
+
+      const tenant = await storage.getTenant(decoded.tenantId);
+      if (!tenant || tenant.isActive !== true) {
+        return res.status(401).json({ message: "Agency access is no longer active" });
+      }
+
+      if (
+        (product === 'chain' && tenant.chainCoreEnabled !== true) ||
+        (product === 'chiamo' && tenant.chiamoConnectEnabled !== true)
+      ) {
+        return res.status(401).json({ message: `${product === 'chain' ? 'Chain' : 'Chiamo'} access is no longer active` });
+      }
+      if (!enforceProductRoute(req, res, product)) return;
+
       // For impersonation sessions, use the role from the JWT token directly
-      // For regular JWT auth, fetch from database but use JWT role as fallback
+      // For regular JWT auth, the persisted credential is authoritative.
       let userRole = decoded.role || 'owner';
       let restrictedServices: string[] = [];
       let voipAccess = false;
       
       // Only fetch credentials for non-impersonation sessions
       if (!decoded.isImpersonation) {
-        const userCredentials = await storage.getAgencyCredentialsById(decoded.userId);
-        if (userCredentials) {
-          userRole = userCredentials.role || 'owner';
-          restrictedServices = userCredentials.restrictedServices || [];
-          voipAccess = userCredentials.voipAccess === true;
+        if (!decoded.userId) {
+          return res.status(401).json({ message: "Invalid agency token" });
         }
+        const userCredentials = await storage.getAgencyCredentialsById(decoded.userId);
+        if (
+          !userCredentials ||
+          userCredentials.isActive !== true ||
+          userCredentials.tenantId !== decoded.tenantId
+        ) {
+          return res.status(401).json({ message: "Agency credentials are no longer active" });
+        }
+        userRole = userCredentials.role || 'owner';
+        restrictedServices = userCredentials.restrictedServices || [];
+        voipAccess = userCredentials.voipAccess === true;
       }
       
       // Attach user info from JWT
@@ -43,7 +83,7 @@ export const authenticateUser: RequestHandler = async (req: any, res, next) => {
         isImpersonation: decoded.isImpersonation || false,
         role: userRole,
         restrictedServices: restrictedServices,
-        product: decoded.product || 'chain',
+        product,
         voipAccess,
         claims: {
           sub: decoded.userId
@@ -59,6 +99,8 @@ export const authenticateUser: RequestHandler = async (req: any, res, next) => {
   // Check if user is authenticated via Replit (passport)
   if (req.isAuthenticated && req.isAuthenticated() && req.user) {
     const user = req.user as any;
+    // Replit/Passport is the legacy Chain sign-in path.
+    if (!enforceProductRoute(req, res, 'chain')) return;
     
     // Check if Replit token is expired
     if (user.expires_at) {
@@ -79,10 +121,13 @@ export const authenticateUser: RequestHandler = async (req: any, res, next) => {
         if (!tenant) {
           return res.status(404).json({ message: "Agency not found" });
         }
+        if (tenant.isActive !== true || tenant.chainCoreEnabled !== true) {
+          return res.status(401).json({ message: "Agency access is no longer active" });
+        }
         
         // Verify this user has access to this tenant
         const platformUser = await storage.getPlatformUser(authId);
-        if (!platformUser || platformUser.tenantId !== tenant.id) {
+        if (!platformUser || platformUser.isActive !== true || platformUser.tenantId !== tenant.id) {
           // User is authenticated but trying to access a different agency's portal
           return res.status(403).json({ message: "You don't have access to this agency" });
         }
@@ -93,7 +138,10 @@ export const authenticateUser: RequestHandler = async (req: any, res, next) => {
           tenantId: tenant.id,
           tenantSlug: tenant.slug,
           role: platformUser.role,
-          id: platformUser.id
+          id: platformUser.id,
+          // Replit/Passport is the legacy Chain sign-in path. Chiamo uses the
+          // product-tagged agency JWT flow above.
+          product: 'chain',
         };
         
         console.log('✅ [Auth] User authenticated for tenant:', {
@@ -104,15 +152,20 @@ export const authenticateUser: RequestHandler = async (req: any, res, next) => {
       } else {
         // No agencySlug - fall back to user's primary tenant
         const platformUser = await storage.getPlatformUser(authId);
-        if (!platformUser) {
+        if (!platformUser || platformUser.isActive !== true || !platformUser.tenantId) {
           return res.status(401).json({ message: "User not found" });
+        }
+        const tenant = await storage.getTenant(platformUser.tenantId);
+        if (!tenant || tenant.isActive !== true || tenant.chainCoreEnabled !== true) {
+          return res.status(401).json({ message: "Agency access is no longer active" });
         }
         
         req.user = {
           ...req.user,
           tenantId: platformUser.tenantId,
           role: platformUser.role,
-          id: platformUser.id
+          id: platformUser.id,
+          product: 'chain',
         };
       }
     } catch (error) {
@@ -192,9 +245,20 @@ export const authenticateConsumer: RequestHandler = async (req: any, res, next) 
     if (
       !consumer ||
       !consumer.isRegistered ||
-      (decoded.tenantId && consumer.tenantId !== decoded.tenantId)
+      !decoded.tenantId ||
+      consumer.tenantId !== decoded.tenantId
     ) {
       return res.status(401).json({ message: "Consumer online access is no longer active" });
+    }
+
+    const tenant = await storage.getTenant(decoded.tenantId);
+    if (
+      !tenant ||
+      tenant.isActive !== true ||
+      tenant.chainCoreEnabled !== true ||
+      tenant.portalAccessEnabled !== true
+    ) {
+      return res.status(401).json({ message: "Consumer portal access is no longer active" });
     }
     
     // Attach consumer info to request

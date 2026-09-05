@@ -35,7 +35,11 @@ test("signed legal records block a Chain permanent deletion", () => {
 });
 
 test("all retained operational categories block a Chain permanent deletion", () => {
-  for (const category of ["arrangements", "approvals", "walletLedger", "campaignHistory", "automationHistory", "sequenceHistory", "convertedLeads"]) {
+  for (const category of [
+    "arrangements", "approvals", "walletLedger", "campaignHistory",
+    "automationHistory", "sequenceHistory", "convertedLeads",
+    "billingHistory", "communicationHistory", "voiceProvisioning",
+  ]) {
     assert.equal(
       classifyRemoval(
         { id:"t", name:"Acme", chainCoreEnabled:true, chiamoConnectEnabled:false },

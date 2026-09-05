@@ -1,10 +1,11 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDb } from './db';
-import { agencyCredentials, platformUsers, users } from '../../shared/schema';
+import { agencyCredentials, platformUsers, tenants, users } from '../../shared/schema';
 import { and, eq } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 import { getKnownDomainOrigins } from '@shared/utils/baseUrl';
 import { isOriginOnKnownDomain } from '@shared/utils/domains';
+import { canAgencyProductAccessPath } from '../../shared/productRouteAccess';
 
 export const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
@@ -38,16 +39,52 @@ export async function verifyAuth(req: AuthenticatedRequest): Promise<boolean> {
     const db = await getDb();
     req.authClaims = decoded;
 
+    if (!decoded.tenantId) {
+      return false;
+    }
+
+    const product = decoded.product === undefined ? 'chain' : decoded.product;
+    if (product !== 'chain' && product !== 'chiamo') {
+      return false;
+    }
+
+    const [tenant] = await db
+      .select()
+      .from(tenants)
+      .where(eq(tenants.id, decoded.tenantId))
+      .limit(1);
+    if (
+      !tenant ||
+      tenant.isActive !== true ||
+      (product === 'chain' && tenant.chainCoreEnabled !== true) ||
+      (product === 'chiamo' && tenant.chiamoConnectEnabled !== true)
+    ) {
+      return false;
+    }
+
+    if (decoded.isImpersonation) {
+      req.user = {
+        id: decoded.userId,
+        tenantId: decoded.tenantId,
+        role: decoded.role || 'owner',
+      };
+      req.platformUser = {
+        tenantId: decoded.tenantId,
+        role: decoded.role || 'owner',
+        restrictedServices: [],
+      };
+      return true;
+    }
+    if (!decoded.userId) {
+      return false;
+    }
+
     const [agencyCredential] = await db
       .select()
       .from(agencyCredentials)
-      .where(
-        decoded.tenantId
-          ? and(eq(agencyCredentials.id, decoded.userId), eq(agencyCredentials.tenantId, decoded.tenantId))
-          : eq(agencyCredentials.id, decoded.userId),
-      )
+      .where(and(eq(agencyCredentials.id, decoded.userId), eq(agencyCredentials.tenantId, decoded.tenantId)))
       .limit(1);
-    if (agencyCredential && agencyCredential.isActive !== false) {
+    if (agencyCredential && agencyCredential.isActive === true) {
       req.user = agencyCredential;
       req.platformUser = {
         tenantId: agencyCredential.tenantId,
@@ -59,30 +96,45 @@ export async function verifyAuth(req: AuthenticatedRequest): Promise<boolean> {
     if (agencyCredential) {
       return false;
     }
-    
-    // Get the user
+    // Older API tokens identify the users row instead of the agency credential.
+    // Resolve that identity through an active platform membership and matching
+    // active agency credential; never fall back to a user without tenant access.
     const [user] = await db
       .select()
       .from(users)
       .where(eq(users.id, decoded.userId))
       .limit(1);
     
-    if (!user) {
+    if (!user || !user.email) {
       return false;
     }
 
-    // Get platform user if tenantId is provided
-    if (decoded.tenantId) {
-      const [platformUser] = await db
-        .select()
-        .from(platformUsers)
-        .where(eq(platformUsers.authId, user.id))
-        .limit(1);
-      
-      req.platformUser = platformUser;
+    const [platformUser] = await db
+      .select()
+      .from(platformUsers)
+      .where(and(
+        eq(platformUsers.authId, user.id),
+        eq(platformUsers.tenantId, decoded.tenantId),
+      ))
+      .limit(1);
+    if (!platformUser || platformUser.isActive !== true) {
+      return false;
     }
 
-    req.user = user;
+    const [matchingCredential] = await db
+      .select()
+      .from(agencyCredentials)
+      .where(and(
+        eq(agencyCredentials.tenantId, decoded.tenantId),
+        eq(agencyCredentials.email, user.email),
+      ))
+      .limit(1);
+    if (!matchingCredential || matchingCredential.isActive !== true) {
+      return false;
+    }
+
+    req.user = matchingCredential;
+    req.platformUser = platformUser;
     return true;
   } catch (error) {
     console.error('Auth verification error:', error);
@@ -161,18 +213,32 @@ export function withAuth(handler: (req: AuthenticatedRequest, res: VercelRespons
     if (!isAuthenticated) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
+    const product = req.authClaims?.product === 'chiamo' ? 'chiamo' : 'chain';
+    if (!canAgencyProductAccessPath(product, req.url || '/')) {
+      return res.status(403).json({
+        code: 'PRODUCT_ROUTE_FORBIDDEN',
+        error: 'This API is not available to the signed-in product.',
+      });
+    }
     
     return handler(req, res);
   };
 }
 
-export function generateToken(userId: string, tenantId?: string, tenantSlug?: string, tenantName?: string): string {
+export function generateToken(
+  userId: string,
+  tenantId?: string,
+  tenantSlug?: string,
+  tenantName?: string,
+  product: 'chain' | 'chiamo' = 'chain',
+): string {
   return jwt.sign(
     { 
       userId, 
       tenantId,
       tenantSlug,
-      tenantName
+      tenantName,
+      product,
     },
     JWT_SECRET,
     { expiresIn: '7d' }

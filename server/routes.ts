@@ -114,6 +114,7 @@ import { walletService, InsufficientFundsError } from "./walletService";
 import { AuthnetService } from "./authnetService";
 import bcrypt from "bcryptjs";
 import { makePreflight, normalizePreflight, sanitizeProviderError, validateRemovalConfirmation } from "./removalService";
+import { canAgencyProductAccessPath, type AgencyProduct } from "@shared/productRouteAccess";
 import { suspendCompanyTwilioSubaccount } from "./companyTwilioService";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
@@ -1754,23 +1755,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.set("trust proxy", 1);
 
   app.use('/api/v2', externalApiRouter);
-  // The Chiamo customer origin is Voice-only. This server-side boundary prevents
-  // manually entered Chain API URLs from bypassing the separate product shell.
+  // Keep authenticated agency tokens inside their product API surface. Shared
+  // voice, settings, team, and session routes are explicitly classified by the
+  // helper; everything else defaults to Chain.
   app.use('/api', (req, res, next) => {
     const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(':')[0].toLowerCase();
     const chiamoDomain = (process.env.CHIAMO_DOMAIN || 'chiamoconnect.com').toLowerCase();
     const chiamoAppDomain = (process.env.CHIAMO_APP_DOMAIN || chiamoDomain).toLowerCase();
-    const allowed = ['/agency/', '/auth/', '/voip/', '/voice/', '/team-members', '/settings', '/health', '/chiamo/'];
     const isChiamoOrigin = host === chiamoDomain || host === chiamoAppDomain || host.endsWith(`.${chiamoDomain}`);
-    // A Chiamo-issued token stays constrained even if replayed against a Chain host.
-    let isChiamoToken = false;
+    let tokenProduct: AgencyProduct | null = null;
     const bearer = req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.slice(7) : '';
     if (bearer) {
-      try { isChiamoToken = (jwt.verify(bearer, process.env.JWT_SECRET || 'your-secret-key') as any).product === 'chiamo'; } catch { /* normal auth returns the appropriate error */ }
+      try {
+        const decoded = jwt.verify(bearer, process.env.JWT_SECRET || 'your-secret-key') as any;
+        // Global Admin and consumer tokens use separate authorization boundaries.
+        if (!decoded.isAdmin && decoded.type !== 'global_admin' && decoded.type !== 'consumer' && decoded.userId) {
+          tokenProduct = decoded.product === 'chiamo' ? 'chiamo' : 'chain';
+        }
+      } catch {
+        // The route's normal authentication middleware returns the final error.
+      }
     }
-    if (!isChiamoOrigin && !isChiamoToken) return next();
-    if (allowed.some(prefix => req.path === prefix || req.path.startsWith(prefix))) return next();
-    return res.status(403).json({ message: 'This Chain service is not included with Chiamo Connect.' });
+    if (tokenProduct && !canAgencyProductAccessPath(tokenProduct, req.path)) {
+      return res.status(403).json({
+        code: 'PRODUCT_ROUTE_FORBIDDEN',
+        message: `This API belongs to ${tokenProduct === 'chain' ? 'Chiamo Connect' : 'Chain Core'}, not the signed-in product.`,
+      });
+    }
+    // Requests from the Chiamo customer host without a token remain constrained
+    // before login as well.
+    if (isChiamoOrigin && !canAgencyProductAccessPath('chiamo', req.path)) {
+      return res.status(403).json({
+        code: 'PRODUCT_ROUTE_FORBIDDEN',
+        message: 'This Chain service is not included with Chiamo Connect.',
+      });
+    }
+    return next();
   });
   // Request/Response logger - log all incoming requests and outgoing responses for debugging
   app.use((req, res, next) => {
@@ -2429,11 +2449,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Tenant routes
   app.get('/api/tenants/:id', authenticateUser, async (req: any, res) => {
     try {
+      if (req.params.id !== req.user.tenantId) {
+        return res.status(403).json({ message: "You do not have access to this tenant" });
+      }
       const tenant = await storage.getTenant(req.params.id);
       if (!tenant) {
         return res.status(404).json({ message: "Tenant not found" });
       }
-      res.json(tenant);
+      res.json({
+        id: tenant.id,
+        name: tenant.name,
+        slug: tenant.slug,
+        businessType: tenant.businessType,
+        brand: tenant.brand,
+        chainCoreEnabled: tenant.chainCoreEnabled,
+        isActive: tenant.isActive,
+        emailServiceEnabled: tenant.emailServiceEnabled,
+        smsServiceEnabled: tenant.smsServiceEnabled,
+        portalAccessEnabled: tenant.portalAccessEnabled,
+        paymentProcessingEnabled: tenant.paymentProcessingEnabled,
+        voipEnabled: tenant.voipEnabled,
+        isTrialAccount: tenant.isTrialAccount,
+        isPaidAccount: tenant.isPaidAccount,
+        maxActiveUsers: tenant.maxActiveUsers,
+        billingMode: tenant.billingMode,
+      });
     } catch (error) {
       console.error("Error fetching tenant:", error);
       res.status(500).json({ message: "Failed to fetch tenant" });
@@ -2445,7 +2485,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { slug } = req.params;
       const [tenant] = await db
-        .select()
+        .select({
+          id: tenants.id,
+          name: tenants.name,
+          slug: tenants.slug,
+          businessType: tenants.businessType,
+          brand: tenants.brand,
+          chainCoreEnabled: tenants.chainCoreEnabled,
+          chiamoConnectEnabled: tenants.chiamoConnectEnabled,
+          isActive: tenants.isActive,
+        })
         .from(tenants)
         .where(eq(tenants.slug, slug))
         .limit(1);
@@ -20991,6 +21040,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         (SELECT count(*)::int FROM payment_processing_logs WHERE tenant_id=${tenantId}) AS processing,
         (SELECT count(*)::int FROM payment_approvals WHERE tenant_id=${tenantId}) AS approvals,
         (SELECT count(*)::int FROM wallet_ledger WHERE tenant_id=${tenantId}) AS wallet_ledger,
+        (
+          (SELECT count(*)::int FROM wallets WHERE tenant_id=${tenantId})
+          + (SELECT count(*)::int FROM tenant_addons WHERE tenant_id=${tenantId})
+          + (SELECT count(*)::int FROM subscriptions WHERE tenant_id=${tenantId})
+          + (SELECT count(*)::int FROM payment_methods WHERE tenant_id=${tenantId})
+          + (SELECT count(*)::int FROM service_activation_requests WHERE tenant_id=${tenantId})
+        ) AS billing_history,
         (SELECT count(*)::int FROM documents WHERE tenant_id=${tenantId}) AS documents,
         (SELECT count(*)::int FROM signature_requests WHERE tenant_id=${tenantId}) AS signature_requests,
         (SELECT count(*)::int FROM signed_documents WHERE tenant_id=${tenantId}) AS signed_documents,
@@ -21003,12 +21059,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
         (SELECT count(*)::int FROM tenant_agreements WHERE tenant_id=${tenantId}) AS agreements,
         (SELECT count(*)::int FROM email_logs WHERE tenant_id=${tenantId}) AS email_logs,
         (SELECT count(*)::int FROM email_replies WHERE tenant_id=${tenantId}) AS email_replies,
-        (SELECT count(*)::int FROM sms_tracking WHERE tenant_id=${tenantId}) AS sms_tracking,
+        (
+          SELECT count(*)::int
+          FROM sms_tracking st
+          WHERE st.tenant_id=${tenantId}
+             OR EXISTS (SELECT 1 FROM consumers c WHERE c.id=st.consumer_id AND c.tenant_id=${tenantId})
+             OR EXISTS (SELECT 1 FROM sms_campaigns sc WHERE sc.id=st.campaign_id AND sc.tenant_id=${tenantId})
+        ) AS sms_tracking,
         (SELECT count(*)::int FROM sms_replies WHERE tenant_id=${tenantId}) AS sms_replies,
         (SELECT count(*)::int FROM messaging_usage_events WHERE tenant_id=${tenantId}) AS messaging_usage,
+        (
+          (SELECT count(*)::int FROM email_campaigns WHERE tenant_id=${tenantId})
+          + (
+              SELECT count(*)::int
+              FROM email_tracking et
+              INNER JOIN email_campaigns ec ON ec.id=et.campaign_id
+              WHERE ec.tenant_id=${tenantId}
+            )
+          + (SELECT count(*)::int FROM auto_response_usage WHERE tenant_id=${tenantId})
+          + (SELECT count(*)::int FROM sms_campaigns WHERE tenant_id=${tenantId})
+          + (SELECT count(*)::int FROM sms_blocked_numbers WHERE tenant_id=${tenantId})
+          + (SELECT count(*)::int FROM sender_identities WHERE tenant_id=${tenantId})
+          + (SELECT count(*)::int FROM consumer_notifications WHERE tenant_id=${tenantId})
+          + (SELECT count(*)::int FROM callback_requests WHERE tenant_id=${tenantId})
+        ) AS communication_history,
         (SELECT count(*)::int FROM voip_suspended_calls WHERE tenant_id=${tenantId}) AS suspended_calls,
         (SELECT count(*)::int FROM voip_voicemails WHERE tenant_id=${tenantId}) AS voicemails,
         (SELECT count(*)::int FROM voip_call_logs WHERE tenant_id=${tenantId}) AS call_logs,
+        (
+          (SELECT count(*)::int FROM voip_phone_numbers WHERE tenant_id=${tenantId})
+          + (SELECT count(*)::int FROM local_presence_requests WHERE tenant_id=${tenantId})
+          + (SELECT count(*)::int FROM voice_verification_statuses WHERE tenant_id=${tenantId})
+        ) AS voice_provisioning,
         (SELECT count(*)::int FROM campaign_logs WHERE tenant_id=${tenantId}) AS campaign_history,
         (
           SELECT count(*)::int
@@ -21026,6 +21108,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     `);
     const row = (result as any).rows?.[0] || {};
     const number = (key: string) => Number(row[key] || 0);
+    let proposedArrangementCount = 0;
+    const proposedTable = await tx.execute(sql`SELECT to_regclass('public.proposed_arrangements') AS relation`);
+    if ((proposedTable as any).rows?.[0]?.relation) {
+      const proposed = await tx.execute(sql`SELECT count(*)::int AS count FROM proposed_arrangements WHERE tenant_id=${tenantId}`);
+      proposedArrangementCount = Number((proposed as any).rows?.[0]?.count || 0);
+    }
     return {
       users: number("users"),
       consumers: number("consumers"),
@@ -21037,7 +21125,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       messages: number("email_logs") + number("email_replies") + number("sms_tracking") + number("sms_replies"),
       paymentSchedules: number("payment_schedules"),
       manualPayments: number("manual_payments"),
-      arrangements: number("arrangements"),
+      arrangements: number("arrangements") + proposedArrangementCount,
       processing: number("processing"),
       approvals: number("approvals"),
       walletLedger: number("wallet_ledger"),
@@ -21057,6 +21145,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       automationHistory: number("automation_history"),
       sequenceHistory: number("sequence_history"),
       convertedLeads: number("converted_leads"),
+      billingHistory: number("billing_history") + proposedArrangementCount,
+      communicationHistory: number("communication_history"),
+      voiceProvisioning: number("voice_provisioning"),
     };
   };
   const tenantPreflight = async (tx: any, tenantId: string, product: "CHAIN" | "CHIAMO") => {
@@ -21083,10 +21174,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return { source: index === 0 ? "tenant_settings.custom_branding.logoUrl" : "tenants.brand.logoUrl", url, owned: Boolean(key), ...(key ? { key } : {}) };
   }));
   const selectedProductActive = (preflight: any) => preflight.product === "CHAIN" ? preflight.target.chainCoreEnabled : preflight.target.chiamoConnectEnabled;
-  const verifyRemovalPassword = async (password: unknown) => {
-    if (typeof password !== "string") return false;
+  const verifyRemovalPassword = async (password: unknown): Promise<number | null> => {
+    if (typeof password !== "string") return null;
     const [credential] = await db.select().from(globalAdminCredentials).where(eq(globalAdminCredentials.id, "primary")).limit(1);
-    return Boolean(credential && await bcrypt.compare(password, credential.passwordHash));
+    if (!credential || credential.mustChangePassword || !await bcrypt.compare(password, credential.passwordHash)) return null;
+    return credential.credentialVersion;
+  };
+  const lockRemovalCredential = async (tx: any, expectedVersion: number) => {
+    const [credential] = await tx.select({
+      credentialVersion: globalAdminCredentials.credentialVersion,
+      mustChangePassword: globalAdminCredentials.mustChangePassword,
+    }).from(globalAdminCredentials)
+      .where(eq(globalAdminCredentials.id, "primary"))
+      .for("update")
+      .limit(1);
+    if (
+      !credential
+      || credential.mustChangePassword
+      || credential.credentialVersion !== expectedVersion
+    ) {
+      throw Object.assign(
+        new Error("The Global Admin credential changed. Sign in again and repeat the removal preflight."),
+        { status: 401, code: "ADMIN_CREDENTIAL_CHANGED" },
+      );
+    }
   };
   const attemptCleanupTask = async (task: any) => {
     try {
@@ -21098,11 +21209,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!await deleteTenantOwnedLogo(task.payload.logoUrl, task.payload.tenantId)) throw new Error("Logo object deletion was not completed");
       } // retained/unknown work is an intentional SKIPPED decision.
       const status = task.task_type === "POSTMARK_RETAINED" || !["TWILIO_SUSPEND", "POSTMARK_DELETE", "LOGO_DELETE"].includes(task.task_type) ? "SKIPPED" : "SUCCEEDED";
-      await db.execute(sql`UPDATE admin_removal_cleanup_tasks SET status=${status}, completed_at=NOW(), updated_at=NOW(), last_error=NULL WHERE id=${task.id}`);
+      const finalized = await db.execute(sql`
+        UPDATE admin_removal_cleanup_tasks
+        SET status=${status}, completed_at=NOW(), updated_at=NOW(), last_error=NULL, claim_token=NULL
+        WHERE id=${task.id}
+          AND status='RUNNING'
+          AND claim_token=${task.claim_token}
+          AND claim_version=${task.claim_version}
+        RETURNING id
+      `);
+      if (!(finalized as any).rows?.length) {
+        return { id: task.id, type: task.task_type, status: "SKIPPED", staleClaim: true };
+      }
       return { id: task.id, type: task.task_type, status };
     } catch (error) {
       const message = sanitizeProviderError(error);
-      await db.execute(sql`UPDATE admin_removal_cleanup_tasks SET status='FAILED', last_error=${message}, updated_at=NOW() WHERE id=${task.id}`);
+      const finalized = await db.execute(sql`
+        UPDATE admin_removal_cleanup_tasks
+        SET status='FAILED', last_error=${message}, updated_at=NOW(), claim_token=NULL
+        WHERE id=${task.id}
+          AND status='RUNNING'
+          AND claim_token=${task.claim_token}
+          AND claim_version=${task.claim_version}
+        RETURNING id
+      `);
+      if (!(finalized as any).rows?.length) {
+        return { id: task.id, type: task.task_type, status: "SKIPPED", staleClaim: true };
+      }
       return { id: task.id, type: task.task_type, status: "FAILED", error: message };
     }
   };
@@ -21123,6 +21256,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       SET status = 'RUNNING',
           attempts = task.attempts + 1,
           claimed_at = NOW(),
+          claim_token = gen_random_uuid()::text,
+          claim_version = task.claim_version + 1,
+          completed_at = NULL,
+          last_error = NULL,
           updated_at = NOW()
       FROM candidates
       WHERE task.id = candidates.id
@@ -21206,7 +21343,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (product !== "CHAIN" && product !== "CHIAMO") {
       return res.status(400).json({ code: "VALIDATION_ERROR", message: "product must be CHAIN or CHIAMO" });
     }
-    if (!(await verifyRemovalPassword(req.body?.password))) {
+    const authorizedCredentialVersion = await verifyRemovalPassword(req.body?.password);
+    if (authorizedCredentialVersion === null) {
       return res.status(401).json({ code: "INVALID_CREDENTIALS", message: "Current Global Admin password is required." });
     }
     let auditId: string | null = null;
@@ -21234,7 +21372,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         targetType: "TENANT",
         targetId: req.params.tenantId,
         actorId: "primary",
-        actorCredentialVersion: req.globalAdminClaims?.credentialVersion || null,
+        actorCredentialVersion: authorizedCredentialVersion,
         product,
         classification: prepared.classification,
         action,
@@ -21247,6 +21385,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       auditId = audit.id;
 
       const result = await db.transaction(async tx => {
+        await lockRemovalCredential(tx, authorizedCredentialVersion);
         const preflight = await tenantPreflight(tx, req.params.tenantId, product);
         if (!preflight) throw Object.assign(new Error("Tenant not found"), { status: 404, code: "NOT_FOUND" });
         if (!selectedProductActive(preflight)) {
@@ -21389,7 +21528,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return res.json(normalizePreflight(preflight, "CHIAMO_LEAD", []));
   });
   app.post("/api/admin/chiamo/leads/:leadId/remove", isPlatformAdmin, async (req: any, res) => {
-    if (!(await verifyRemovalPassword(req.body?.password))) return res.status(401).json({ code: "INVALID_CREDENTIALS", message: "Current Global Admin password is required." });
+    const authorizedCredentialVersion = await verifyRemovalPassword(req.body?.password);
+    if (authorizedCredentialVersion === null) return res.status(401).json({ code: "INVALID_CREDENTIALS", message: "Current Global Admin password is required." });
     let auditId: string | null = null;
     try {
       const prepared = await db.transaction(async tx => {
@@ -21418,7 +21558,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         targetType: "CHIAMO_LEAD",
         targetId: prepared.lead.id,
         actorId: "primary",
-        actorCredentialVersion: req.globalAdminClaims?.credentialVersion || null,
+        actorCredentialVersion: authorizedCredentialVersion,
         product: "CHIAMO",
         classification: "PERMANENT_DELETE",
         action: "DELETE_LEAD",
@@ -21431,6 +21571,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       auditId = audit.id;
 
       await db.transaction(async tx => {
+        await lockRemovalCredential(tx, authorizedCredentialVersion);
         const [lead] = await tx.select().from(chiamoLeads).where(eq(chiamoLeads.id, req.params.leadId)).for("update").limit(1);
         if (!lead || lead.convertedTenantId) {
           throw Object.assign(new Error("The lead changed while the preflight was open."), { status: 409, code: "PREFLIGHT_CHANGED" });
@@ -21516,6 +21657,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!tenant) {
         return res.status(404).json({ success: false, message: "Tenant not found" });
       }
+      if (tenant.isActive !== true) {
+        return res.status(409).json({ success: false, code: "TENANT_NOT_ACTIVE", message: "Tenant is not active." });
+      }
+      const requestedProduct = req.body?.product;
+      if (requestedProduct !== undefined && requestedProduct !== "CHAIN" && requestedProduct !== "CHIAMO") {
+        return res.status(400).json({ success: false, code: "VALIDATION_ERROR", message: "product must be CHAIN or CHIAMO" });
+      }
+      // Older callers did not send a product. Preserve compatibility while
+      // always issuing an explicit claim; after one product is removed, the
+      // surviving product is selected automatically.
+      const product = requestedProduct || (tenant.chainCoreEnabled ? "CHAIN" : tenant.chiamoConnectEnabled ? "CHIAMO" : null);
+      if (
+        !product
+        || (product === "CHAIN" && tenant.chainCoreEnabled !== true)
+        || (product === "CHIAMO" && tenant.chiamoConnectEnabled !== true)
+      ) {
+        return res.status(409).json({ success: false, code: "PRODUCT_NOT_ACTIVE", message: "The selected product is not active for this tenant." });
+      }
       
       // Get or create an agency credential for this tenant to use as the user
       const [credential] = await db.select()
@@ -21532,6 +21691,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           tenantName: tenant.name,
           isImpersonation: true, // Mark this as an impersonation session
           role: 'owner', // Give full access
+          product: product.toLowerCase(),
         },
         process.env.JWT_SECRET || 'your-secret-key',
         { expiresIn: '4h' } // Shorter expiry for impersonation sessions
@@ -21547,6 +21707,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           name: tenant.name,
           slug: tenant.slug,
         },
+        product,
         message: `Now logged in as ${tenant.name}`,
       });
     } catch (error: any) {

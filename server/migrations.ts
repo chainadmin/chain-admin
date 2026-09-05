@@ -72,11 +72,15 @@ export async function runMigrations() {
         attempts INTEGER NOT NULL DEFAULT 0,
         last_error TEXT,
         claimed_at TIMESTAMP,
+        claim_token TEXT,
+        claim_version INTEGER NOT NULL DEFAULT 0,
         completed_at TIMESTAMP,
         created_at TIMESTAMP NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMP NOT NULL DEFAULT NOW()
       )
     `);
+    await client.query(`ALTER TABLE admin_removal_cleanup_tasks ADD COLUMN IF NOT EXISTS claim_token TEXT`);
+    await client.query(`ALTER TABLE admin_removal_cleanup_tasks ADD COLUMN IF NOT EXISTS claim_version INTEGER NOT NULL DEFAULT 0`);
     await client.query(`CREATE INDEX IF NOT EXISTS admin_removal_audits_target_idx ON admin_removal_audits(target_type, target_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS admin_removal_cleanup_tasks_claim_idx ON admin_removal_cleanup_tasks(status, updated_at)`);
     await client.query(`CREATE INDEX IF NOT EXISTS admin_removal_cleanup_tasks_audit_idx ON admin_removal_cleanup_tasks(audit_id)`);

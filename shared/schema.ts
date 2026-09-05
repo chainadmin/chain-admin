@@ -300,6 +300,10 @@ export const adminRemovalCleanupTasks = pgTable("admin_removal_cleanup_tasks", {
   attempts: integer("attempts").notNull().default(0),
   lastError: text("last_error"),
   claimedAt: timestamp("claimed_at"),
+  // Every retry receives a new fence. A stale worker may still finish an
+  // idempotent provider call, but it cannot overwrite the newer worker's state.
+  claimToken: text("claim_token"),
+  claimVersion: integer("claim_version").notNull().default(0),
   completedAt: timestamp("completed_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),

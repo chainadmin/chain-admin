@@ -32,6 +32,11 @@ router.use(async (req: ExternalApiRequest, res, next) => {
     return res.status(401).json({ message: "Unauthorized" });
   }
 
+  const activeTenant = await storage.getTenant(tenant.tenantId);
+  if (!activeTenant || activeTenant.isActive !== true || activeTenant.chainCoreEnabled !== true) {
+    return res.status(403).json({ message: "Chain API access is disabled" });
+  }
+
   const settings = await storage.getTenantSettings(tenant.tenantId);
   if (!settings?.campaignIntegrationEnabled) {
     return res.status(403).json({ message: "Campaign integration is disabled" });

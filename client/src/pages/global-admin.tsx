@@ -3561,7 +3561,10 @@ export default function GlobalAdmin() {
                                 headers: {
                                   'Authorization': `Bearer ${token}`,
                                   'Content-Type': 'application/json'
-                                }
+                                 },
+                                 body: JSON.stringify({
+                                   product: tenant.chainCoreEnabled ? 'CHAIN' : 'CHIAMO',
+                                 }),
                               });
                               
                               const data = await response.json();

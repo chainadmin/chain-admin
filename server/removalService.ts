@@ -52,7 +52,8 @@ const retainedKeys = [
   "signedLegalRecords", "signedDocuments", "signatureAudit", "audit", "agreements",
   "emailLogs", "emailReplies", "smsLogs", "smsReplies", "replies", "tracking",
   "messagingUsage", "calls", "callLogs", "voicemails", "campaignHistory",
-  "automationHistory", "sequenceHistory", "convertedLeads",
+  "automationHistory", "sequenceHistory", "convertedLeads", "billingHistory",
+  "communicationHistory", "voiceProvisioning",
 ] as const;
 
 /** Do not use provider response bodies in an admin-visible error or audit. */
