@@ -113,7 +113,15 @@ import {
 import { walletService, InsufficientFundsError } from "./walletService";
 import { AuthnetService } from "./authnetService";
 import bcrypt from "bcryptjs";
-import { makePreflight, normalizePreflight, sanitizeProviderError, validateRemovalConfirmation } from "./removalService";
+import {
+  effectiveRemovalClassification,
+  FORCE_PERMANENT_DELETE_CONFIRMATION,
+  makePreflight,
+  normalizePreflight,
+  protectedLegalRecordCount,
+  sanitizeProviderError,
+  validateRemovalConfirmation,
+} from "./removalService";
 import { countOptionalPaymentApprovals } from "./removalQueryHelpers";
 import { canAgencyProductAccessPath, type AgencyProduct } from "@shared/productRouteAccess";
 import { resolvePublicAgencyBranding } from "@shared/agencyBranding";
@@ -21317,10 +21325,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/admin/removals/tenants/:tenantId/preflight", isPlatformAdmin, async (req: any, res) => {
     try {
       const product = req.query.product;
+      const forcePermanentDelete = req.query.forcePermanentDelete === "true";
       if (product !== "CHAIN" && product !== "CHIAMO") return res.status(400).json({ code: "VALIDATION_ERROR", message: "product must be CHAIN or CHIAMO" });
       const result = await db.transaction(tx => tenantPreflight(tx, req.params.tenantId, product));
       if (!result) return res.status(404).json({ message: "Tenant not found" });
-      if (!selectedProductActive(result)) return res.status(409).json({ code: "PRODUCT_NOT_ACTIVE", message: "The selected product is not active for this tenant." });
+      if (!selectedProductActive(result) && !forcePermanentDelete) return res.status(409).json({ code: "PRODUCT_NOT_ACTIVE", message: "The selected product is not active for this tenant." });
       return res.json(publicTenantPreflight(result));
     } catch (error) {
       console.error("Tenant removal preflight failed:", error);
@@ -21332,8 +21341,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   app.post("/api/admin/removals/tenants/:tenantId", isPlatformAdmin, async (req: any, res) => {
     const product = req.body?.product;
+    const forcePermanentDelete = req.body?.forcePermanentDelete === true;
     if (product !== "CHAIN" && product !== "CHIAMO") {
       return res.status(400).json({ code: "VALIDATION_ERROR", message: "product must be CHAIN or CHIAMO" });
+    }
+    if (
+      forcePermanentDelete
+      && req.body?.purgeConfirmation !== FORCE_PERMANENT_DELETE_CONFIRMATION
+    ) {
+      return res.status(400).json({
+        code: "VALIDATION_ERROR",
+        message: `Type ${FORCE_PERMANENT_DELETE_CONFIRMATION} to authorize the permanent purge.`,
+      });
     }
     const authorizedCredentialVersion = await verifyRemovalPassword(req.body?.password);
     if (authorizedCredentialVersion === null) {
@@ -21347,7 +21366,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const prepared = await db.transaction(async tx => {
         const snapshot = await tenantPreflight(tx, req.params.tenantId, product);
         if (!snapshot) throw Object.assign(new Error("Tenant not found"), { status: 404, code: "NOT_FOUND" });
-        if (!selectedProductActive(snapshot)) {
+        if (!selectedProductActive(snapshot) && !forcePermanentDelete) {
           throw Object.assign(new Error("The selected product is not active for this tenant."), { status: 409, code: "PRODUCT_NOT_ACTIVE" });
         }
         const confirmation = validateRemovalConfirmation(snapshot.target.name, req.body?.typedName, req.body?.reason);
@@ -21355,7 +21374,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (req.body?.preflightFingerprint !== snapshot.fingerprint) {
           throw Object.assign(new Error("The removal preflight changed. Review it and try again."), { status: 409, code: "PREFLIGHT_CHANGED" });
         }
-        return snapshot;
+        if (forcePermanentDelete && protectedLegalRecordCount(snapshot.counts) > 0) {
+          throw Object.assign(new Error("Finalized signed legal documents must be retained and prevent a permanent purge."), { status: 409, code: "RETENTION_BLOCK" });
+        }
+        return {
+          ...snapshot,
+          classification: effectiveRemovalClassification(
+            snapshot.classification,
+            snapshot.counts,
+            forcePermanentDelete,
+          ),
+          blockers: forcePermanentDelete ? [] : snapshot.blockers,
+        };
       });
       const action = prepared.classification === "PERMANENT_DELETE"
         ? "DELETE_TENANT"
@@ -21370,7 +21400,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         action,
         reason: req.body.reason.trim(),
         targetSnapshot: prepared.target,
-        dependencySnapshot: prepared,
+        dependencySnapshot: { ...prepared, forcePermanentDelete },
         outcome: "PENDING",
         cleanupStatus: "NOT_REQUIRED",
       }).returning();
@@ -21380,7 +21410,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await lockRemovalCredential(tx, authorizedCredentialVersion);
         const preflight = await tenantPreflight(tx, req.params.tenantId, product);
         if (!preflight) throw Object.assign(new Error("Tenant not found"), { status: 404, code: "NOT_FOUND" });
-        if (!selectedProductActive(preflight)) {
+        if (!selectedProductActive(preflight) && !forcePermanentDelete) {
           throw Object.assign(new Error("The selected product is no longer active for this tenant."), { status: 409, code: "PREFLIGHT_CHANGED" });
         }
         if (preflight.fingerprint !== prepared.fingerprint || preflight.fingerprint !== req.body?.preflightFingerprint) {
@@ -21388,12 +21418,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         const confirmation = validateRemovalConfirmation(preflight.target.name, req.body?.typedName, req.body?.reason);
         if (confirmation) throw Object.assign(new Error(confirmation), { status: 400, code: "VALIDATION_ERROR" });
+        if (forcePermanentDelete && protectedLegalRecordCount(preflight.counts) > 0) {
+          throw Object.assign(new Error("Finalized signed legal documents must be retained and prevent a permanent purge."), { status: 409, code: "RETENTION_BLOCK" });
+        }
 
         await tx.execute(sql`DELETE FROM sessions WHERE sess -> 'agencyUser' ->> 'tenantId' = ${req.params.tenantId}`);
         const phoneBillingOwner = preflight.providerResources.phoneBillingOwner;
-        if (preflight.classification === "PERMANENT_DELETE") {
+        const classification = prepared.classification;
+        if (classification === "PERMANENT_DELETE") {
           // Only known non-retained configuration/identity rows are removed
           // explicitly. Any missed or newly-added retained FK aborts safely.
+          if (forcePermanentDelete) {
+            await tx.delete(chiamoLeads).where(eq(chiamoLeads.convertedTenantId, req.params.tenantId));
+          }
           await tx.delete(chiamoServiceConfigurations).where(eq(chiamoServiceConfigurations.tenantId, req.params.tenantId));
           await tx.delete(chiamoSubscriptions).where(eq(chiamoSubscriptions.tenantId, req.params.tenantId));
           await tx.delete(phoneProductEntitlements).where(eq(phoneProductEntitlements.tenantId, req.params.tenantId));
@@ -21402,7 +21439,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           await tx.delete(agencyCredentials).where(eq(agencyCredentials.tenantId, req.params.tenantId));
           const deleted = await tx.delete(tenants).where(eq(tenants.id, req.params.tenantId)).returning({ id: tenants.id });
           if (deleted.length !== 1) throw new Error("Tenant delete did not affect exactly one row");
-        } else if (preflight.classification === "PRODUCT_DEACTIVATE") {
+        } else if (classification === "PRODUCT_DEACTIVATE") {
           if (product === "CHAIN") {
             await stopChainProduct(tx, req.params.tenantId);
             await tx.update(tenants).set({
@@ -21441,15 +21478,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         const tasks: any[] = [];
-        const maySuspendSelectedTwilio = preflight.classification !== "PRODUCT_DEACTIVATE"
+        const maySuspendSelectedTwilio = classification !== "PRODUCT_DEACTIVATE"
           || phoneBillingOwner === product;
         if (preflight.providerResources.twilioSubaccountSid && maySuspendSelectedTwilio) {
           tasks.push({ auditId: audit.id, taskType: "TWILIO_SUSPEND", payload: { subaccountSid: preflight.providerResources.twilioSubaccountSid } });
         }
-        if (preflight.classification === "PERMANENT_DELETE" && preflight.providerResources.postmarkServerId) {
+        if (classification === "PERMANENT_DELETE" && preflight.providerResources.postmarkServerId) {
           tasks.push({ auditId: audit.id, taskType: "POSTMARK_DELETE", payload: { serverId: preflight.providerResources.postmarkServerId } });
         }
-        if (preflight.classification !== "PERMANENT_DELETE" && preflight.providerResources.postmarkServerId) {
+        if (classification !== "PERMANENT_DELETE" && preflight.providerResources.postmarkServerId) {
           tasks.push({
             auditId: audit.id,
             taskType: "POSTMARK_RETAINED",
@@ -21458,7 +21495,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             completedAt: new Date(),
           });
         }
-        if (preflight.classification === "PERMANENT_DELETE") for (const logoUrl of preflight.logoReferences) {
+        if (classification === "PERMANENT_DELETE") for (const logoUrl of preflight.logoReferences) {
           if (tenantOwnedLogoKey(logoUrl, req.params.tenantId)) tasks.push({ auditId: audit.id, taskType: "LOGO_DELETE", payload: { tenantId: req.params.tenantId, logoUrl } });
         }
         if (tasks.length) await tx.insert(adminRemovalCleanupTasks).values(tasks);
@@ -21469,7 +21506,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           cleanupStatus: initialCleanupStatus,
           completedAt: new Date(),
         }).where(eq(adminRemovalAudits.id, audit.id));
-        return { auditId: audit.id, classification: preflight.classification };
+        return { auditId: audit.id, classification };
       });
 
       const claimed = await claimCleanupTasks(result.auditId);

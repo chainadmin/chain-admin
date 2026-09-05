@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  classifyRemoval, makePreflight, retryCleanupTask, sanitizeProviderError,
-  normalizePreflight, validateRemovalConfirmation,
+  classifyRemoval, effectiveRemovalClassification, makePreflight, retryCleanupTask, sanitizeProviderError,
+  FORCE_PERMANENT_DELETE_CONFIRMATION, normalizePreflight,
+  protectedLegalRecordCount, validateRemovalConfirmation,
 } from "./removalService";
 import { tenantOwnedLogoKey } from "./r2Storage";
 
@@ -38,6 +39,10 @@ test("removal confirmation tolerates surrounding stored whitespace but remains c
 
 test("signed legal records block a Chain permanent deletion", () => {
   assert.equal(classifyRemoval({ id:"t", name:"Acme", chainCoreEnabled:true, chiamoConnectEnabled:false }, "CHAIN", { ...empty, signedLegalRecords: 1 }), "ARCHIVE");
+  assert.equal(protectedLegalRecordCount({ signedLegalRecords: 1, signedDocuments: 2 }), 3);
+  assert.equal(FORCE_PERMANENT_DELETE_CONFIRMATION, "PERMANENTLY DELETE");
+  assert.equal(effectiveRemovalClassification("ARCHIVE", { ...empty, accounts: 2 }, true), "PERMANENT_DELETE");
+  assert.equal(effectiveRemovalClassification("ARCHIVE", { ...empty, signedLegalRecords: 1 }, true), "ARCHIVE");
 });
 
 test("all retained operational categories block a Chain permanent deletion", () => {

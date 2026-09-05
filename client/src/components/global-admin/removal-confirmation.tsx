@@ -48,15 +48,17 @@ function errorDetails(error: unknown) {
 
 export function RemovalConfirmation({ open, onOpenChange, target, onSuccess }: Props) {
   const [preflight, setPreflight] = useState<Preflight | null>(null);
+  const [forcePermanentDelete, setForcePermanentDelete] = useState(false);
+  const [purgeConfirmation, setPurgeConfirmation] = useState("");
   const [typedName, setTypedName] = useState("");
   const [reason, setReason] = useState("");
   const [password, setPassword] = useState("");
   const [cleanupResult, setCleanupResult] = useState<any>(null);
   const preflightUrl = target.kind === "lead"
     ? `/api/admin/chiamo/leads/${target.id}/removal-preflight`
-    : `/api/admin/removals/tenants/${target.id}/preflight?product=${target.product}`;
+    : `/api/admin/removals/tenants/${target.id}/preflight?product=${target.product}${forcePermanentDelete ? "&forcePermanentDelete=true" : ""}`;
   const query = useQuery<Preflight>({
-    queryKey: ["global-admin-removal-preflight", target.kind, target.id, target.product],
+    queryKey: ["global-admin-removal-preflight", target.kind, target.id, target.product, forcePermanentDelete],
     queryFn: async () => {
       const response = await apiRequest("GET", preflightUrl);
       return await response.json() as Preflight;
@@ -73,7 +75,13 @@ export function RemovalConfirmation({ open, onOpenChange, target, onSuccess }: P
         : `/api/admin/removals/tenants/${target.id}`;
       const response = await apiRequest("POST", url, {
         ...(target.kind === "tenant" ? { product: target.product } : {}),
-        typedName, reason, password, preflightFingerprint: current?.fingerprint,
+        typedName,
+        reason,
+        password,
+        preflightFingerprint: current?.fingerprint,
+        ...(target.kind === "tenant" && forcePermanentDelete
+          ? { forcePermanentDelete: true, purgeConfirmation }
+          : {}),
       });
       return await response.json();
     },
@@ -103,15 +111,28 @@ export function RemovalConfirmation({ open, onOpenChange, target, onSuccess }: P
   });
   const confirmationName = normalizedRemovalTargetName(current?.target.name || target.name);
   const exact = matchesRemovalTargetName(typedName, confirmationName);
-  const canExecute = Boolean(current && exact && reason.trim().length >= 10 && password && !execute.isPending);
-  const classificationLabel = current?.classification === "PERMANENT_DELETE" ? "Permanent deletion"
+  const hasProtectedLegalRecords = Boolean(current?.blockers?.some(blocker =>
+    blocker.category === "signedLegalRecords" || blocker.category === "signedDocuments"));
+  const canForcePurge = forcePermanentDelete
+    && purgeConfirmation === "PERMANENTLY DELETE"
+    && !hasProtectedLegalRecords;
+  const canExecute = Boolean(
+    current
+    && exact
+    && reason.trim().length >= 10
+    && password
+    && (!forcePermanentDelete || canForcePurge)
+    && !execute.isPending,
+  );
+  const classificationLabel = forcePermanentDelete ? "Permanent purge"
+    : current?.classification === "PERMANENT_DELETE" ? "Permanent deletion"
     : current?.classification === "PRODUCT_DEACTIVATE" ? "Product deactivation"
       : "Archive";
   const failure = execute.error || retryCleanup.error || query.error;
   const failureInfo = errorDetails(failure);
   const reset = (next: boolean) => {
     if (!next) {
-      setTypedName(""); setReason(""); setPassword(""); setCleanupResult(null); setPreflight(null);
+      setForcePermanentDelete(false); setPurgeConfirmation(""); setTypedName(""); setReason(""); setPassword(""); setCleanupResult(null); setPreflight(null);
       execute.reset(); retryCleanup.reset();
     }
     onOpenChange(next);
@@ -124,6 +145,24 @@ export function RemovalConfirmation({ open, onOpenChange, target, onSuccess }: P
         <DialogTitle className="flex items-center gap-2 text-rose-700"><ShieldAlert className="h-5 w-5" />Review {target.product} removal</DialogTitle>
         <DialogDescription>Nothing is changed until the final action is submitted. The server preflight is the source of truth.</DialogDescription>
       </DialogHeader>
+      {target.kind === "tenant" && !cleanupResult && <label className="flex cursor-pointer items-start gap-3 rounded-lg border-2 border-rose-200 bg-rose-50 p-4">
+        <input
+          type="checkbox"
+          className="mt-1 h-4 w-4 accent-rose-700"
+          checked={forcePermanentDelete}
+          onChange={event => {
+            setForcePermanentDelete(event.target.checked);
+            setPurgeConfirmation("");
+            setPreflight(null);
+            execute.reset();
+          }}
+          data-testid="checkbox-force-permanent-delete"
+        />
+        <span>
+          <span className="block font-bold text-rose-900">Permanently purge this company and its data</span>
+          <span className="mt-1 block text-sm text-rose-800">Use this for test companies that must be removed instead of archived. This deletes all products and associated users, consumers, accounts, financial history, messages, and calls. It cannot be undone. Finalized signed legal documents still prevent a purge.</span>
+        </span>
+      </label>}
       {query.isLoading && <div className="flex items-center gap-2 rounded-lg border bg-slate-50 p-4 text-sm"><Loader2 className="h-4 w-4 animate-spin" />Preparing a server-side impact review…</div>}
       {query.error && !current && <div className="space-y-3"><InlineFailure error={query.error} /><Button variant="outline" onClick={() => query.refetch()}><RefreshCw className="h-4 w-4" />Run preflight again</Button></div>}
       {current && !cleanupResult && <div className="space-y-4">
@@ -141,6 +180,12 @@ export function RemovalConfirmation({ open, onOpenChange, target, onSuccess }: P
         </div>
         {current.logos?.length > 0 && <p className="text-xs text-slate-500">A logo URL is an external reference and is not a database blocker. Only owned assets are considered for cleanup.</p>}
         {current.blockers?.length > 0 && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><p className="font-bold">Retained history that prevents permanent deletion</p><p className="mb-2 text-xs">These records will be preserved by the archive or product-deactivation action shown above.</p>{current.blockers.map(blocker => <p key={`${blocker.category}-${blocker.label}`}>{blocker.label} · {blocker.count}</p>)}</div>}
+        {forcePermanentDelete && <div className="rounded-lg border-2 border-rose-300 bg-rose-50 p-3 text-sm text-rose-900">
+          <p className="font-bold">Permanent purge authorization</p>
+          <p className="mt-1">Type <b>PERMANENTLY DELETE</b> below. The company and all listed non-legal data will be permanently removed.</p>
+          {hasProtectedLegalRecords && <p className="mt-2 font-bold">This company has finalized signed legal documents and cannot be permanently purged.</p>}
+          <Input className="mt-3 bg-white font-mono" value={purgeConfirmation} onChange={event => setPurgeConfirmation(event.target.value)} placeholder="PERMANENTLY DELETE" data-testid="input-force-delete-confirmation" />
+        </div>}
         <div className="grid gap-3 sm:grid-cols-2">
           <label><Label>Type the target name exactly</Label><Input className="mt-1" value={typedName} onChange={event => setTypedName(event.target.value)} placeholder={confirmationName} /></label>
           <label><Label>Reason required (at least 10 characters)</Label><Input className="mt-1" value={reason} onChange={event => setReason(event.target.value)} placeholder="Document the authorization" /></label>

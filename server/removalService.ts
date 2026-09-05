@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 export type RemovalProduct = "CHAIN" | "CHIAMO";
 export type RemovalClassification = "PERMANENT_DELETE" | "PRODUCT_DEACTIVATE" | "ARCHIVE";
 export type CleanupStatus = "PENDING" | "RUNNING" | "FAILED" | "SUCCEEDED" | "SKIPPED";
+export const FORCE_PERMANENT_DELETE_CONFIRMATION = "PERMANENTLY DELETE";
 
 export type RemovalCounts = Record<
   "users" | "consumers" | "accounts" | "invoices" | "payments" | "signedLegalRecords" |
@@ -76,6 +77,20 @@ export function retainedHistoryBlockers(counts: Record<string, number>): string[
   return retainedKeys
     .filter(key => Number(counts[key] || 0) > 0)
     .map(key => `${key}:${counts[key]}`);
+}
+
+export function protectedLegalRecordCount(counts: Record<string, number>): number {
+  return Number(counts.signedLegalRecords || 0) + Number(counts.signedDocuments || 0);
+}
+
+export function effectiveRemovalClassification(
+  current: RemovalClassification,
+  counts: Record<string, number>,
+  forcePermanentDelete: boolean,
+): RemovalClassification {
+  return forcePermanentDelete && protectedLegalRecordCount(counts) === 0
+    ? "PERMANENT_DELETE"
+    : current;
 }
 
 export function classifyRemoval(target: RemovalTarget, product: RemovalProduct, counts: Record<string, number>): RemovalClassification {
