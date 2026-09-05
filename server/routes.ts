@@ -115,6 +115,7 @@ import { AuthnetService } from "./authnetService";
 import bcrypt from "bcryptjs";
 import { makePreflight, normalizePreflight, sanitizeProviderError, validateRemovalConfirmation } from "./removalService";
 import { canAgencyProductAccessPath, type AgencyProduct } from "@shared/productRouteAccess";
+import { resolvePublicAgencyBranding } from "@shared/agencyBranding";
 import { suspendCompanyTwilioSubaccount } from "./companyTwilioService";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
@@ -7579,25 +7580,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Get tenant settings for additional branding
       const settings = await storage.getTenantSettings(tenant.id);
 
-      // Combine branding information
-      const customBranding = settings?.customBranding as any;
-      const branding = {
-        agencyName: tenant.name,
-        agencySlug: tenant.slug,
-        businessType: tenant.businessType || 'call_center',
-        logoUrl: customBranding?.logoUrl || (tenant.brand as any)?.logoUrl || null,
-        primaryColor: customBranding?.primaryColor || '#3B82F6',
-        secondaryColor: customBranding?.secondaryColor || '#1E40AF',
-        contactEmail: settings?.contactEmail || null,
-        contactPhone: settings?.contactPhone || null,
-        hasPrivacyPolicy: !!settings?.privacyPolicy,
-        hasTermsOfService: !!settings?.termsOfService,
-        privacyPolicy: settings?.privacyPolicy || null,
-        termsOfService: settings?.termsOfService || null,
-        landingPageHeadline: customBranding?.landingPageHeadline || null,
-        landingPageSubheadline: customBranding?.landingPageSubheadline || null,
-        customLandingPageUrl: customBranding?.customLandingPageUrl || null,
-      };
+      const branding = resolvePublicAgencyBranding(tenant, settings);
 
       res.status(200).json(branding);
     } catch (error) {

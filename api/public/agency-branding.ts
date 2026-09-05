@@ -2,6 +2,7 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 import { getDb } from '../_lib/db';
 import { tenants, tenantSettings } from '../../shared/schema';
 import { eq } from 'drizzle-orm';
+import { resolvePublicAgencyBranding } from '../../shared/agencyBranding';
 
 async function handler(req: VercelRequest, res: VercelResponse) {
   // Set CORS headers
@@ -42,6 +43,7 @@ async function handler(req: VercelRequest, res: VercelResponse) {
         id: tenants.id,
         name: tenants.name,
         slug: tenants.slug,
+        businessType: tenants.businessType,
         brand: tenants.brand,
         isActive: tenants.isActive,
       })
@@ -75,21 +77,7 @@ async function handler(req: VercelRequest, res: VercelResponse) {
       .limit(1);
     console.log('[agency-branding] Tenant settings query completed');
 
-    // Combine branding information
-    const customBranding = settings?.customBranding as any;
-    const branding = {
-      agencyName: tenant.name,
-      agencySlug: tenant.slug,
-      logoUrl: customBranding?.logoUrl || (tenant.brand as any)?.logoUrl || null,
-      primaryColor: customBranding?.primaryColor || '#3B82F6',
-      secondaryColor: customBranding?.secondaryColor || '#1E40AF',
-      contactEmail: settings?.contactEmail || null,
-      contactPhone: settings?.contactPhone || null,
-      hasPrivacyPolicy: !!settings?.privacyPolicy,
-      hasTermsOfService: !!settings?.termsOfService,
-      privacyPolicy: settings?.privacyPolicy || null,
-      termsOfService: settings?.termsOfService || null,
-    };
+    const branding = resolvePublicAgencyBranding(tenant, settings);
 
     console.log('[agency-branding] Sending successful response');
     res.status(200).json(branding);

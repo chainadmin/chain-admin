@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import type { CSSProperties } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,14 @@ import {
 import chainLogo from "@/assets/chain-logo.png";
 import { getAgencySlugFromRequest } from "@shared/utils/subdomain";
 import { resolvePolicyContent } from "./agency-policy-utils";
+import {
+  DEFAULT_PRIMARY_BRAND_COLOR,
+  DEFAULT_SECONDARY_BRAND_COLOR,
+  getContrastTextColor,
+  hexToRgba,
+  resolveBrandColor,
+  resolveSafeLandingPageUrl,
+} from "@shared/agencyBranding";
 
 interface AgencyBranding {
   agencyName: string;
@@ -73,8 +82,8 @@ export default function AgencyLanding() {
       agencyName: fallbackName,
       agencySlug: resolvedSlug,
       logoUrl: null,
-      primaryColor: "#2563eb",
-      secondaryColor: "#4f46e5",
+      primaryColor: DEFAULT_PRIMARY_BRAND_COLOR,
+      secondaryColor: DEFAULT_SECONDARY_BRAND_COLOR,
       contactEmail: "support@chainsoftwaregroup.com",
       contactPhone: null,
       hasPrivacyPolicy: false,
@@ -94,9 +103,8 @@ export default function AgencyLanding() {
 
   // Redirect to custom landing page if configured
   useEffect(() => {
-    const customUrl = agencyData?.customLandingPageUrl;
-    // Only redirect if URL is set and starts with http:// or https://
-    if (customUrl && (customUrl.startsWith('http://') || customUrl.startsWith('https://'))) {
+    const customUrl = resolveSafeLandingPageUrl(agencyData?.customLandingPageUrl);
+    if (customUrl) {
       window.location.href = customUrl;
     }
   }, [agencyData]);
@@ -170,11 +178,22 @@ export default function AgencyLanding() {
     console.warn("Agency branding failed to load, using fallback", error);
   }
 
-  const accentColor = resolvedBranding.primaryColor || "#2563eb";
-  const accentSecondary = resolvedBranding.secondaryColor || "#4f46e5";
+  const accentColor = resolveBrandColor(resolvedBranding.primaryColor, DEFAULT_PRIMARY_BRAND_COLOR);
+  const accentSecondary = resolveBrandColor(resolvedBranding.secondaryColor, DEFAULT_SECONDARY_BRAND_COLOR);
+  const brandForeground = getContrastTextColor(accentColor);
   const accentGradient = {
     background: `linear-gradient(135deg, ${accentColor}, ${accentSecondary})`,
   };
+  const primaryAction = {
+    backgroundColor: accentColor,
+    color: brandForeground,
+  };
+  const brandStyles = {
+    "--brand-primary": accentColor,
+    "--brand-secondary": accentSecondary,
+    "--brand-primary-soft": hexToRgba(accentColor, 0.2),
+    "--brand-secondary-soft": hexToRgba(accentSecondary, 0.18),
+  } as CSSProperties;
 
   const featureCards = [
     {
@@ -213,10 +232,10 @@ export default function AgencyLanding() {
   ];
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-white">
+    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-white" style={brandStyles}>
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -top-32 right-0 h-80 w-80 rounded-full bg-blue-500/30 blur-3xl" />
-        <div className="absolute bottom-0 left-0 h-[26rem] w-[26rem] rounded-full bg-indigo-500/20 blur-3xl" />
+        <div className="absolute -top-32 right-0 h-80 w-80 rounded-full blur-3xl" style={{ backgroundColor: hexToRgba(accentColor, 0.3) }} />
+        <div className="absolute bottom-0 left-0 h-[26rem] w-[26rem] rounded-full blur-3xl" style={{ backgroundColor: hexToRgba(accentSecondary, 0.22) }} />
       </div>
 
       <div className="relative">
@@ -231,21 +250,22 @@ export default function AgencyLanding() {
                 />
               </div>
               <div>
-                <p className="text-sm uppercase tracking-[0.2em] text-blue-200/80">Secure portal</p>
+                <p className="text-sm uppercase tracking-[0.2em]" style={{ color: accentColor }}>Secure portal</p>
                 <p className="text-lg font-semibold text-white">{resolvedBranding.agencyName}</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
               <Button
                 variant="ghost"
-                className="text-blue-100 hover:bg-white/10"
+                className="text-slate-100 hover:bg-white/10"
                 onClick={handleFindBalance}
                 data-testid="link-sign-in"
               >
                 Sign in
               </Button>
               <Button
-                className="rounded-full bg-blue-500 px-6 text-white hover:bg-blue-400"
+                className="rounded-full px-6 transition-opacity hover:opacity-90"
+                style={primaryAction}
                 onClick={() => setLocation(`/consumer-register/${resolvedBranding.agencySlug}`)}
                 data-testid="button-register"
               >
@@ -260,20 +280,22 @@ export default function AgencyLanding() {
             <div>
               <Badge
                 variant="outline"
-                className="border-blue-400/50 bg-blue-500/10 text-blue-100"
+                className="text-slate-100"
+                style={{ borderColor: hexToRgba(accentColor, 0.55), backgroundColor: hexToRgba(accentColor, 0.12) }}
               >
                 Powered by Chain Software Group
               </Badge>
               <h1 className="mt-6 text-4xl font-semibold tracking-tight text-white sm:text-5xl">
                 {resolvedBranding.landingPageHeadline || `${resolvedBranding.agencyName} gives you a smarter way to stay current`}
               </h1>
-              <p className="mt-6 max-w-xl text-lg text-blue-100/80">
+              <p className="mt-6 max-w-xl text-lg text-slate-200">
                 {resolvedBranding.landingPageSubheadline || 'Access your secure portal to review balances, explore payment plans, and stay in control every step of the way. Available 24/7 from any device.'}
               </p>
               <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center">
                 <Button
                   size="lg"
-                  className="h-12 rounded-full bg-blue-500 px-8 text-base font-medium hover:bg-blue-400"
+                  className="h-12 rounded-full px-8 text-base font-medium transition-opacity hover:opacity-90"
+                  style={primaryAction}
                   onClick={handleFindBalance}
                   data-testid="button-find-balance"
                 >
@@ -294,51 +316,51 @@ export default function AgencyLanding() {
               <div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Card className="border-white/10 bg-white/5 backdrop-blur">
                   <CardContent className="flex h-full flex-col justify-between gap-2 p-5">
-                    <p className="text-sm uppercase tracking-wide text-blue-200/80">Fast access</p>
+                    <p className="text-sm uppercase tracking-wide" style={{ color: accentColor }}>Fast access</p>
                     <p className="text-3xl font-semibold text-white">60 seconds</p>
-                    <p className="text-xs text-blue-100/70">Average time to locate your account</p>
+                    <p className="text-xs text-slate-300">Average time to locate your account</p>
                   </CardContent>
                 </Card>
                 <Card className="border-white/10 bg-white/5 backdrop-blur">
                   <CardContent className="flex h-full flex-col justify-between gap-2 p-5">
-                    <p className="text-sm uppercase tracking-wide text-blue-200/80">Always available</p>
+                    <p className="text-sm uppercase tracking-wide" style={{ color: accentSecondary }}>Always available</p>
                     <p className="text-3xl font-semibold text-white">24/7</p>
-                    <p className="text-xs text-blue-100/70">Manage balances from any device</p>
+                    <p className="text-xs text-slate-300">Manage balances from any device</p>
                   </CardContent>
                 </Card>
               </div>
             </div>
 
             <div className="relative">
-              <div className="absolute -top-6 -right-6 h-32 w-32 rounded-full bg-blue-500/20 blur-3xl" />
+              <div className="absolute -top-6 -right-6 h-32 w-32 rounded-full blur-3xl" style={{ backgroundColor: hexToRgba(accentColor, 0.22) }} />
               <Card className="border-white/10 bg-white/10 backdrop-blur">
                 <CardContent className="space-y-6 p-6">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-blue-100/70">Enterprise-grade protection</p>
+                      <p className="text-sm text-slate-300">Enterprise-grade protection</p>
                       <p className="text-2xl font-semibold text-white">Secure by design</p>
                     </div>
-                    <Shield className="h-10 w-10 text-blue-200" />
+                    <Shield className="h-10 w-10" style={{ color: accentColor }} />
                   </div>
-                  <div className="space-y-4 text-sm text-blue-100/80">
+                  <div className="space-y-4 text-sm text-slate-200">
                     <p className="flex items-center gap-3">
-                      <CheckCircle2 className="h-5 w-5 text-blue-300" />
+                      <CheckCircle2 className="h-5 w-5" style={{ color: accentColor }} />
                       Bank-level encryption safeguards every payment and update.
                     </p>
                     <p className="flex items-center gap-3">
-                      <CheckCircle2 className="h-5 w-5 text-blue-300" />
+                      <CheckCircle2 className="h-5 w-5" style={{ color: accentColor }} />
                       Two-factor verification keeps your profile and balances private.
                     </p>
                     <p className="flex items-center gap-3">
-                      <CheckCircle2 className="h-5 w-5 text-blue-300" />
+                      <CheckCircle2 className="h-5 w-5" style={{ color: accentColor }} />
                       Real people ready to help when you need a hand.
                     </p>
                   </div>
                   <div className="rounded-xl border border-white/10 bg-slate-900/60 p-4">
-                    <p className="text-sm text-blue-100/80">
+                    <p className="text-sm text-slate-200">
                       {`"The ${resolvedBranding.agencyName} portal powered by Chain makes it simple. I can review everything and confirm my payments without waiting on hold."`}
                     </p>
-                    <p className="mt-3 text-xs uppercase tracking-wide text-blue-200">Verified consumer feedback</p>
+                    <p className="mt-3 text-xs uppercase tracking-wide" style={{ color: accentSecondary }}>Verified consumer feedback</p>
                   </div>
                 </CardContent>
               </Card>
@@ -350,9 +372,9 @@ export default function AgencyLanding() {
               {featureCards.map((feature) => (
                 <Card key={feature.title} className="border-white/10 bg-slate-900/60 backdrop-blur">
                   <CardContent className="space-y-3 p-6">
-                    <feature.icon className="h-10 w-10 text-blue-300" />
+                    <feature.icon className="h-10 w-10" style={{ color: accentColor }} />
                     <h3 className="text-xl font-semibold text-white">{feature.title}</h3>
-                    <p className="text-sm text-blue-100/80">{feature.description}</p>
+                    <p className="text-sm text-slate-200">{feature.description}</p>
                   </CardContent>
                 </Card>
               ))}
@@ -363,17 +385,17 @@ export default function AgencyLanding() {
             <div className="flex flex-col gap-8 lg:flex-row lg:items-center lg:justify-between">
               <div className="max-w-xl">
                 <h2 className="text-3xl font-semibold text-white">Know exactly what to expect</h2>
-                <p className="mt-3 text-base text-blue-100/80">
+                <p className="mt-3 text-base text-slate-200">
                   The portal guides you through every step so you can get answers fast and stay confident about what comes next.
                 </p>
               </div>
-              <Sparkles className="hidden h-20 w-20 text-blue-200 lg:block" />
+              <Sparkles className="hidden h-20 w-20 lg:block" style={{ color: accentSecondary }} />
             </div>
             <div className="mt-8 grid gap-6 md:grid-cols-3">
               {steps.map((step) => (
                 <div key={step.title} className="rounded-2xl border border-white/10 bg-slate-950/60 p-6">
                   <h3 className="text-lg font-semibold text-white">{step.title}</h3>
-                  <p className="mt-3 text-sm text-blue-100/80">{step.description}</p>
+                  <p className="mt-3 text-sm text-slate-200">{step.description}</p>
                 </div>
               ))}
             </div>
@@ -383,25 +405,25 @@ export default function AgencyLanding() {
             <Card className="border-white/10 bg-slate-900/60 backdrop-blur">
               <CardContent className="space-y-4 p-6">
                 <div className="flex items-center gap-3">
-                  <div className="rounded-full bg-blue-500/20 p-2" style={accentGradient}>
+                  <div className="rounded-full p-2" style={accentGradient}>
                     <Lock className="h-6 w-6 text-white" />
                   </div>
                   <div>
-                    <p className="text-sm text-blue-100/70">Private &amp; protected</p>
+                    <p className="text-sm text-slate-300">Private &amp; protected</p>
                     <p className="text-xl font-semibold text-white">Security that matches your expectations</p>
                   </div>
                 </div>
-                <p className="text-sm text-blue-100/80">
+                <p className="text-sm text-slate-200">
                   Every interaction is encrypted end-to-end. Only verified consumers can access account details, and every payment is tokenized to keep your data secure.
                 </p>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-blue-100/80">
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-slate-200">
                     <p className="font-medium text-white">Instant notifications</p>
-                    <p className="mt-1 text-xs text-blue-100/70">Get updates the moment something changes.</p>
+                    <p className="mt-1 text-xs text-slate-300">Get updates the moment something changes.</p>
                   </div>
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-blue-100/80">
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-slate-200">
                     <p className="font-medium text-white">Flexible options</p>
-                    <p className="mt-1 text-xs text-blue-100/70">Explore plans tailored to your situation.</p>
+                    <p className="mt-1 text-xs text-slate-300">Explore plans tailored to your situation.</p>
                   </div>
                 </div>
               </CardContent>
@@ -410,16 +432,16 @@ export default function AgencyLanding() {
             <Card className="border-white/10 bg-white/5 backdrop-blur">
               <CardContent className="space-y-5 p-6">
                 <div className="flex items-center gap-3">
-                  <Clock className="h-6 w-6 text-blue-200" />
+                  <Clock className="h-6 w-6" style={{ color: accentColor }} />
                   <div>
-                    <p className="text-sm text-blue-100/70">Need assistance?</p>
+                    <p className="text-sm text-slate-300">Need assistance?</p>
                     <p className="text-xl font-semibold text-white">We're here for you</p>
                   </div>
                 </div>
-                <p className="text-sm text-blue-100/80">
+                <p className="text-sm text-slate-200">
                   Whether you have a question about your balance or want to talk through options, we're only a tap away.
                 </p>
-                <div className="space-y-3 text-sm text-blue-100/80">
+                <div className="space-y-3 text-sm text-slate-200">
                   {resolvedBranding.contactEmail && (
                     <button
                       onClick={() => (window.location.href = `mailto:${resolvedBranding.contactEmail}`)}
@@ -427,10 +449,10 @@ export default function AgencyLanding() {
                       data-testid="link-contact-email"
                     >
                       <span className="flex items-center gap-3">
-                        <Mail className="h-5 w-5 text-blue-200" />
+                        <Mail className="h-5 w-5" style={{ color: accentColor }} />
                         {resolvedBranding.contactEmail}
                       </span>
-                      <ArrowRight className="h-4 w-4 text-blue-200" />
+                      <ArrowRight className="h-4 w-4" style={{ color: accentSecondary }} />
                     </button>
                   )}
                   {resolvedBranding.contactPhone && (
@@ -440,14 +462,14 @@ export default function AgencyLanding() {
                       data-testid="link-contact-phone"
                     >
                       <span className="flex items-center gap-3">
-                        <Phone className="h-5 w-5 text-blue-200" />
+                        <Phone className="h-5 w-5" style={{ color: accentColor }} />
                         {resolvedBranding.contactPhone}
                       </span>
-                      <ArrowRight className="h-4 w-4 text-blue-200" />
+                      <ArrowRight className="h-4 w-4" style={{ color: accentSecondary }} />
                     </button>
                   )}
                   {!resolvedBranding.contactEmail && !resolvedBranding.contactPhone && (
-                    <p className="rounded-xl border border-dashed border-white/20 bg-slate-950/60 p-4 text-center text-xs text-blue-100/70">
+                    <p className="rounded-xl border border-dashed border-white/20 bg-slate-950/60 p-4 text-center text-xs text-slate-300">
                       {`Contact information will appear here once provided by ${resolvedBranding.agencyName}.`}
                     </p>
                   )}
@@ -458,15 +480,15 @@ export default function AgencyLanding() {
         </main>
 
         <footer className="border-t border-white/10 bg-slate-950/70 py-10">
-          <div className="mx-auto flex max-w-6xl flex-col gap-8 px-6 text-sm text-blue-100/70 md:flex-row md:items-center md:justify-between">
+          <div className="mx-auto flex max-w-6xl flex-col gap-8 px-6 text-sm text-slate-300 md:flex-row md:items-center md:justify-between">
             <div>
-              <p className="text-blue-100/80">© {new Date().getFullYear()} {resolvedBranding.agencyName}. All rights reserved.</p>
-              <p className="text-xs text-blue-100/60">Powered by Chain Software Group</p>
+              <p className="text-slate-200">© {new Date().getFullYear()} {resolvedBranding.agencyName}. All rights reserved.</p>
+              <p className="text-xs text-slate-400">Powered by Chain Software Group</p>
             </div>
             <div className="flex flex-wrap gap-4">
               <button
                 onClick={handleFindBalance}
-                className="transition-colors hover:text-blue-200"
+                className="transition-colors hover:text-[var(--brand-primary)]"
                 data-testid="link-account-summary"
               >
                 Account summary
@@ -474,7 +496,7 @@ export default function AgencyLanding() {
               {hasTermsContent && (
                 <button
                   onClick={() => setShowTermsDialog(true)}
-                  className="transition-colors hover:text-blue-200"
+                  className="transition-colors hover:text-[var(--brand-primary)]"
                   data-testid="link-terms"
                 >
                   Terms of Service
@@ -483,7 +505,7 @@ export default function AgencyLanding() {
               {hasPrivacyContent && (
                 <button
                   onClick={() => setShowPrivacyDialog(true)}
-                  className="transition-colors hover:text-blue-200"
+                  className="transition-colors hover:text-[var(--brand-primary)]"
                   data-testid="link-privacy"
                 >
                   Privacy Policy
@@ -498,7 +520,7 @@ export default function AgencyLanding() {
                       window.location.href = `tel:${resolvedBranding.contactPhone}`;
                     }
                   }}
-                  className="transition-colors hover:text-blue-200"
+                  className="transition-colors hover:text-[var(--brand-primary)]"
                   data-testid="link-contact"
                 >
                   Contact us
@@ -506,7 +528,7 @@ export default function AgencyLanding() {
               )}
               <button
                 onClick={() => setLocation("/agency-login")}
-                className="transition-colors hover:text-blue-200"
+                className="transition-colors hover:text-[var(--brand-primary)]"
                 data-testid="link-agency-login"
               >
                 Agency sign in
@@ -517,10 +539,10 @@ export default function AgencyLanding() {
       </div>
 
       <Dialog open={showTermsDialog} onOpenChange={setShowTermsDialog}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto bg-slate-950 text-blue-100">
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto bg-slate-950 text-slate-100">
           <DialogHeader>
             <DialogTitle>Terms of Service</DialogTitle>
-            <DialogDescription className="mt-4 whitespace-pre-wrap text-blue-100/80">
+            <DialogDescription className="mt-4 whitespace-pre-wrap text-slate-200">
               {termsContent}
             </DialogDescription>
           </DialogHeader>
@@ -528,10 +550,10 @@ export default function AgencyLanding() {
       </Dialog>
 
       <Dialog open={showPrivacyDialog} onOpenChange={setShowPrivacyDialog}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto bg-slate-950 text-blue-100">
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto bg-slate-950 text-slate-100">
           <DialogHeader>
             <DialogTitle>Privacy Policy</DialogTitle>
-            <DialogDescription className="mt-4 whitespace-pre-wrap text-blue-100/80">
+            <DialogDescription className="mt-4 whitespace-pre-wrap text-slate-200">
               {privacyContent}
             </DialogDescription>
           </DialogHeader>

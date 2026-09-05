@@ -48,6 +48,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import AutoResponseSettings from "@/components/auto-response-settings";
 import TeamMembersSection from "@/components/team-members-section";
 import { usePaginatedConsumers } from "@/hooks/use-paginated-consumers";
+import { hasActiveLandingBranding } from "@shared/agencyBranding";
 
 const getValidBrandColor = (value: unknown, fallback: string) =>
   typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value) ? value : fallback;
@@ -231,9 +232,9 @@ export default function Settings() {
     {
       label: "Portal branding",
       icon: ImageIcon,
-      active: Boolean((settings as any)?.customBranding?.logoUrl),
-      description: (settings as any)?.customBranding?.logoUrl
-        ? "Custom logo in use"
+      active: hasActiveLandingBranding((settings as any)?.customBranding),
+      description: hasActiveLandingBranding((settings as any)?.customBranding)
+        ? "Custom landing style in use"
         : "Using default Chain theme",
     },
     {
