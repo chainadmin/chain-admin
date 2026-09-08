@@ -10,6 +10,8 @@ import { deleteCookie } from "@/lib/cookies";
 import { chiamoPlans, CHIAMO_SUPPORT_EMAIL } from "@shared/chiamo";
 import { applyProductMetadata } from "@/lib/page-metadata";
 import { VoipControlCenter } from "@/components/voip-control-center";
+import { ChiamoNumbersPanel } from "./chiamo-numbers";
+import { ChiamoUsersPanel } from "./chiamo-users";
 
 const brand = brands.chiamo;
 const nav = [
@@ -49,7 +51,19 @@ export { ChiamoLogin } from "./chiamo-login";
 export function ChiamoShell({page}:{page:string}) { const [open,setOpen]=useState(false); useEffect(() => applyProductMetadata(page), [page]); const logout=()=>{localStorage.removeItem("authToken");deleteCookie("authToken");window.location.href="/agency-login";}; return <div className="min-h-screen bg-slate-50 text-slate-900"><aside className={`${open?"translate-x-0":"-translate-x-full"} fixed inset-y-0 z-30 w-72 bg-[#062d31] p-5 text-white transition md:translate-x-0`}><div className="flex items-center justify-between"><img src={brand.logo} className="h-11 rounded bg-white p-1"/><button className="md:hidden" onClick={()=>setOpen(false)}><X/></button></div><nav className="mt-10 space-y-1">{nav.map(([href,label,Icon])=><Link key={href} href={href} onClick={()=>setOpen(false)} className={`flex items-center gap-3 rounded-xl px-4 py-3 ${page===href?"bg-emerald-500 font-bold":"text-slate-300 hover:bg-white/10"}`}><Icon className="h-5 w-5"/>{label}</Link>)}</nav></aside><div className="md:pl-72"><header className="flex h-20 items-center justify-between border-b bg-white px-5"><div className="flex items-center"><button className="mr-4 md:hidden" onClick={()=>setOpen(true)}><Menu/></button><h1 className="text-xl font-bold">{nav.find(n=>n[0]===page)?.[1]}</h1></div><Button variant="ghost" onClick={logout}><LogOut className="mr-2 h-4 w-4"/>Logout</Button></header><main className="p-4 sm:p-8"><ChiamoPage page={page}/></main></div></div> }
 
 type Call={id:string;fromNumber:string;toNumber:string;direction:string;status:string;duration:number|null;createdAt:string;recordingUrl?:string;recordingSid?:string};
-function useVoice(){const calls=useQuery<Call[]>({queryKey:["/api/voip/call-logs?limit=500"]});const numbers=useQuery<any[]>({queryKey:["/api/voip/phone-numbers"]});const users=useQuery<any[]>({queryKey:["/api/team-members"]});return {calls:calls.data||[],numbers:numbers.data||[],users:users.data||[],loading:calls.isLoading||numbers.isLoading||users.isLoading,error:calls.error||numbers.error||users.error};}
+function useVoice() {
+  const [page] = useLocation();
+  const needsCalls = ["/dashboard", "/calls", "/call-logs", "/recordings"].includes(page);
+  const needsSummary = page === "/dashboard";
+  const calls = useQuery<Call[]>({ queryKey: ["/api/voip/call-logs?limit=500"], enabled: needsCalls });
+  const numbers = useQuery<any[]>({ queryKey: ["/api/voip/phone-numbers"], enabled: needsSummary });
+  const users = useQuery<any[]>({ queryKey: ["/api/team-members"], enabled: needsSummary });
+  return {
+    calls: calls.data || [], numbers: numbers.data || [], users: users.data || [],
+    loading: (needsCalls && calls.isLoading) || (needsSummary && (numbers.isLoading || users.isLoading)),
+    error: (needsCalls && calls.error) || (needsSummary && (numbers.error || users.error)),
+  };
+}
 function ChiamoPage({page}:{page:string}) { const {calls,numbers,users,loading,error}=useVoice(); const account=useQuery<any>({queryKey:["/api/chiamo/account"],enabled:page==="/dashboard"||page==="/plan-billing"}); const [filter,setFilter]=useState("all"); const [search,setSearch]=useState(""); const filtered=useMemo(()=>calls.filter(c=>(filter==="all"||c.direction===filter||filter==="missed"&&c.status==="missed")&&`${c.fromNumber} ${c.toNumber}`.toLowerCase().includes(search.toLowerCase())),[calls,filter,search]); if(page==="/phone") return <div className="mx-auto max-w-xl rounded-3xl bg-[#062d31] p-8 text-center text-white"><Phone className="mx-auto h-12 w-12 text-emerald-400"/><h2 className="mt-4 text-2xl font-bold">Business Phone</h2><p className="mt-2 text-slate-300">Open the shared, secure calling experience.</p><div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row"><Button className="bg-emerald-500 hover:bg-emerald-600" onClick={()=>window.open('/softphone','_blank','width=400,height=700')}>Open Phone</Button><Button asChild variant="outline" className="border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white"><a href="/help">See how it works</a></Button></div></div>;
   if(page==="/plan-billing")return <BillingPanel query={account}/>;
   if(page==="/dashboard"&&!account.isLoading&&account.data&&account.data?.service?.voiceProviderStatus!=="READY")return <AccountSetupStatus account={account.data}/>;
@@ -57,12 +71,21 @@ function ChiamoPage({page}:{page:string}) { const {calls,numbers,users,loading,e
   if(error)return <Card title="PHONE SYSTEM STATUS"><h2 className="text-lg font-bold text-amber-800">Phone setup is not available yet</h2><p className="mt-2 text-sm text-slate-600">{error instanceof Error?error.message:"The phone service could not be loaded."} If your account was just created, provider setup may still be in progress.</p></Card>;
   if(page==="/dashboard") {const today=new Date().toDateString();const todays=calls.filter(c=>new Date(c.createdAt).toDateString()===today);return <div className="grid gap-6 lg:grid-cols-3"><Card title="BUSINESS PHONE"><p className="text-2xl font-bold">{numbers[0]?.phoneNumber||"No number assigned"}</p><p className="text-emerald-600">{numbers.length?"Ready":"Setup required"}</p><a href="/phone" className="mt-5 inline-block font-bold text-emerald-700">Open Phone →</a></Card><Card title="TODAY"><div className="grid grid-cols-3 gap-2 text-center"><Metric n={todays.filter(c=>c.direction==="incoming").length} t="Incoming"/><Metric n={todays.filter(c=>c.direction==="outgoing").length} t="Outgoing"/><Metric n={todays.filter(c=>c.status==="missed").length} t="Missed"/></div></Card><Card title="USERS"><p className="text-4xl font-black">{users.filter(u=>u.voipAccess).length}</p><p className="text-slate-500">Active phone users</p></Card><div className="lg:col-span-2"><Card title="RECENT CALLS"><CallTable calls={calls.slice(0,5)}/></Card></div><Card title="QUICK ACTIONS"><div className="grid gap-2">{[["Make Call","/phone"],["View Call Logs","/call-logs"],["Listen to Voicemail","/voicemail"],["Manage Numbers","/numbers"]].map(x=><a className="rounded-xl bg-slate-100 p-3 font-semibold" href={x[1]}>{x[0]}</a>)}</div></Card></div>}
   if(page==="/call-logs"||page==="/calls"||page==="/recordings"){const shown=page==="/recordings"?filtered.filter(c=>c.recordingSid||c.recordingUrl):filtered;return <Card title={page==="/recordings"?"CALL RECORDINGS":"CALL HISTORY"}><div className="mb-5 flex flex-wrap gap-2"><div className="relative"><Search className="absolute left-3 top-3 h-4 w-4"/><Input className="pl-9" placeholder="Search number or name" value={search} onChange={e=>setSearch(e.target.value)}/></div>{["all","incoming","outgoing","missed"].map(f=><Button variant={filter===f?"default":"outline"} onClick={()=>setFilter(f)}>{f[0].toUpperCase()+f.slice(1)}</Button>)}</div><CallTable calls={shown} recordings={page==="/recordings"}/></Card>}
-  if(page==="/numbers") return <div className="space-y-6"><Card title="BUSINESS NUMBERS"><p className="mb-5 text-sm text-slate-500">Review the number inventory and use Call Control to assign each number to a live routing path.</p><SimpleTable heads={["Phone Number","Assigned User / Extension","Status","Capabilities"]} rows={numbers.map(n=>[n.phoneNumber,n.friendlyName||"Unassigned",n.isActive?"Active":"Inactive","Voice"])} empty="No business numbers are assigned."/></Card><VoipControlCenter tone="chiamo"/></div>;
-  if(page==="/users") return <Card title="VOICE USERS"><SimpleTable heads={["Name","Email","Role","Status","VoIP Access"]} rows={users.map(u=>[u.name||u.username,u.email,u.role,u.isActive===false?"Inactive":"Active",u.voipAccess?"Enabled":"Disabled"])} empty="No users found."/></Card>;
+  if(page==="/numbers") return <div className="space-y-6"><ChiamoNumbersPanel/><VoipControlCenter tone="chiamo"/></div>;
+  if(page==="/users") return <ChiamoUsersPanel/>;
   if(page==="/voicemail") return <VoipControlCenter tone="chiamo"/>;
   if(page==="/help") return <PhoneGuide/>;
   if(page==="/more-services") return <div><h2 className="text-3xl font-bold">More tools for growing businesses</h2><div className="mt-6 grid gap-5 md:grid-cols-2">{[["CALL ROUTING","Review routing options for teams and locations."],["RECORDING","Discuss recording requirements and retention."],["CUSTOM SETUP","Ask about specialized communications requirements."]].map(([t,d])=><Card key={t} title={t}><p className="text-slate-600">{d}</p><a href="/get-started" className="mt-5 inline-block font-bold text-emerald-700">Request Details →</a></Card>)}</div></div>;
-  if(page==="/settings") return <VoipControlCenter tone="chiamo"/>;
+  if(page==="/settings") return <div className="space-y-6">
+    <Card title="MANAGE YOUR PHONE SYSTEM">
+      <p className="mb-4 text-sm text-slate-600">Account owners can purchase business numbers and manage team access.</p>
+      <div className="flex flex-wrap gap-3">
+        <Button asChild className="bg-emerald-600 hover:bg-emerald-700"><Link href="/numbers"><Hash className="mr-2 h-4 w-4"/>Buy or manage numbers</Link></Button>
+        <Button asChild variant="outline"><Link href="/users"><Users className="mr-2 h-4 w-4"/>Add or manage users</Link></Button>
+      </div>
+    </Card>
+    <VoipControlCenter tone="chiamo"/>
+  </div>;
   return <div className="grid gap-5 md:grid-cols-2">{["My Profile","Notifications","Users & Permissions","Organization","Billing","More Services"].map(t=><Card title={t}><p className="text-slate-500">Manage {t.toLowerCase()} with the controls supported for your account.</p></Card>)}</div>;
 }
 

@@ -2,6 +2,7 @@ import express from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { runMigrations } from "./migrations";
+import { migrateChiamoNumberPurchases } from "./chiamoNumberMigration";
 import cron from "node-cron";
 import { runChiamoInvoicePass } from "./chiamoInvoices";
 import { randomBytes } from "node:crypto";
@@ -51,6 +52,7 @@ async function main() {
   
   // Run database migrations automatically on startup (Railway deployments)
   await runMigrations();
+  await migrateChiamoNumberPurchases();
   
   const internalCronToken = randomBytes(32).toString("hex");
   const server = await createServer(internalCronToken);

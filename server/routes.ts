@@ -92,6 +92,8 @@ import externalApiRouter from "./external-api";
 import { registerWalletRoutes } from "./walletRoutes";
 import { registerChiamoRoutes } from "./chiamoRoutes";
 import { registerChiamoCredentialRoutes } from "./chiamoCredentialRoutes";
+import { registerChiamoUserRoutes } from "./chiamoUserRoutes";
+import { registerChiamoNumberRoutes } from "./chiamoNumberRoutes";
 import { resolveChiamoBaseUrl } from "./chiamoOnboarding";
 import { CHIAMO_SUPPORT_EMAIL } from "@shared/chiamo";
 import { chiamoLeads, chiamoServiceConfigurations, chiamoSubscriptions } from "@shared/chiamo-schema";
@@ -21692,6 +21694,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/admin/seed-plans', isPlatformAdmin, seedPlans);
 
   registerChiamoRoutes(app, isPlatformAdmin);
+  registerChiamoUserRoutes(app);
+  registerChiamoNumberRoutes(app);
 
   // Impersonate tenant (Global Admin only) - generates a JWT token to log in as any tenant
   app.post('/api/admin/impersonate-tenant/:tenantId', isPlatformAdmin, async (req: any, res) => {

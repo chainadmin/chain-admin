@@ -20,3 +20,14 @@ an expired worker must not overwrite a replacement worker's credentials.
 **How to apply:** Preserve live claims across repeated conversion requests,
 check claim ownership before every local resource write, and keep deliberate
 account intent separate from billing-derived operational eligibility.
+
+Retries of a paid operation must carry the immutable operation the customer
+confirmed, never read a later form selection when a background timer fires.
+
+**Why:** A pending provider response can outlive the original UI selection.
+Reading mutable form state on retry can purchase a different, unconfirmed
+resource even when server-side idempotency works correctly.
+
+**How to apply:** Retain the confirmed resource and idempotency key together,
+lock conflicting selections while work is pending, cancel timers on unmount,
+and reconcile ambiguous outcomes before attempting another provider creation.
