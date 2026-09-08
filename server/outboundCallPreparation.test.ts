@@ -86,10 +86,15 @@ test('outbound HTTP preparation succeeds with an active owned company number', a
 });
 
 test('explicit private mode uses exactly the dedicated active owned DID', async () => {
-  const privacy = { ...primary, id: 'privacy', phoneNumber: '+17165550199', isPrimary: false };
+  const privacy = {
+    ...primary, id: 'privacy', phoneNumber: '+17165550199', isPrimary: false,
+    numberType: 'LOCAL_PRESENCE' as const, areaCode: '716',
+  };
   const boundary = makeBoundary([primary, privacy]);
   const response = await boundary.request({
-    toNumber: '2125551212',
+    // A local-presence dial string exercises the bucket/prefix branch that
+    // previously discarded the selected Privacy DID and fell back to primary.
+    toNumber: '812125551212',
     callerIdMode: 'private',
     selectedNumberId: primary.id,
   });
@@ -101,6 +106,7 @@ test('explicit private mode uses exactly the dedicated active owned DID', async 
   assert.equal(boundary.calls.signed.callerIdNumberId, privacy.id);
   assert.equal(boundary.calls.signed.callerId, privacy.phoneNumber);
   assert.notEqual(boundary.calls.signed.callerId, primary.phoneNumber);
+  assert.equal(response.payload.selectionReason, 'SERVER_SELECTED');
 });
 
 test('missing dedicated Privacy DID fails without log or token and never falls back', async () => {

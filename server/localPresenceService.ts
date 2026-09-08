@@ -49,7 +49,8 @@ export type DialingSelectionReason =
   | 'LOCAL_PRESENCE_STATE'
   | 'PRIVATE_FALLBACK'
   | 'PRIMARY_FALLBACK'
-  | 'CALLER_SELECTED';
+  | 'CALLER_SELECTED'
+  | 'SERVER_SELECTED';
 
 export type DialingDecision = ParsedDialString & {
   destinationAreaCode: string;
@@ -66,6 +67,12 @@ export type SelectDialingNumberInput = {
   /** The id or E.164 phone number selected by the caller for an ordinary call. */
   selectedNumberId?: string | null;
   selectedPhoneNumber?: string | null;
+  /**
+   * A server-authorized exact DID. This is intentionally distinct from the
+   * caller-controlled selectors above: it bypasses geographic bucket policy
+   * only after the caller has already been authorized by a server workflow.
+   */
+  exactSelectedNumberId?: string | null;
   areaCodeToState?: AreaCodeToStateResolver;
 };
 
@@ -100,7 +107,10 @@ export function selectDialingNumber(input: SelectDialingNumberInput): DialingDec
     ? normalizedState(input.areaCodeToState(destinationAreaCode))
     : null;
 
-  if (parsed.localPresenceRequested) {
+  if (input.exactSelectedNumberId) {
+    selected = ownedActive.find(number => number.id === input.exactSelectedNumberId);
+    selectionReason = 'SERVER_SELECTED';
+  } else if (parsed.localPresenceRequested) {
     // Only bucket inventory participates in geographic matching. In
     // particular, a ported/direct or primary DID with the same area code does
     // not masquerade as Local Presence inventory.

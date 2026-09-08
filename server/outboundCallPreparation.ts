@@ -145,6 +145,9 @@ export function createOutboundCallPreparationHandler(
           dialString: toNumber,
           numbers: allNumbers,
           selectedNumberId,
+          // Only the dedicated Privacy workflow may supply this
+          // server-authorized bypass. Never use a client requested number here.
+          exactSelectedNumberId: privacyRequested ? privacyLine!.id : undefined,
           areaCodeToState,
         });
       } catch (error) {
