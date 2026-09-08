@@ -43,7 +43,10 @@ export interface LifecycleCallbacks {
   onIncomingCleared(call: ProviderCall): void;
   onReconnectChanged(pending: PendingReconnect | null): void;
   onError(message: string): void;
+  onCallTransitionChanged?(pending: boolean): void;
 }
+
+export const MAX_WAITING_CALLS = 4;
 
 const NOOP_CALLBACKS: LifecycleCallbacks = {
   onActive: () => {},
@@ -52,6 +55,7 @@ const NOOP_CALLBACKS: LifecycleCallbacks = {
   onIncomingCleared: () => {},
   onReconnectChanged: () => {},
   onError: () => {},
+  onCallTransitionChanged: () => {},
 };
 const MAX_PERSISTED_RECONNECT_MS = 60_000;
 
@@ -64,7 +68,8 @@ export class SoftphoneCallController {
   private sessionId = "";
   private storage: ReconnectStorage | null = null;
   private activeCall: ProviderCall | null = null;
-  private incomingCall: ProviderCall | null = null;
+  private incomingCalls: ProviderCall[] = [];
+  private answerAfterActiveEnds: ProviderCall | null = null;
   private acceptingCall: ProviderCall | null = null;
   private acceptingRecovery: PendingReconnect | null = null;
   private recentTerminal: { call: ProviderCall; recovery: boolean; sessionId: string } | null = null;
@@ -89,13 +94,15 @@ export class SoftphoneCallController {
     if (this.sessionId && this.sessionId !== "signed-out") {
       this.storage?.removeItem(pendingReconnectStorageKey(this.sessionId));
     }
+    this.clearAllIncoming();
     this.clearPending(false);
     this.sessionId = sessionId;
     this.storage = storage ?? null;
     this.activeCall = null;
-    this.incomingCall = null;
+    this.answerAfterActiveEnds = null;
     this.acceptingCall = null;
     this.acceptingRecovery = null;
+    this.notifyCallTransition();
     if (!storage || sessionId === "signed-out") return;
 
     const restored = this.readPersisted(storage, sessionId, now);
@@ -108,6 +115,10 @@ export class SoftphoneCallController {
 
   getActiveCall(): ProviderCall | null {
     return this.activeCall;
+  }
+
+  isCallTransitionPending(): boolean {
+    return !!this.acceptingCall || !!this.answerAfterActiveEnds;
   }
 
   getPendingReconnect(): PendingReconnect | null {
@@ -137,7 +148,11 @@ export class SoftphoneCallController {
   }
 
   isIncoming(call: ProviderCall): boolean {
-    return this.incomingCall === call;
+    return this.incomingCalls.includes(call);
+  }
+
+  getIncomingCalls(): readonly ProviderCall[] {
+    return this.incomingCalls;
   }
 
   attachActive(call: ProviderCall, _recovered = false, _metadata?: PendingReconnect, notify = true): void {
@@ -168,7 +183,7 @@ export class SoftphoneCallController {
         !pending.cancelRequested &&
         !this.activeCall &&
         !this.acceptingCall &&
-        !this.incomingCall;
+        this.incomingCalls.length === 0;
       if (!matched) {
         this.safeReject(call);
         return "rejected";
@@ -176,6 +191,7 @@ export class SoftphoneCallController {
       this.bindCallEvents(call);
       this.acceptingCall = call;
       this.acceptingRecovery = pending;
+      this.notifyCallTransition();
       this.updatePending({ ...pending, phase: "resuming" });
       try {
         call.accept();
@@ -187,19 +203,20 @@ export class SoftphoneCallController {
       return "recovered";
     }
 
-    if (this.activeCall || this.acceptingCall || this.incomingCall) {
+    if (this.acceptingCall || this.incomingCalls.length >= MAX_WAITING_CALLS) {
       this.safeReject(call);
       return "rejected";
     }
     this.bindCallEvents(call);
-    this.incomingCall = call;
+    this.incomingCalls = [...this.incomingCalls, call];
     this.callbacks.onIncoming(call);
     return "incoming";
   }
 
   acceptIncoming(call: ProviderCall): boolean {
-    if (this.incomingCall !== call || this.activeCall || this.acceptingCall) return false;
+    if (!this.incomingCalls.includes(call) || this.activeCall || this.acceptingCall) return false;
     this.acceptingCall = call;
+    this.notifyCallTransition();
     try {
       call.accept();
       return true;
@@ -210,11 +227,26 @@ export class SoftphoneCallController {
   }
 
   rejectIncoming(call: ProviderCall): boolean {
-    if (this.incomingCall !== call) return false;
+    if (!this.incomingCalls.includes(call)) return false;
     this.safeReject(call);
-    this.incomingCall = null;
-    this.callbacks.onIncomingCleared(call);
+    this.clearIncoming(call);
     return true;
+  }
+
+  endActiveAndAcceptIncoming(call: ProviderCall): boolean {
+    const active = this.activeCall;
+    if (!active || !this.incomingCalls.includes(call) || this.acceptingCall || this.answerAfterActiveEnds) return false;
+    this.answerAfterActiveEnds = call;
+    this.notifyCallTransition();
+    try {
+      active.disconnect();
+      return true;
+    } catch (error) {
+      if (this.answerAfterActiveEnds === call) this.answerAfterActiveEnds = null;
+      this.notifyCallTransition();
+      this.callbacks.onError(providerErrorMessage(error, "call"));
+      return false;
+    }
   }
 
   beginReconnect(
@@ -317,11 +349,13 @@ export class SoftphoneCallController {
     if (pending && cancel) void cancel(pending).catch(() => {});
     if (this.sessionId) this.storage?.removeItem(pendingReconnectStorageKey(this.sessionId));
     this.clearPending(true);
+    this.clearAllIncoming();
     this.sessionId = "";
     this.activeCall = null;
-    this.incomingCall = null;
+    this.answerAfterActiveEnds = null;
     this.acceptingCall = null;
     this.acceptingRecovery = null;
+    this.notifyCallTransition();
   }
 
   private bindCallEvents(call: ProviderCall): void {
@@ -343,11 +377,9 @@ export class SoftphoneCallController {
     this.acceptingCall = null;
     this.acceptingRecovery = null;
     this.recentTerminal = null;
-    if (this.incomingCall === call) {
-      this.incomingCall = null;
-      this.callbacks.onIncomingCleared(call);
-    }
+    if (this.incomingCalls.includes(call)) this.clearIncoming(call);
     this.activeCall = call;
+    this.notifyCallTransition();
     if (recovery) this.clearPending(true);
     this.callbacks.onActive(call, !!recovery, recovery ?? undefined);
   }
@@ -357,22 +389,20 @@ export class SoftphoneCallController {
     const terminalRelevant = terminal?.call === call &&
       terminal.sessionId === this.sessionId &&
       !this.activeCall;
-    const relevant = this.activeCall === call || this.incomingCall === call || this.acceptingCall === call || terminalRelevant;
+    const relevant = this.activeCall === call || this.incomingCalls.includes(call) || this.acceptingCall === call || terminalRelevant;
     if (!relevant) return; // An old incoming call cannot disturb a newer call.
     const wasActive = this.activeCall === call;
     const wasRecovery = (this.acceptingCall === call && !!this.acceptingRecovery) || !!terminal?.recovery;
-    if (this.incomingCall === call) {
-      this.incomingCall = null;
-      this.callbacks.onIncomingCleared(call);
-    }
+    if (this.incomingCalls.includes(call)) this.clearIncoming(call);
+    if (this.answerAfterActiveEnds === call) this.answerAfterActiveEnds = null;
     if (this.acceptingCall === call) {
       this.acceptingCall = null;
       this.acceptingRecovery = null;
     }
     if (wasActive) {
-      this.activeCall = null;
-      this.callbacks.onEnded(call);
+      this.finishActiveCall(call);
     }
+    this.notifyCallTransition();
     if (terminalRelevant) this.recentTerminal = null;
     this.safeReject(call);
     this.callbacks.onError(providerErrorMessage(error, "call"));
@@ -381,19 +411,16 @@ export class SoftphoneCallController {
 
   private handleTerminal(call: ProviderCall): void {
     const wasRecovery = this.acceptingCall === call && !!this.acceptingRecovery;
-    const wasRelevant = this.activeCall === call || this.incomingCall === call || this.acceptingCall === call;
-    if (this.incomingCall === call) {
-      this.incomingCall = null;
-      this.callbacks.onIncomingCleared(call);
-    }
+    const wasActive = this.activeCall === call;
+    const wasRelevant = wasActive || this.incomingCalls.includes(call) || this.acceptingCall === call;
+    if (this.incomingCalls.includes(call)) this.clearIncoming(call);
+    if (this.answerAfterActiveEnds === call) this.answerAfterActiveEnds = null;
     if (this.acceptingCall === call) {
       this.acceptingCall = null;
       this.acceptingRecovery = null;
     }
-    if (this.activeCall === call) {
-      this.activeCall = null;
-      this.callbacks.onEnded(call);
-    }
+    if (wasActive) this.finishActiveCall(call);
+    this.notifyCallTransition();
     if (!wasRelevant) return;
     this.recentTerminal = { call, recovery: wasRecovery, sessionId: this.sessionId };
     queueMicrotask(() => {
@@ -406,6 +433,37 @@ export class SoftphoneCallController {
 
   private safeReject(call: ProviderCall): void {
     try { call.reject(); } catch {}
+  }
+
+  private clearIncoming(call: ProviderCall): void {
+    if (!this.incomingCalls.includes(call)) return;
+    this.incomingCalls = this.incomingCalls.filter((candidate) => candidate !== call);
+    this.callbacks.onIncomingCleared(call);
+  }
+
+  private clearAllIncoming(): void {
+    const calls = this.incomingCalls;
+    this.incomingCalls = [];
+    this.answerAfterActiveEnds = null;
+    for (const call of calls) {
+      this.safeReject(call);
+      this.callbacks.onIncomingCleared(call);
+    }
+  }
+
+  private finishActiveCall(call: ProviderCall): void {
+    if (this.activeCall !== call) return;
+    this.activeCall = null;
+    this.callbacks.onEnded(call);
+    const queued = this.answerAfterActiveEnds;
+    this.answerAfterActiveEnds = null;
+    if (queued && this.incomingCalls.includes(queued) && !this.acceptingCall) {
+      this.acceptIncoming(queued);
+    }
+  }
+
+  private notifyCallTransition(): void {
+    this.callbacks.onCallTransitionChanged?.(this.isCallTransitionPending());
   }
 
   private scheduleTimeout(timeoutMs: number): void {

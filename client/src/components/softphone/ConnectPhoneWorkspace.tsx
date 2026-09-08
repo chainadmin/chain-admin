@@ -1,4 +1,5 @@
-import { type ReactNode } from "react";
+import React, { type ReactNode } from "react";
+import type { ProviderCall } from "@/lib/softphone-call-lifecycle";
 import {
   Building2, Check, ChevronRight, Download, EyeOff, History, LogOut, Mic, MicOff,
   Pause, Phone, PhoneCall, PhoneIncoming, PhoneOff, PhoneOutgoing, ParkingCircle,
@@ -9,6 +10,7 @@ type CallState = "idle" | "connecting" | "ringing" | "in-call" | "ended";
 type Retained = { id: string; callerName: string; callerNumber: string; duration?: number | null; parkedBy?: string; status?: string; reconnectingByMe?: boolean };
 type ParkedCall = { id: string; callerName: string; callerNumber: string; parkedBy: string; parkedAt: string; duration?: number | null; status?: string; reconnectingByMe?: boolean };
 type CallLog = { id: string; direction: "inbound" | "outbound"; fromNumber: string; toNumber: string; status: string; duration: number | null; createdAt: string };
+type WaitingCall = { id: string; call: ProviderCall; callerName: string; callerNumber: string };
 
 interface Props {
   userName?: string;
@@ -27,6 +29,10 @@ interface Props {
   inbound: { callerName: string; callerNumber: string } | null;
   onAcceptInbound: () => void;
   onRejectInbound: () => void;
+  waitingCalls: WaitingCall[];
+  handoffCall: ProviderCall | null;
+  callTransitionPending: boolean;
+  onEndAndAnswer: (call: WaitingCall) => void;
   callState: CallState;
   callDuration: string;
   dialpadNumber: string;
@@ -69,7 +75,7 @@ function Action({ children, label, active, danger, disabled, onClick }: { childr
 }
 
 export function ConnectPhoneWorkspace(props: Props) {
-  const busy = props.callPreparing || props.isRetentionPending || !!props.pendingReconnect;
+  const busy = props.callPreparing || props.isRetentionPending || props.callTransitionPending || !!props.pendingReconnect;
   const activeName = props.activeCallerName || props.dialpadNumber || "Enter a number";
   const phoneStatus = props.connectionStatus === "offline" ? "Offline" : props.connectionStatus === "reconnecting" || !props.isProviderRegistered ? "Connecting" : "Ready";
   return (
@@ -95,7 +101,7 @@ export function ConnectPhoneWorkspace(props: Props) {
 
         {props.inbound && <section className="mb-3 rounded-2xl border border-[#58a99b] bg-[#d9f1eb] p-3 shadow-[0_12px_30px_rgba(8,124,105,.12)] sm:flex sm:items-center sm:justify-between sm:px-5">
           <div className="flex min-w-0 items-center gap-3"><div className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[#087c69] text-white"><PhoneIncoming size={19} /></div><div className="min-w-0"><p className="text-[11px] font-bold uppercase tracking-[.14em] text-[#087c69]">Secure incoming call</p><p className="truncate text-base font-bold">{props.inbound.callerName || props.inbound.callerNumber || "Unknown caller"}</p>{props.inbound.callerName && <p className="truncate font-mono text-xs text-[#52776f]">{props.inbound.callerNumber}</p>}</div></div>
-          <div className="mt-3 flex gap-2 sm:mt-0 sm:w-[215px]"><Action label="Decline incoming call" danger onClick={props.onRejectInbound}><X size={16} />Decline</Action><Action label="Answer incoming call" active onClick={props.onAcceptInbound}><Check size={16} />Answer</Action></div>
+          <div className="mt-3 flex gap-2 sm:mt-0 sm:w-[215px]"><Action label="Decline incoming call" disabled={props.callTransitionPending} danger onClick={props.onRejectInbound}><X size={16} />Decline</Action><Action label="Answer incoming call" disabled={props.callTransitionPending} active onClick={props.onAcceptInbound}><Check size={16} />{props.callTransitionPending ? "Answering…" : "Answer"}</Action></div>
         </section>}
 
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -107,10 +113,25 @@ export function ConnectPhoneWorkspace(props: Props) {
               {props.heldCall && <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-[#e1b65d]/45 bg-[#79550d]/35 px-3 py-2.5"><div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-wider text-[#fedc8a]">Held call</p><p className="truncate text-sm font-semibold">{nameOrNumber(props.heldCall)}</p></div><button type="button" disabled={!!props.pendingReconnect || retainedUnavailable(props.heldCall)} onClick={props.onResume} className="shrink-0 rounded-lg bg-[#f6c864] px-3 py-2 text-xs font-bold text-[#4c3505] disabled:opacity-50">{props.pendingReconnect?.id === props.heldCall.id ? "Reconnecting" : retainedUnavailable(props.heldCall) ? "Unavailable" : "Resume"}</button></div>}
               <input value={props.dialpadNumber} onChange={(e) => props.setDialpadNumber(e.target.value)} placeholder="Type a number" aria-label="Phone number" className="mb-3 h-12 w-full rounded-xl border border-white/15 bg-[#052f2b] px-3 text-center font-mono text-lg text-white outline-none placeholder:text-[#77a69a] focus:border-[#75cdbc]" />
               <div className="grid grid-cols-3 gap-2">{keys.map(([digit, letters]) => <button type="button" key={digit} onClick={() => props.onDial(digit)} className="h-14 rounded-xl bg-white/9 text-xl font-medium transition hover:bg-white/16 active:scale-[.97] motion-reduce:transition-none"><span className="block leading-5">{digit}</span>{letters && <span className="block text-[9px] tracking-[.17em] text-[#94c2b7]">{letters}</span>}</button>)}</div>
-              <button type="button" onClick={props.onCall} disabled={!props.dialpadNumber || props.callPreparing} className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#27a68e] text-sm font-bold text-white transition hover:bg-[#31b99e] disabled:opacity-45"><Phone size={17} />{props.callPreparing ? "Preparing call" : "Call"}</button>
+              <button type="button" onClick={props.onCall} disabled={!props.dialpadNumber || props.callPreparing || props.callTransitionPending} className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#27a68e] text-sm font-bold text-white transition hover:bg-[#31b99e] disabled:opacity-45"><Phone size={17} />{props.callTransitionPending ? "Answering incoming call" : props.callPreparing ? "Preparing call" : "Call"}</button>
             </>}
-            {(props.callState === "connecting" || props.callState === "ringing") && <div className="py-10 text-center"><PhoneOutgoing className="mx-auto mb-4 animate-pulse text-[#75cdbc]" size={34} /><p className="text-sm text-[#b9dcd3]">{props.callState === "ringing" ? "Ringing customer" : "Connecting to customer"}</p><button type="button" onClick={props.onHangup} className="mt-6 rounded-xl border border-rose-300/40 bg-rose-400/10 px-6 py-3 text-sm font-bold text-rose-100">Cancel call</button></div>}
-            {props.callState === "in-call" && <div className="space-y-3"><div className="grid grid-cols-3 gap-2"><Action label="Toggle mute" active={props.isMuted} onClick={props.onMute}>{props.isMuted ? <MicOff size={17} /> : <Mic size={17} />}<span className="hidden sm:inline">{props.isMuted ? "Muted" : "Mute"}</span></Action><Action label="Toggle speaker" active={props.isSpeakerOn} onClick={props.onSpeaker}>{props.isSpeakerOn ? <Volume2 size={17} /> : <VolumeX size={17} />}<span className="hidden sm:inline">Audio</span></Action><Action label="Place call on hold" disabled={props.isRetentionPending} onClick={props.onHold}>{props.isRetentionPending ? <RotateCw className="animate-spin" size={17} /> : <Pause size={17} />}<span className="hidden sm:inline">Hold</span></Action></div><Action label="Park call for another agent" disabled={props.isRetentionPending} onClick={props.onPark}><ParkingCircle size={17} />Park for team</Action><Action label="End active call" danger onClick={props.onHangup}><PhoneOff size={17} />End call</Action></div>}
+            {(props.callState === "connecting" || props.callState === "ringing") && <div className="py-10 text-center"><PhoneOutgoing className="mx-auto mb-4 animate-pulse text-[#75cdbc]" size={34} /><p role={props.callTransitionPending ? "status" : undefined} className="text-sm text-[#b9dcd3]">{props.callTransitionPending ? "Securely connecting the selected waiting caller…" : props.callState === "ringing" ? "Ringing customer" : "Connecting to customer"}</p>{!props.callTransitionPending && <button type="button" onClick={props.onHangup} className="mt-6 rounded-xl border border-rose-300/40 bg-rose-400/10 px-6 py-3 text-sm font-bold text-rose-100">Cancel call</button>}</div>}
+            {props.callState === "in-call" && <div className="space-y-3"><div className="grid grid-cols-3 gap-2"><Action label="Toggle mute" active={props.isMuted} onClick={props.onMute}>{props.isMuted ? <MicOff size={17} /> : <Mic size={17} />}<span className="hidden sm:inline">{props.isMuted ? "Muted" : "Mute"}</span></Action><Action label="Toggle speaker" active={props.isSpeakerOn} onClick={props.onSpeaker}>{props.isSpeakerOn ? <Volume2 size={17} /> : <VolumeX size={17} />}<span className="hidden sm:inline">Audio</span></Action><Action label="Place call on hold" disabled={props.isRetentionPending} onClick={props.onHold}>{props.isRetentionPending ? <RotateCw className="animate-spin" size={17} /> : <Pause size={17} />}<span className="hidden sm:inline">Hold</span></Action></div><Action label="Park call for another agent" disabled={props.isRetentionPending} onClick={props.onPark}><ParkingCircle size={17} />Park for team</Action><Action label="End active call" danger onClick={props.onHangup}><PhoneOff size={17} />End call</Action>
+              <section aria-label="Call waiting" aria-live="polite" aria-atomic="false" className="rounded-xl border border-white/15 bg-white/7 p-2.5 text-left">
+                <div className="mb-2 flex items-center justify-between"><p className="text-[10px] font-bold uppercase tracking-[.14em] text-[#a9d8cc]">Call waiting</p><span className="text-[10px] text-[#94c2b7]">{props.waitingCalls.length}/4 ringing</span></div>
+                <div className="grid gap-1.5 sm:grid-cols-2">
+                  {Array.from({ length: 4 }, (_, index) => {
+                    const waiting = props.waitingCalls[index];
+                    const handingOff = !!waiting && waiting.call === props.handoffCall;
+                    return waiting ? <div key={waiting.id} className="flex min-w-0 items-center gap-2 rounded-lg border border-[#75cdbc]/40 bg-[#0a514a] p-2">
+                      <PhoneIncoming size={14} className="shrink-0 animate-pulse text-[#75cdbc]" />
+                      <div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold">{waiting.callerName || waiting.callerNumber || "Unknown caller"}</p><p className="truncate font-mono text-[10px] text-[#a9d8cc]">Ringing · {waiting.callerNumber}</p></div>
+                      <button type="button" disabled={!!props.handoffCall} aria-label={`End active call and answer ${waiting.callerName || waiting.callerNumber || "unknown caller"}`} onClick={() => props.onEndAndAnswer(waiting)} className="min-h-11 shrink-0 rounded-md bg-[#75cdbc] px-2.5 py-2 text-xs font-bold text-[#073f3a] disabled:opacity-50">{handingOff ? "Answering…" : "End & answer"}</button>
+                    </div> : <div key={index} className="flex min-h-12 items-center rounded-lg border border-dashed border-white/10 px-2 text-[10px] text-[#77a69a]">Line {index + 1} available</div>;
+                  })}
+                </div>
+              </section>
+            </div>}
             {props.callState === "ended" && <div className="py-10 text-center text-sm text-[#b9dcd3]"><PhoneOff className="mx-auto mb-3" size={28} />Call ended</div>}
           </section>
 

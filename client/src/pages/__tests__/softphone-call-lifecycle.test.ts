@@ -10,7 +10,7 @@ import {
   type ProviderCall,
   type ReconnectStorage,
 } from "../../lib/softphone-call-lifecycle";
-import { updateLiveDeviceToken } from "../../lib/softphone-call-device";
+import { buildSoftphoneDeviceOptions, canStartSoftphoneOutboundCall, scheduleSoftphoneCallCleanup, synchronizeCallMute, updateLiveDeviceToken } from "../../lib/softphone-call-device";
 import { SoftphoneOutboundCallCoordinator } from "../../lib/softphone-outbound-call";
 import {
   cancelReconnect as requestCancelReconnect,
@@ -24,6 +24,7 @@ class FakeCall implements ProviderCall {
   accepted = 0;
   rejected = 0;
   disconnected = 0;
+  muted: boolean[] = [];
   private listeners = new Map<string, Array<(...args: any[]) => void>>();
 
   constructor(options: { sid?: string; retainedId?: string; token?: string } = {}) {
@@ -38,6 +39,7 @@ class FakeCall implements ProviderCall {
   accept() { this.accepted += 1; }
   reject() { this.rejected += 1; }
   disconnect() { this.disconnected += 1; this.emit("disconnect"); }
+  mute(shouldMute: boolean) { this.muted.push(shouldMute); }
   on(event: string, listener: (...args: any[]) => void) {
     this.listeners.set(event, [...(this.listeners.get(event) || []), listener]);
   }
@@ -133,6 +135,120 @@ test("manual incoming call is not active until its SDK accept event", () => {
   incoming.emit("accept");
   assert.equal(controller.getActiveCall(), incoming);
   assert.deepEqual(events.active, [incoming]);
+});
+
+test("four waiting calls remain distinct and overflow rejects only the fifth leg", () => {
+  const { controller, events } = controllerHarness();
+  const active = new FakeCall({ sid: "active" });
+  controller.attachActive(active);
+  const waiting = Array.from({ length: 5 }, (_, index) => new FakeCall({ sid: `waiting-${index}` }));
+  assert.deepEqual(waiting.map((call) => controller.receiveIncoming(call)), [
+    "incoming", "incoming", "incoming", "incoming", "rejected",
+  ]);
+  assert.deepEqual(controller.getIncomingCalls(), waiting.slice(0, 4));
+  assert.equal(waiting[4].rejected, 1);
+  assert.deepEqual(events.incoming, waiting.slice(0, 4));
+});
+
+test("end and answer connects the exact selected waiting call only after active disconnects", () => {
+  const { controller, events } = controllerHarness();
+  const active = new FakeCall({ sid: "active" });
+  const first = new FakeCall({ sid: "first" });
+  const selected = new FakeCall({ sid: "selected" });
+  controller.attachActive(active);
+  controller.receiveIncoming(first);
+  controller.receiveIncoming(selected);
+  assert.equal(controller.endActiveAndAcceptIncoming(selected), true);
+  assert.equal(active.disconnected, 1);
+  assert.equal(first.accepted, 0);
+  assert.equal(selected.accepted, 1);
+  assert.equal(controller.getActiveCall(), null);
+  selected.emit("accept");
+  assert.equal(controller.getActiveCall(), selected);
+  assert.deepEqual(events.ended, [active]);
+});
+
+test("a selected waiting call that cancels first cannot be accepted by a late active disconnect", () => {
+  const { controller } = controllerHarness();
+  class DelayedDisconnectCall extends FakeCall {
+    disconnect() { this.disconnected += 1; }
+  }
+  const active = new DelayedDisconnectCall({ sid: "active" });
+  const selected = new FakeCall({ sid: "selected" });
+  controller.attachActive(active);
+  controller.receiveIncoming(selected);
+  assert.equal(controller.endActiveAndAcceptIncoming(selected), true);
+  selected.emit("cancel");
+  active.emit("disconnect");
+  assert.equal(selected.accepted, 0);
+  assert.equal(controller.getIncomingCalls().length, 0);
+});
+
+test("active call error completes the exact queued handoff and a late disconnect is harmless", () => {
+  const { controller, events } = controllerHarness();
+  class DelayedDisconnectCall extends FakeCall {
+    disconnect() { this.disconnected += 1; }
+  }
+  const active = new DelayedDisconnectCall({ sid: "active" });
+  const other = new FakeCall({ sid: "other" });
+  const selected = new FakeCall({ sid: "selected" });
+  controller.attachActive(active);
+  controller.receiveIncoming(other);
+  controller.receiveIncoming(selected);
+  assert.equal(controller.endActiveAndAcceptIncoming(selected), true);
+  active.emit("error", { message: "active media failed" });
+  assert.equal(selected.accepted, 1);
+  assert.equal(other.accepted, 0);
+  active.emit("disconnect");
+  selected.emit("accept");
+  assert.equal(controller.getActiveCall(), selected);
+  assert.deepEqual(events.ended, [active]);
+});
+
+test("selected cancellation racing active error clears the handoff without answering another slot", () => {
+  const { controller } = controllerHarness();
+  class DelayedDisconnectCall extends FakeCall {
+    disconnect() { this.disconnected += 1; }
+  }
+  const active = new DelayedDisconnectCall({ sid: "active" });
+  const selected = new FakeCall({ sid: "selected" });
+  const other = new FakeCall({ sid: "other" });
+  controller.attachActive(active);
+  controller.receiveIncoming(selected);
+  controller.receiveIncoming(other);
+  controller.endActiveAndAcceptIncoming(selected);
+  selected.emit("cancel");
+  active.emit("error", { message: "active media failed" });
+  assert.equal(selected.accepted, 0);
+  assert.equal(other.accepted, 0);
+  assert.deepEqual(controller.getIncomingCalls(), [other]);
+});
+
+test("session changes reject and clear every waiting call without leaking it to the next user", () => {
+  const { controller } = controllerHarness("tenant:user");
+  const first = new FakeCall({ sid: "first" });
+  const second = new FakeCall({ sid: "second" });
+  controller.receiveIncoming(first);
+  controller.receiveIncoming(second);
+  controller.startSession("other-tenant:other-user");
+  assert.equal(first.rejected, 1);
+  assert.equal(second.rejected, 1);
+  assert.deepEqual(controller.getIncomingCalls(), []);
+});
+
+test("terminal and stale events clear only their exact waiting slot", () => {
+  const { controller, events } = controllerHarness();
+  const active = new FakeCall({ sid: "active" });
+  const old = new FakeCall({ sid: "old" });
+  const current = new FakeCall({ sid: "current" });
+  controller.attachActive(active);
+  controller.receiveIncoming(old);
+  controller.receiveIncoming(current);
+  old.emit("disconnect");
+  old.emit("error", { code: 31208 });
+  assert.deepEqual(controller.getIncomingCalls(), [current]);
+  assert.equal(controller.getActiveCall(), active);
+  assert.deepEqual(events.errors, []);
 });
 
 test("provider errors are specific and stable repeated status is deduplicated", () => {
@@ -451,6 +567,107 @@ test("token refresh updates the live device without destroying it or its active 
   token = updateLiveDeviceToken(device, token, "token-2");
   assert.deepEqual(device.updated, ["token-2"]);
   assert.equal(device.destroyed, 0);
+});
+
+test("Twilio device configuration delivers incoming invites while another call is active", () => {
+  const options = buildSoftphoneDeviceOptions(["opus", "pcmu"]);
+  assert.equal(options.allowIncomingWhileBusy, true);
+  assert.deepEqual(options.codecPreferences, ["opus", "pcmu"]);
+});
+
+test("replacement calls inherit the mute state displayed by the softphone", () => {
+  const providerStates: boolean[] = [];
+  const replacement = { mute: (muted: boolean) => providerStates.push(muted) };
+  synchronizeCallMute(replacement, true);
+  synchronizeCallMute(replacement, false);
+  assert.deepEqual(providerStates, [true, false]);
+});
+
+test("slow waiting-call handoff preserves mute beyond cleanup delay and applies it to the replacement", () => {
+  const controller = new SoftphoneCallController();
+  const scheduled: Array<{ callback: () => void; delayMs: number }> = [];
+  let displayedMuted = true;
+  let cleanupRuns = 0;
+  let transitionObservedOnEnd = false;
+  controller.configure({
+    onActive: (call) => synchronizeCallMute(call as FakeCall, displayedMuted),
+    onEnded: () => {
+      transitionObservedOnEnd = controller.isCallTransitionPending();
+      scheduleSoftphoneCallCleanup(
+        () => controller.getActiveCall()
+          ? "active"
+          : controller.isCallTransitionPending()
+            ? "transitioning"
+            : "idle",
+        () => {
+          cleanupRuns += 1;
+          displayedMuted = false;
+        },
+        (callback, delayMs) => {
+          scheduled.push({ callback, delayMs });
+        },
+      );
+    },
+    onIncoming: () => {},
+    onIncomingCleared: () => {},
+    onReconnectChanged: () => {},
+    onError: () => {},
+  });
+  controller.startSession("tenant:user");
+  class DelayedDisconnectCall extends FakeCall {
+    disconnect() { this.disconnected += 1; }
+  }
+  const active = new DelayedDisconnectCall({ sid: "active" });
+  const replacement = new FakeCall({ sid: "replacement" });
+  controller.attachActive(active, false, undefined, false);
+  controller.receiveIncoming(replacement);
+  controller.endActiveAndAcceptIncoming(replacement);
+  active.emit("disconnect");
+
+  assert.equal(transitionObservedOnEnd, true);
+  const initialCleanup = scheduled.shift();
+  assert.equal(initialCleanup?.delayMs, 2_000);
+  initialCleanup?.callback();
+  assert.equal(cleanupRuns, 0);
+  assert.equal(displayedMuted, true);
+  assert.equal(controller.isCallTransitionPending(), true);
+
+  replacement.emit("accept");
+  assert.deepEqual(replacement.muted, [true]);
+  assert.equal(displayedMuted, true);
+  scheduled.shift()?.callback();
+  assert.equal(cleanupRuns, 0);
+});
+
+test("failed slow handoff eventually performs normal ended-call cleanup", () => {
+  const scheduled: Array<{ callback: () => void; delayMs: number }> = [];
+  let progress: "transitioning" | "idle" = "transitioning";
+  let cleanupRuns = 0;
+  scheduleSoftphoneCallCleanup(
+    () => progress,
+    () => { cleanupRuns += 1; },
+    (callback, delayMs) => { scheduled.push({ callback, delayMs }); },
+  );
+  const initialCleanup = scheduled.shift();
+  assert.equal(initialCleanup?.delayMs, 2_000);
+  initialCleanup?.callback();
+  assert.equal(cleanupRuns, 0);
+  assert.equal(scheduled[0]?.delayMs, 250);
+  progress = "idle";
+  scheduled.shift()?.callback();
+  assert.equal(cleanupRuns, 1);
+});
+
+test("outbound dialing stays blocked until waiting-call acceptance resolves", () => {
+  const ready = {
+    hasNumber: true,
+    dialLocked: false,
+    requestPending: false,
+    hasActiveCall: false,
+    callTransitionPending: false,
+  };
+  assert.equal(canStartSoftphoneOutboundCall(ready), true);
+  assert.equal(canStartSoftphoneOutboundCall({ ...ready, callTransitionPending: true }), false);
 });
 
 test("outbound coordinator fences delayed fetch and connect results after cancel", async () => {

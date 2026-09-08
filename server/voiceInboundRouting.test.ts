@@ -22,6 +22,17 @@ test('ring-team inbound calls play text greeting and have voicemail fallback', (
   assert.match(xml, /tenant-user-/);
 });
 
+test('ring-team fan-out keeps every available agent in the same dial', () => {
+  const xml = buildInboundTwiML({
+    ...base,
+    agentIds: ['agent-a', 'agent-b', 'agent-c'],
+    mode: 'RING_TEAM',
+    greeting: { enabled: false, type: null },
+  });
+  assert.equal((xml.match(/<Client>/g) || []).length, 3);
+  assert.match(xml, /dial-status\?bucketId=bucket-a/);
+});
+
 test('direct voicemail buckets bypass the tenant greeting', () => {
   const xml = buildInboundTwiML({
     ...base,

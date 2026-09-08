@@ -34,7 +34,7 @@ import {
   type ProviderCall,
 } from "@/lib/softphone-call-lifecycle";
 import { cancelReconnect, requestReconnect, retainAgentCall } from "@/lib/softphone-call-requests";
-import { updateLiveDeviceToken } from "@/lib/softphone-call-device";
+import { buildSoftphoneDeviceOptions, canStartSoftphoneOutboundCall, scheduleSoftphoneCallCleanup, synchronizeCallMute, updateLiveDeviceToken } from "@/lib/softphone-call-device";
 import { completeOutboundAttempt, SoftphoneOutboundCallCoordinator, type AbortableAttempt } from "@/lib/softphone-outbound-call";
 import { ConnectPhoneWorkspace } from "@/components/softphone/ConnectPhoneWorkspace";
 import { privacyLineNumber, type PrivacyLineResponse } from "@/components/voip/privacy-line";
@@ -75,6 +75,13 @@ interface HeldCall {
   duration?: number | null;
   status?: string;
   reconnectingByMe?: boolean;
+}
+
+interface WaitingCall {
+  id: string;
+  call: ProviderCall;
+  callerNumber: string;
+  callerName: string;
 }
 
 const dialpadButtons = [
@@ -128,14 +135,15 @@ export default function SoftphonePage() {
   const [heldCall, setHeldCall] = useState<HeldCall | null>(null);
   const [activeCallerName, setActiveCallerName] = useState("");
 
-  const [inboundCall, setInboundCall] = useState<Call | null>(null);
-  const [inboundCallerNumber, setInboundCallerNumber] = useState<string>("");
-  const [inboundCallerName, setInboundCallerName] = useState<string>("");
+  const [waitingCalls, setWaitingCalls] = useState<WaitingCall[]>([]);
+  const [handoffCall, setHandoffCall] = useState<ProviderCall | null>(null);
+  const [isCallTransitionPending, setIsCallTransitionPending] = useState(false);
 
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
   const deviceRef = useRef<Device | null>(null);
   const deviceTokenRef = useRef<string | null>(null);
   const activeCallRef = useRef<Call | null>(null);
+  const waitingCallIdRef = useRef(0);
   const lifecycleRef = useRef(new SoftphoneCallController());
   const retentionLockRef = useRef(false);
   const dialLockRef = useRef(false);
@@ -145,10 +153,11 @@ export default function SoftphonePage() {
 
   lifecycleRef.current.configure({
     onActive: (call, recovered, metadata) => {
-      activeCallRef.current = call as Call;
-      setInboundCall(null);
-      setInboundCallerNumber("");
-      setInboundCallerName("");
+      const activeCall = call as Call;
+      synchronizeCallMute(activeCall, isMuted);
+      activeCallRef.current = activeCall;
+      setWaitingCalls((current) => current.filter((waiting) => waiting.call !== call));
+      setHandoffCall(null);
       if (metadata) {
         setDialpadNumber(metadata.callerNumber);
         setActiveCallerName(metadata.callerName);
@@ -162,34 +171,44 @@ export default function SoftphonePage() {
     onEnded: (call) => {
       outboundRef.current.completeCall(call);
       if (activeCallRef.current === call) activeCallRef.current = null;
-      setCallState("ended");
-      setTimeout(() => {
-        if (lifecycleRef.current.getActiveCall()) return;
-        setCallState("idle");
-        setDialpadNumber("");
-        setIsMuted(false);
-        setIsOnHold(false);
-        setActiveCallerName("");
-      }, 2000);
+      setCallState(lifecycleRef.current.isCallTransitionPending() ? "connecting" : "ended");
+      scheduleSoftphoneCallCleanup(
+        () => lifecycleRef.current.getActiveCall()
+          ? "active"
+          : lifecycleRef.current.isCallTransitionPending()
+            ? "transitioning"
+            : "idle",
+        () => {
+          setCallState("idle");
+          setDialpadNumber("");
+          setIsMuted(false);
+          setIsOnHold(false);
+          setActiveCallerName("");
+        },
+      );
       queryClient.invalidateQueries({ queryKey: callLogsQueryKey });
     },
     onIncoming: (call) => {
       const providerCall = call as Call;
       const callerNumber = providerCall.parameters.From || "Unknown";
-      setInboundCallerNumber(callerNumber);
-      setInboundCall(providerCall);
-      setInboundCallerName("");
+      const lifecycleCall = providerCall as unknown as ProviderCall;
+      const waitingId = providerCall.parameters.CallSid || `waiting-${++waitingCallIdRef.current}`;
+      setWaitingCalls((current) => current.some((waiting) => waiting.call === lifecycleCall)
+        ? current
+        : [...current, { id: waitingId, call: lifecycleCall, callerNumber, callerName: "" }]);
       void lookupCallerName(callerNumber).then((name) => {
-        if (lifecycleRef.current.isIncoming(providerCall as unknown as ProviderCall)) setInboundCallerName(name);
+        if (!lifecycleRef.current.isIncoming(providerCall as unknown as ProviderCall)) return;
+        setWaitingCalls((current) => current.map((waiting) =>
+          waiting.call === lifecycleCall ? { ...waiting, callerName: name } : waiting));
       });
     },
     onIncomingCleared: (call) => {
-      setInboundCall((current) => current === call ? null : current);
-      setInboundCallerNumber("");
-      setInboundCallerName("");
+      setWaitingCalls((current) => current.filter((waiting) => waiting.call !== call));
+      setHandoffCall((current) => current === call ? null : current);
     },
     onReconnectChanged: setPendingReconnect,
     onError: setStableStatus,
+    onCallTransitionChanged: setIsCallTransitionPending,
   });
 
   useEffect(() => {
@@ -290,6 +309,9 @@ export default function SoftphonePage() {
     setProviderError("");
     setInlineStatus("");
     setPendingReconnect(null);
+    setWaitingCalls([]);
+    setHandoffCall(null);
+    setIsCallTransitionPending(false);
     setIsProviderRegistered(false);
   };
 
@@ -357,6 +379,9 @@ export default function SoftphonePage() {
     setIsAuthenticated(false);
     setUser(null);
     lifecycleRef.current.endSession();
+    setWaitingCalls([]);
+    setHandoffCall(null);
+    setIsCallTransitionPending(false);
     setSessionError("Your session expired. Please sign in again.");
   };
 
@@ -430,6 +455,9 @@ export default function SoftphonePage() {
       sessionScope,
       isAuthenticated ? sessionStorage : undefined,
     );
+    setWaitingCalls([]);
+    setHandoffCall(null);
+    setIsCallTransitionPending(false);
   }, [isAuthenticated, sessionScope, authToken]);
 
   useEffect(() => {
@@ -466,10 +494,10 @@ export default function SoftphonePage() {
 
     setProviderError("");
     setIsProviderRegistered(false);
-    const device = new Device(voiceToken.token, {
-      logLevel: 1,
-      codecPreferences: [Call.Codec.Opus, Call.Codec.PCMU],
-    });
+    const device = new Device(
+      voiceToken.token,
+      buildSoftphoneDeviceOptions([Call.Codec.Opus, Call.Codec.PCMU]),
+    );
 
     device.on("registered", () => {
       if (deviceRef.current !== device) return;
@@ -532,20 +560,28 @@ export default function SoftphonePage() {
 
   useEffect(() => {
     if (activeCallRef.current) {
-      activeCallRef.current.mute(isMuted);
+      synchronizeCallMute(activeCallRef.current, isMuted);
     }
   }, [isMuted]);
 
-  const handleAcceptInbound = () => {
-    if (!inboundCall) return;
-    if (!lifecycleRef.current.acceptIncoming(inboundCall as unknown as ProviderCall)) return;
-    setDialpadNumber(inboundCallerNumber);
-    setActiveCallerName(inboundCallerName);
+  const handleAcceptInbound = (waiting: WaitingCall) => {
+    if (!lifecycleRef.current.acceptIncoming(waiting.call)) return;
+    setDialpadNumber(waiting.callerNumber);
+    setActiveCallerName(waiting.callerName);
   };
 
-  const handleRejectInbound = () => {
-    if (!inboundCall) return;
-    lifecycleRef.current.rejectIncoming(inboundCall as unknown as ProviderCall);
+  const handleRejectInbound = (waiting: WaitingCall) => {
+    lifecycleRef.current.rejectIncoming(waiting.call);
+  };
+
+  const handleEndAndAnswer = (waiting: WaitingCall) => {
+    setHandoffCall(waiting.call);
+    if (!lifecycleRef.current.endActiveAndAcceptIncoming(waiting.call)) {
+      setHandoffCall((current) => current === waiting.call ? null : current);
+      return;
+    }
+    setDialpadNumber(waiting.callerNumber);
+    setActiveCallerName(waiting.callerName);
   };
 
   const initiateCallMutation = useMutation({
@@ -655,7 +691,13 @@ export default function SoftphonePage() {
   };
 
   const handleCall = async () => {
-    if (!dialpadNumber || dialLockRef.current || initiateCallMutation.isPending || lifecycleRef.current.getActiveCall()) return;
+    if (!canStartSoftphoneOutboundCall({
+      hasNumber: !!dialpadNumber,
+      dialLocked: dialLockRef.current,
+      requestPending: initiateCallMutation.isPending,
+      hasActiveCall: !!lifecycleRef.current.getActiveCall(),
+      callTransitionPending: lifecycleRef.current.isCallTransitionPending(),
+    })) return;
     dialLockRef.current = true;
     setIsDialPreparing(true);
     const attempt = outboundRef.current.begin();
@@ -760,6 +802,7 @@ export default function SoftphonePage() {
   };
 
   const handleHangup = () => {
+    if (lifecycleRef.current.isCallTransitionPending()) return;
     if (outboundRef.current.cancel()) {
       lifecycleRef.current.getActiveCall()?.disconnect();
       setCallState("idle");
@@ -932,9 +975,13 @@ export default function SoftphonePage() {
     }}
     pendingReconnect={pendingReconnect}
     onCancelReconnect={() => { void lifecycleRef.current.cancelReconnect("Reconnect cancelled. The caller remains retained.").finally(() => { void refreshHeldCall(); void refreshParkedCalls(); }); }}
-    inbound={inboundCall ? { callerName: inboundCallerName, callerNumber: inboundCallerNumber } : null}
-    onAcceptInbound={handleAcceptInbound}
-    onRejectInbound={handleRejectInbound}
+    inbound={callState !== "in-call" && waitingCalls[0] ? waitingCalls[0] : null}
+    onAcceptInbound={() => waitingCalls[0] && handleAcceptInbound(waitingCalls[0])}
+    onRejectInbound={() => waitingCalls[0] && handleRejectInbound(waitingCalls[0])}
+    waitingCalls={callState === "in-call" ? waitingCalls : []}
+    handoffCall={handoffCall}
+    callTransitionPending={isCallTransitionPending}
+    onEndAndAnswer={handleEndAndAnswer}
     callState={callState}
     callDuration={formatDuration(callDuration)}
     dialpadNumber={dialpadNumber}
