@@ -40,6 +40,7 @@ export interface IVoipStorage {
   getRoutingBuckets(tenantId: string): Promise<VoipRoutingBucket[]>;
   getRoutingBucket(id: string, tenantId: string): Promise<VoipRoutingBucket | undefined>;
   getVoiceSettings(tenantId: string): Promise<VoipTenantSettings | undefined>;
+  getActivePrivacyLine(tenantId: string): Promise<VoipPhoneNumber | undefined>;
   getVoicemails(tenantId: string): Promise<VoipVoicemail[]>;
 }
 
@@ -275,6 +276,19 @@ export class VoipStorage implements IVoipStorage {
     const [row] = await db.select().from(voipTenantSettings)
       .where(eq(voipTenantSettings.tenantId, tenantId)).limit(1);
     return row;
+  }
+
+  async getActivePrivacyLine(tenantId: string) {
+    const settings = await this.getVoiceSettings(tenantId);
+    if (!settings?.privacyLinePhoneNumberId) return undefined;
+    const [number] = await db.select().from(voipPhoneNumbers).where(and(
+      eq(voipPhoneNumbers.id, settings.privacyLinePhoneNumberId),
+      eq(voipPhoneNumbers.tenantId, tenantId),
+      eq(voipPhoneNumbers.isActive, true),
+      eq(voipPhoneNumbers.status, 'ACTIVE'),
+      eq(voipPhoneNumbers.voiceEnabled, true),
+    )).limit(1);
+    return number;
   }
 
   async getVoicemails(tenantId: string) {

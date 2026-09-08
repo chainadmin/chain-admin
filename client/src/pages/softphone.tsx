@@ -37,6 +37,7 @@ import { cancelReconnect, requestReconnect, retainAgentCall } from "@/lib/softph
 import { updateLiveDeviceToken } from "@/lib/softphone-call-device";
 import { SoftphoneOutboundCallCoordinator, type AbortableAttempt } from "@/lib/softphone-outbound-call";
 import { ConnectPhoneWorkspace } from "@/components/softphone/ConnectPhoneWorkspace";
+import { privacyLineNumber, type PrivacyLineResponse } from "@/components/voip/privacy-line";
 
 interface VoipCallLog {
   id: string;
@@ -376,6 +377,25 @@ export default function SoftphonePage() {
         throw new Error("Access denied");
       }
       if (!response.ok) throw new Error("Failed to fetch call logs");
+      return response.json();
+    },
+  });
+
+  const privacyLineQueryKey = ["/api/voip/privacy-line", sessionScope] as const;
+  const { data: privacyLine } = useQuery<PrivacyLineResponse>({
+    queryKey: privacyLineQueryKey,
+    enabled: isAuthenticated,
+    retry: 1,
+    queryFn: async () => {
+      const response = await fetch(softphoneApiUrl("/api/voip/privacy-line"), {
+        headers: getAuthHeaders(),
+        credentials: "include",
+      });
+      if (response.status === 401 || response.status === 403) {
+        handleAuthError();
+        throw new Error("Access denied");
+      }
+      if (!response.ok) throw new Error("Privacy Line could not be loaded.");
       return response.json();
     },
   });
@@ -932,6 +952,7 @@ export default function SoftphonePage() {
     onPickup={(call) => { void handlePickupParkedCall(call); }}
     callerIdMode={callerIdMode}
     setCallerIdMode={setCallerIdMode}
+    privacyLineNumber={privacyLineNumber(privacyLine)?.phoneNumber || null}
     logs={callLogs}
     loadingLogs={loadingLogs}
     onLogClick={(log) => { if (callState === "idle") setDialpadNumber(log.direction === "outbound" ? log.toNumber : log.fromNumber); }}

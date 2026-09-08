@@ -2562,6 +2562,10 @@ export async function runMigrations() {
         inbound_greeting_type TEXT,
         inbound_greeting_text TEXT,
         inbound_greeting_audio_url TEXT,
+        privacy_line_phone_number_id UUID REFERENCES voip_phone_numbers(id) ON DELETE SET NULL,
+        privacy_voicemail_greeting_type TEXT,
+        privacy_voicemail_greeting_text TEXT,
+        privacy_voicemail_greeting_audio_url TEXT,
         hold_music_key TEXT NOT NULL DEFAULT 'art-gallery-museum',
         park_music_key TEXT NOT NULL DEFAULT 'art-gallery-museum',
         updated_at TIMESTAMP DEFAULT NOW()
@@ -2575,6 +2579,7 @@ export async function runMigrations() {
         call_sid TEXT NOT NULL, recording_sid TEXT, recording_url TEXT,
         from_number TEXT NOT NULL, to_number TEXT NOT NULL,
         duration INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'RECORDING',
+        is_privacy BOOLEAN NOT NULL DEFAULT false,
         is_read BOOLEAN NOT NULL DEFAULT false, read_at TIMESTAMP,
         created_at TIMESTAMP DEFAULT NOW(), updated_at TIMESTAMP DEFAULT NOW(),
         UNIQUE (tenant_id, call_sid)
@@ -2594,6 +2599,13 @@ export async function runMigrations() {
         created_at TIMESTAMP DEFAULT NOW(),
         updated_at TIMESTAMP DEFAULT NOW()
       );
+    `);
+    await client.query(`
+      ALTER TABLE voip_tenant_settings ADD COLUMN IF NOT EXISTS privacy_line_phone_number_id UUID REFERENCES voip_phone_numbers(id) ON DELETE SET NULL;
+      ALTER TABLE voip_tenant_settings ADD COLUMN IF NOT EXISTS privacy_voicemail_greeting_type TEXT;
+      ALTER TABLE voip_tenant_settings ADD COLUMN IF NOT EXISTS privacy_voicemail_greeting_text TEXT;
+      ALTER TABLE voip_tenant_settings ADD COLUMN IF NOT EXISTS privacy_voicemail_greeting_audio_url TEXT;
+      ALTER TABLE voip_voicemails ADD COLUMN IF NOT EXISTS is_privacy BOOLEAN NOT NULL DEFAULT false;
     `);
     await client.query(`
       ALTER TABLE voip_suspended_calls ADD COLUMN IF NOT EXISTS music_key TEXT NOT NULL DEFAULT 'art-gallery-museum';

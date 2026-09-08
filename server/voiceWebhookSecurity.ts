@@ -3,6 +3,7 @@ import twilio from 'twilio';
 export type VoiceWebhookCredential = {
   tenantId: string;
   authToken: string;
+  accountSid?: string;
 };
 
 export async function verifyTwilioVoiceWebhook(input: {
@@ -15,6 +16,7 @@ export async function verifyTwilioVoiceWebhook(input: {
   if (!input.signature || !input.accountSid) return null;
   const credential = await input.resolveCredential(input.accountSid);
   if (!credential) return null;
+  if (credential.accountSid && credential.accountSid !== input.accountSid) return null;
   return twilio.validateRequest(credential.authToken, input.signature, input.publicUrl, input.params)
     ? credential.tenantId
     : null;

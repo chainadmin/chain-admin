@@ -22,7 +22,7 @@ test('HTTP Voice webhook rejects forged signatures and unknown subaccounts', asy
       publicUrl: url,
       params: req.body,
       accountSid: req.body.AccountSid,
-      resolveCredential: async sid => sid === accountSid ? { tenantId: 'tenant-a', authToken } : null,
+      resolveCredential: async sid => sid === accountSid ? { tenantId: 'tenant-a', authToken, accountSid } : null,
     });
     res.status(tenantId ? 200 : 403).send(tenantId || 'forbidden');
   });

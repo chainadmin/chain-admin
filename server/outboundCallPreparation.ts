@@ -4,11 +4,13 @@ import { selectDialingNumber, type AreaCodeToStateResolver, type DialingNumber }
 
 export const PRIVATE_CALLER_ID_UNAVAILABLE_MESSAGE =
   'Withheld caller ID is not supported for outbound calls. Select a company phone number to continue only if you consent to display it.';
+export const PRIVACY_LINE_UNAVAILABLE_MESSAGE =
+  'The dedicated Privacy line is not configured or is no longer active.';
 
 export class OutboundCallPreparationError extends Error {
   constructor(
     public readonly status: 400 | 409 | 422,
-    public readonly code: 'INVALID_DIAL_STRING' | 'NO_ACTIVE_CALLER_ID' | 'PRIVATE_CALLER_ID_UNAVAILABLE',
+    public readonly code: 'INVALID_DIAL_STRING' | 'NO_ACTIVE_CALLER_ID' | 'PRIVATE_CALLER_ID_UNAVAILABLE' | 'PRIVACY_LINE_UNAVAILABLE',
     message: string,
   ) {
     super(message);
@@ -27,6 +29,7 @@ export type OutboundCallUser = {
 export type OutboundCallPreparationDependencies = {
   getCurrentUser(req: Parameters<RequestHandler>[0]): Promise<OutboundCallUser | null | undefined>;
   getNumbers(tenantId: string): Promise<DialingNumber[]>;
+  getPrivacyLine(tenantId: string): Promise<DialingNumber | null | undefined>;
   consumerBelongsToTenant(consumerId: string, tenantId: string): Promise<boolean>;
   accountBelongsToTenant(accountId: string, tenantId: string): Promise<boolean>;
   getAreaCodeToState(): Promise<AreaCodeToStateResolver>;
@@ -47,7 +50,8 @@ export type OutboundCallPreparationDependencies = {
     callLogId: string;
     destination: string;
     callerId: string;
-    callerIdMode: 'NUMBER';
+    callerIdMode: 'NUMBER' | 'PRIVACY';
+    callerIdNumberId?: string;
   }): Promise<string>;
   logError?(message: string, error: unknown): void;
 };
@@ -106,22 +110,22 @@ export function createOutboundCallPreparationHandler(
       }
 
       // Validate the destination without consulting inventory/provider state.
-      // Explicit private mode must fail closed rather than reveal a fallback DID.
+      // Validate before consulting inventory/provider state.
       try {
         parseDialString(toNumber);
       } catch (error) {
         throw preparationError(error);
       }
-      if (privateModeRequested(callerIdMode)) {
-        throw new OutboundCallPreparationError(
-          422,
-          'PRIVATE_CALLER_ID_UNAVAILABLE',
-          PRIVATE_CALLER_ID_UNAVAILABLE_MESSAGE,
-        );
-      }
+      const privacyRequested = privateModeRequested(callerIdMode);
 
       const allNumbers = await dependencies.getNumbers(user.tenantId);
-      const selectedNumberId = requestedNumberId
+      const privacyLine = privacyRequested ? await dependencies.getPrivacyLine(user.tenantId) : null;
+      if (privacyRequested && (!privacyLine || privacyLine.tenantId !== user.tenantId
+        || privacyLine.isActive !== true || String(privacyLine.status || '').toUpperCase() !== 'ACTIVE')) {
+        throw new OutboundCallPreparationError(409, 'PRIVACY_LINE_UNAVAILABLE', PRIVACY_LINE_UNAVAILABLE_MESSAGE);
+      }
+      const selectedNumberId = privacyRequested ? privacyLine!.id
+        : requestedNumberId
         || (callerIdMode === 'office'
           ? allNumbers.find(number => number.numberType === 'TOLL_FREE' && number.isActive)?.id
           : undefined);
@@ -147,7 +151,7 @@ export function createOutboundCallPreparationHandler(
         throw preparationError(error);
       }
 
-      if (decision.selectionReason === 'PRIVATE_FALLBACK') {
+      if (!privacyRequested && decision.selectionReason === 'PRIVATE_FALLBACK') {
         throw new OutboundCallPreparationError(
           422,
           'PRIVATE_CALLER_ID_UNAVAILABLE',
@@ -172,7 +176,8 @@ export function createOutboundCallPreparationHandler(
         callLogId: callLog.id,
         destination: decision.destination,
         callerId: decision.selectedNumber.phoneNumber,
-        callerIdMode: 'NUMBER',
+        callerIdMode: privacyRequested ? 'PRIVACY' : 'NUMBER',
+        ...(privacyRequested ? { callerIdNumberId: decision.selectedNumber.id } : {}),
       });
 
       return res.json({
@@ -184,7 +189,7 @@ export function createOutboundCallPreparationHandler(
         status: 'initiated',
         localPresenceRequested: decision.localPresenceRequested,
         selectionReason: decision.selectionReason,
-        isPrivate: false,
+        isPrivate: privacyRequested,
         message: 'Call initiated. Use the Twilio Voice SDK to handle the call.',
       });
     } catch (error) {
@@ -201,7 +206,7 @@ export function isUnsupportedPrivateSelection(selection: {
   callerIdMode?: unknown;
   callerId?: unknown;
 } | null | undefined): boolean {
-  return privateModeRequested(selection?.callerIdMode)
+  return (privateModeRequested(selection?.callerIdMode) && selection?.callerIdMode !== 'PRIVACY')
     || (typeof selection?.callerId === 'string' && selection.callerId.toLowerCase() === 'anonymous');
 }
 

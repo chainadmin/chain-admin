@@ -26336,9 +26336,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       params: req.body || {},
       accountSid,
       resolveCredential: async sid => {
-        const [company] = await db.select({ id: tenants.id, authToken: tenants.twilioAuthToken })
+        let [company] = await db.select({ id: tenants.id, authToken: tenants.twilioAuthToken })
           .from(tenants).where(eq(tenants.twilioAccountSid, sid)).limit(1);
-        return company?.authToken ? { tenantId: company.id, authToken: decryptCredential(company.authToken) } : null;
+        if (!company) {
+          const [number] = await db.select({ tenantId: voipPhoneNumbers.tenantId }).from(voipPhoneNumbers)
+            .where(eq(voipPhoneNumbers.twilioSubaccountSid, sid)).limit(1);
+          if (number) [company] = await db.select({ id: tenants.id, authToken: tenants.twilioAuthToken })
+            .from(tenants).where(eq(tenants.id, number.tenantId)).limit(1);
+        }
+        return company?.authToken ? { tenantId: company.id, authToken: decryptCredential(company.authToken), accountSid: sid } : null;
       },
     });
     if (!tenantId) return res.status(403).send('Invalid Twilio signature or account');
@@ -26351,17 +26357,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const id = typeof req.query.id === 'string' ? req.query.id : '';
       const tokenResult = reconnectTokenSchema.safeParse(req.query.reconnectToken);
-      if (!id || !tokenResult.success) return res.status(400).send('<Response/>');
+      if (!id || !tokenResult.success) return res.status(200).send('<Response><Hangup/></Response>');
       const tokenHash = hashReconnectToken(tokenResult.data);
       const [record] = await db.select().from(voipSuspendedCalls).where(and(
         eq(voipSuspendedCalls.id, id),
         eq(voipSuspendedCalls.tenantId, (req as any).twilioTenantId),
         eq(voipSuspendedCalls.reconnectTokenHash, tokenHash),
       )).limit(1);
-      if (!record) return res.status(404).send('<Response/>');
+      if (!record) return res.status(200).send('<Response><Hangup/></Response>');
 
       const callbackDecision = classifyRetainedCallback(record.retainedCallSid, req.body || {});
-      if (callbackDecision === 'WRONG_PARENT') return res.status(409).send('<Response/>');
+      if (callbackDecision === 'WRONG_PARENT') return res.status(200).send('<Response><Hangup/></Response>');
       if (callbackDecision === 'ANSWERED') {
         await db.update(voipSuspendedCalls).set({
           status: 'COMPLETED',
@@ -26400,7 +26406,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       return res.send('<Response/>');
     } catch (error) {
       console.error('[Voice] Retained callback failed code=retained_callback_failed');
-      return res.status(500).send('<Response/>');
+      return res.status(200).send('<Response><Hangup/></Response>');
     }
   });
 
@@ -26471,6 +26477,86 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const [saved] = await db.insert(voipTenantSettings).values({ tenantId: user.tenantId, ...parsed.data })
       .onConflictDoUpdate({ target: voipTenantSettings.tenantId, set: { ...parsed.data, updatedAt: new Date() } }).returning();
     res.json(saved);
+  });
+
+  const privacyLineInput = z.object({
+    phoneNumberId: z.string().uuid().nullable(),
+    greetingType: z.enum(['TEXT', 'AUDIO']).nullable().optional(),
+    greetingText: z.string().trim().min(1).max(1000).nullable().optional(),
+    greetingAudioUrl: z.string().min(1).nullable().optional(),
+  });
+  const privacyLineResponse = async (tenantId: string) => {
+    const [settings, numbers] = await Promise.all([
+      voipStorage.getVoiceSettings(tenantId),
+      voipStorage.getVoipPhoneNumbersByTenant(tenantId),
+    ]);
+    const availableNumbers = numbers.filter(number =>
+      number.isActive === true && number.status === 'ACTIVE' && number.voiceEnabled === true);
+    return {
+      phoneNumberId: settings?.privacyLinePhoneNumberId || null,
+      selectedNumber: availableNumbers.find(number => number.id === settings?.privacyLinePhoneNumberId) || null,
+      availableNumbers,
+      greeting: {
+        type: settings?.privacyVoicemailGreetingType || null,
+        text: settings?.privacyVoicemailGreetingText || null,
+        audioUrl: settings?.privacyVoicemailGreetingAudioUrl || null,
+      },
+    };
+  };
+  app.get('/api/voip/privacy-line', async (req, res) => {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    res.json(await privacyLineResponse(user.tenantId));
+  });
+  app.patch('/api/voip/privacy-line', async (req, res) => {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    if (!['owner', 'manager', 'platform_admin'].includes(String(user.role || ''))) {
+      return res.status(403).json({ message: 'Only company owners and managers can update the Privacy line' });
+    }
+    const parsed = privacyLineInput.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: 'Invalid Privacy line settings', issues: parsed.error.issues });
+    if (parsed.data.greetingType === 'TEXT' && !parsed.data.greetingText) return res.status(400).json({ message: 'Privacy voicemail text is required' });
+    if (parsed.data.greetingType === 'AUDIO' && !parsed.data.greetingAudioUrl) return res.status(400).json({ message: 'Privacy voicemail audio is required' });
+    if (parsed.data.greetingAudioUrl) {
+      const { parseGreetingAudioReference } = await import('./voiceMediaTokens');
+      if (!parseGreetingAudioReference(parsed.data.greetingAudioUrl, user.tenantId)) {
+        return res.status(400).json({ message: 'Privacy greeting audio must be an uploaded company audio file' });
+      }
+    }
+    try {
+      await db.transaction(async tx => {
+        if (parsed.data.phoneNumberId) {
+          const [owned] = await tx.select({ id: voipPhoneNumbers.id }).from(voipPhoneNumbers).where(and(
+            eq(voipPhoneNumbers.id, parsed.data.phoneNumberId),
+            eq(voipPhoneNumbers.tenantId, user.tenantId),
+            eq(voipPhoneNumbers.isActive, true),
+            eq(voipPhoneNumbers.status, 'ACTIVE'),
+            eq(voipPhoneNumbers.voiceEnabled, true),
+          )).limit(1);
+          if (!owned) throw Object.assign(new Error('Privacy line must be an active company-owned Voice DID'), { code: 'INVALID_PRIVACY_LINE' });
+        }
+        const values = {
+          privacyLinePhoneNumberId: parsed.data.phoneNumberId,
+          privacyVoicemailGreetingType: parsed.data.greetingType,
+          privacyVoicemailGreetingText: parsed.data.greetingText,
+          privacyVoicemailGreetingAudioUrl: parsed.data.greetingAudioUrl,
+        };
+        // A Privacy DID must never retain ordinary bucket routing. Clearing this
+        // in the same transaction also handles a newly selected line while the
+        // prior line immediately becomes available for ordinary routing again.
+        if (parsed.data.phoneNumberId) {
+          await tx.update(voipPhoneNumbers).set({ routingBucketId: null, updatedAt: new Date() })
+            .where(and(eq(voipPhoneNumbers.id, parsed.data.phoneNumberId), eq(voipPhoneNumbers.tenantId, user.tenantId)));
+        }
+        await tx.insert(voipTenantSettings).values({ tenantId: user.tenantId, ...values })
+          .onConflictDoUpdate({ target: voipTenantSettings.tenantId, set: { ...values, updatedAt: new Date() } });
+      });
+      res.json(await privacyLineResponse(user.tenantId));
+    } catch (error: any) {
+      if (error?.code === 'INVALID_PRIVACY_LINE') return res.status(400).json({ code: error.code, message: error.message });
+      return res.status(500).json({ message: 'Failed to update Privacy line' });
+    }
   });
 
   app.post('/api/voip/settings/greeting-audio', requireOwner, voiceGreetingUpload.single('audio'), async (req, res) => {
@@ -26553,10 +26639,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!item?.recordingSid) return res.status(404).send('Voicemail recording not available');
       const { getRecordingUrl } = await import('./twilioVoiceService');
       const providerUrl = await getRecordingUrl(selection.tenantId, item.recordingSid);
-      if (!providerUrl || !process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
+      const [company] = await db.select({
+        accountSid: voipPhoneNumbers.twilioSubaccountSid,
+        authToken: tenants.twilioAuthToken,
+      }).from(voipPhoneNumbers).innerJoin(tenants, eq(tenants.id, voipPhoneNumbers.tenantId)).where(and(
+        eq(voipPhoneNumbers.id, item.phoneNumberId!),
+        eq(voipPhoneNumbers.tenantId, selection.tenantId),
+      )).limit(1);
+      if (!providerUrl || !company?.accountSid || !company.authToken) {
         return res.status(404).send('Voicemail recording not available');
       }
-      const authorization = Buffer.from(`${process.env.TWILIO_ACCOUNT_SID}:${process.env.TWILIO_AUTH_TOKEN}`).toString('base64');
+      const { decryptCredential } = await import('./credentialCrypto');
+      const authorization = Buffer.from(`${company.accountSid}:${decryptCredential(company.authToken)}`).toString('base64');
       const providerResponse = await fetch(providerUrl, { headers: { Authorization: `Basic ${authorization}` } });
       if (!providerResponse.ok || !providerResponse.body) return res.status(502).send('Unable to retrieve voicemail recording');
       res.setHeader('Cache-Control', 'private, no-store');
@@ -27318,6 +27412,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (routingBucketId !== undefined && routingBucketId !== null && !(await voipStorage.getRoutingBucket(routingBucketId, user.tenantId))) {
         return res.status(400).json({ message: 'Routing bucket does not belong to this company' });
       }
+      if (routingBucketId !== undefined && routingBucketId !== null) {
+        const settings = await voipStorage.getVoiceSettings(user.tenantId);
+        if (settings?.privacyLinePhoneNumberId === id) {
+          return res.status(409).json({
+            code: 'PRIVACY_LINE_ROUTING_CONFLICT',
+            message: 'The dedicated Privacy line cannot use ordinary routing buckets',
+          });
+        }
+      }
 
       // If setting as primary, unset existing primary
       if (isPrimary) {
@@ -27835,6 +27938,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/voip/call', authenticateUser, createOutboundCallPreparationHandler({
     getCurrentUser,
     getNumbers: tenantId => voipStorage.getVoipPhoneNumbersByTenant(tenantId) as any,
+    getPrivacyLine: tenantId => voipStorage.getActivePrivacyLine(tenantId) as any,
     consumerBelongsToTenant: async (consumerId, tenantId) => {
       const [owned] = await db.select({ id: consumers.id }).from(consumers)
         .where(and(eq(consumers.id, consumerId), eq(consumers.tenantId, tenantId))).limit(1);
@@ -27905,10 +28009,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       params: req.body || {},
       accountSid,
       resolveCredential: async sid => {
-        const [company] = await db.select({ id: tenants.id, authToken: tenants.twilioAuthToken })
+        let [company] = await db.select({ id: tenants.id, authToken: tenants.twilioAuthToken })
           .from(tenants).where(eq(tenants.twilioAccountSid, sid)).limit(1);
+        if (!company) {
+          const [number] = await db.select({ tenantId: voipPhoneNumbers.tenantId }).from(voipPhoneNumbers)
+            .where(eq(voipPhoneNumbers.twilioSubaccountSid, sid)).limit(1);
+          if (number) [company] = await db.select({ id: tenants.id, authToken: tenants.twilioAuthToken })
+            .from(tenants).where(eq(tenants.id, number.tenantId)).limit(1);
+        }
         return company?.authToken
-          ? { tenantId: company.id, authToken: decryptCredential(company.authToken) }
+          ? { tenantId: company.id, authToken: decryptCredential(company.authToken), accountSid: sid }
           : null;
       },
     });
@@ -27940,7 +28050,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let selection: any;
       try {
         selection = jwt.verify(String(SelectionToken || ''), process.env.JWT_SECRET!);
-      } catch {
+      } catch (error) {
+        // Twilio has already authenticated this callback. Expiration is an
+        // expected stale delivery and must terminate cleanly; malformed or
+        // tampered selections remain authorization failures.
+        if (error instanceof jwt.TokenExpiredError) {
+          res.type('text/xml');
+          return res.status(200).send('<Response><Hangup/></Response>');
+        }
         return res.status(403).send('<Response><Say>Invalid call authorization.</Say><Hangup/></Response>');
       }
       if (selection?.purpose !== 'voice-call-selection' || selection.tenantId !== clientTenantId) {
@@ -27951,13 +28068,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(422).send('<Response><Say>Withheld caller ID is not supported for outbound calls.</Say><Hangup/></Response>');
       }
       const allNumbers = await voipStorage.getVoipPhoneNumbersByTenant(clientTenantId);
-       const callerId = allNumbers.find(number => number.phoneNumber === selection.callerId && number.isActive);
+       const callerId = allNumbers.find(number => number.phoneNumber === selection.callerId
+         && number.isActive && number.status === 'ACTIVE' && number.voiceEnabled);
+       if (selection.callerIdMode === 'PRIVACY') {
+         const currentPrivacyLine = await voipStorage.getActivePrivacyLine(clientTenantId);
+         if (!currentPrivacyLine || currentPrivacyLine.id !== selection.callerIdNumberId
+           || currentPrivacyLine.phoneNumber !== selection.callerId) {
+           res.type('text/xml');
+           return res.status(200).send('<Response><Say>The dedicated Privacy line is unavailable.</Say><Hangup/></Response>');
+         }
+       } else if (selection.callerIdMode !== 'NUMBER') {
+         res.type('text/xml');
+         return res.status(422).send('<Response><Say>Withheld caller ID is not supported for outbound calls.</Say><Hangup/></Response>');
+       }
        if (!callerId) {
         res.type('text/xml');
-        return res.status(409).send('<Response><Say>No active company caller ID is configured.</Say><Hangup/></Response>');
+         return res.status(200).send('<Response><Say>No active company caller ID is configured.</Say><Hangup/></Response>');
       }
       const bound = await voipStorage.bindVoipCallSid(selection.callLogId, clientTenantId, CallSid);
-      if (!bound) return res.status(409).send('<Response><Say>Call authorization was already used.</Say><Hangup/></Response>');
+      if (!bound) return res.status(200).send('<Response><Say>Call authorization was already used.</Say><Hangup/></Response>');
       
       const { generateTwiML } = await import('./twilioVoiceService');
       
@@ -27973,7 +28102,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.send(twiml);
     } catch (error) {
       console.error("Error generating TwiML for outbound call:", error);
-      res.status(500).send('<Response><Say>An error occurred</Say></Response>');
+      res.type('text/xml').status(200).send('<Response><Say>An error occurred.</Say><Hangup/></Response>');
     }
   });
 
@@ -28006,8 +28135,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.send('<Response><Say>This phone system is not currently active.</Say><Hangup/></Response>');
       }
 
+      const settings = await voipStorage.getVoiceSettings(tenantId);
+      const isPrivacy = settings?.privacyLinePhoneNumberId === ownedNumber.id;
       const credentials = await storage.getAgencyCredentialsByTenant(tenantId);
-      const configuredBucket = ownedNumber.routingBucketId
+      const configuredBucket = !isPrivacy && ownedNumber.routingBucketId
         ? await voipStorage.getRoutingBucket(ownedNumber.routingBucketId, tenantId)
         : undefined;
       const bucket = configuredBucket?.isActive ? configuredBucket : undefined;
@@ -28028,7 +28159,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: 'ringing',
       });
 
-      const settings = await voipStorage.getVoiceSettings(tenantId);
       const { voiceWebhookBaseUrl } = await import('./companyTwilioService');
       const { createGreetingPlaybackUrl } = await import('./voiceMediaTokens');
       const { buildInboundTwiML } = await import('./voiceInboundRouting');
@@ -28036,19 +28166,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const twiml = buildInboundTwiML({
         tenantId,
         callSid: CallSid,
-        bucketId: bucket?.id,
-        mode: bucket?.mode === 'VOICEMAIL' ? 'VOICEMAIL' : 'RING_TEAM',
-        agentIds: voipAgents.map(agent => agent.id),
+        bucketId: isPrivacy ? null : bucket?.id,
+        mode: isPrivacy || bucket?.mode === 'VOICEMAIL' ? 'VOICEMAIL' : 'RING_TEAM',
+        agentIds: isPrivacy ? [] : voipAgents.map(agent => agent.id),
         timeoutSeconds: bucket?.ringTimeoutSeconds || 30,
         greeting: {
-          enabled: settings?.inboundGreetingEnabled === true,
-          type: settings?.inboundGreetingType || null,
-          text: settings?.inboundGreetingText,
-          audioUrl: settings?.inboundGreetingAudioUrl
-            ? createGreetingPlaybackUrl(process.env.JWT_SECRET!, callbackBase, settings.inboundGreetingAudioUrl)
+          enabled: isPrivacy ? Boolean(settings?.privacyVoicemailGreetingType) : settings?.inboundGreetingEnabled === true,
+          type: isPrivacy ? settings?.privacyVoicemailGreetingType || null : settings?.inboundGreetingType || null,
+          text: isPrivacy ? settings?.privacyVoicemailGreetingText : settings?.inboundGreetingText,
+          audioUrl: (isPrivacy ? settings?.privacyVoicemailGreetingAudioUrl : settings?.inboundGreetingAudioUrl)
+            ? createGreetingPlaybackUrl(process.env.JWT_SECRET!, callbackBase, (isPrivacy ? settings?.privacyVoicemailGreetingAudioUrl : settings?.inboundGreetingAudioUrl)!)
             : null,
         },
         callbackBase,
+        privacy: isPrivacy,
       });
 
       res.type('text/xml');
@@ -28061,13 +28192,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post('/api/voice/inbound-voicemail', validateTwilioVoiceSignature, async (req, res) => {
-    const tenantId = (req as any).twilioTenantId as string;
-    const requestedBucket = typeof req.query.bucketId === 'string'
-      ? await voipStorage.getRoutingBucket(req.query.bucketId, tenantId)
-      : undefined;
-    const { voiceWebhookBaseUrl } = await import('./companyTwilioService');
-    const { buildVoicemailTwiML } = await import('./voiceInboundRouting');
-    res.type('text/xml').send(buildVoicemailTwiML({ bucketId: requestedBucket?.id, callbackBase: voiceWebhookBaseUrl() }));
+    try {
+      const tenantId = (req as any).twilioTenantId as string;
+      const requestedBucket = typeof req.query.bucketId === 'string'
+        ? await voipStorage.getRoutingBucket(req.query.bucketId, tenantId)
+        : undefined;
+      const { voiceWebhookBaseUrl } = await import('./companyTwilioService');
+      const { buildVoicemailTwiML } = await import('./voiceInboundRouting');
+      res.type('text/xml').send(buildVoicemailTwiML({ bucketId: requestedBucket?.id, callbackBase: voiceWebhookBaseUrl() }));
+    } catch {
+      res.type('text/xml').status(200).send('<Response><Hangup/></Response>');
+    }
   });
 
   app.post('/api/voice/voicemail-complete', validateTwilioVoiceSignature, async (_req, res) => {
@@ -28076,6 +28211,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post('/api/voice/voicemail-recording', validateTwilioVoiceSignature, async (req, res) => {
+    try {
     const tenantId = (req as any).twilioTenantId as string;
     const { CallSid, RecordingSid, RecordingUrl, RecordingStatus, RecordingDuration, From, To } = req.body;
     const requestedBucket = typeof req.query.bucketId === 'string'
@@ -28084,10 +28220,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const ownedNumbers = await voipStorage.getVoipPhoneNumbersByTenant(tenantId);
     const normalizedTo = String(To || '').startsWith('+') ? String(To) : `+1${String(To || '').replace(/\D/g, '')}`;
     const phone = ownedNumbers.find(number => number.phoneNumber === normalizedTo);
-    if (!phone || !CallSid || !RecordingSid) return res.status(400).send('Invalid voicemail callback');
+    if (!phone || !CallSid || !RecordingSid) return res.sendStatus(204);
+    const settings = await voipStorage.getVoiceSettings(tenantId);
+    const isPrivacy = req.query.privacy === '1' && settings?.privacyLinePhoneNumberId === phone.id;
     await db.insert(voipVoicemails).values({
       tenantId,
-      routingBucketId: requestedBucket?.id || phone.routingBucketId || null,
+      routingBucketId: isPrivacy ? null : requestedBucket?.id || phone.routingBucketId || null,
       phoneNumberId: phone.id,
       callSid: CallSid,
       recordingSid: RecordingSid,
@@ -28096,16 +28234,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       toNumber: phone.phoneNumber,
       duration: Number.parseInt(RecordingDuration, 10) || 0,
       status: RecordingStatus === 'completed' ? 'READY' : String(RecordingStatus || 'PROCESSING').toUpperCase(),
+      isPrivacy,
     }).onConflictDoUpdate({
       target: [voipVoicemails.tenantId, voipVoicemails.callSid],
       set: {
         recordingSid: RecordingSid, recordingUrl: RecordingUrl ? `${RecordingUrl}.mp3` : null,
         duration: Number.parseInt(RecordingDuration, 10) || 0,
         status: RecordingStatus === 'completed' ? 'READY' : String(RecordingStatus || 'PROCESSING').toUpperCase(),
+        isPrivacy,
         updatedAt: new Date(),
       },
     });
-    res.sendStatus(204);
+      res.sendStatus(204);
+    } catch {
+      // Provider retries and duplicate delivery are expected. Signature/account
+      // failures have already been rejected by middleware and are not masked.
+      res.sendStatus(204);
+    }
   });
 
   // Dial status callback (called by Twilio when dial attempt completes)
@@ -28137,7 +28282,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.send('<Response/>');
     } catch (error) {
       console.error("Error handling dial status callback:", error);
-      res.sendStatus(500);
+      res.type('text/xml').status(200).send('<Response><Hangup/></Response>');
     }
   });
 

@@ -20,7 +20,8 @@ const primary: DialingNumber = {
 };
 
 function makeBoundary(numbers: DialingNumber[] = [primary]) {
-  const calls = { inventory: 0, callLogs: 0, tokens: 0 };
+  const calls: { inventory: number; callLogs: number; tokens: number; signed?: any } =
+    { inventory: 0, callLogs: 0, tokens: 0 };
   const dependencies: OutboundCallPreparationDependencies = {
     getCurrentUser: async () => ({
       id: 'user-a',
@@ -33,6 +34,7 @@ function makeBoundary(numbers: DialingNumber[] = [primary]) {
       calls.inventory++;
       return numbers;
     },
+    getPrivacyLine: async () => numbers.find(number => number.id === 'privacy'),
     consumerBelongsToTenant: async () => true,
     accountBelongsToTenant: async () => true,
     getAreaCodeToState: async () => areaCode => areaCode === '716' ? 'NY' : areaCode === '305' ? 'FL' : undefined,
@@ -40,8 +42,9 @@ function makeBoundary(numbers: DialingNumber[] = [primary]) {
       calls.callLogs++;
       return { id: 'log-a' };
     },
-    signSelectionToken: async () => {
+    signSelectionToken: async payload => {
       calls.tokens++;
+      calls.signed = payload;
       return 'signed-selection';
     },
   };
@@ -77,17 +80,37 @@ test('outbound HTTP preparation succeeds with an active owned company number', a
   assert.equal(response.payload.toNumber, '+12125551212');
   assert.equal(response.payload.selectionToken, 'signed-selection');
   assert.equal(response.payload.isPrivate, false);
-  assert.deepEqual(boundary.calls, { inventory: 1, callLogs: 1, tokens: 1 });
+  assert.equal(boundary.calls.inventory, 1);
+  assert.equal(boundary.calls.callLogs, 1);
+  assert.equal(boundary.calls.tokens, 1);
 });
 
-test('explicit private mode fails before inventory, call log, or signing', async () => {
-  const boundary = makeBoundary();
-  const response = await boundary.request({ toNumber: '2125551212', callerIdMode: 'private' });
+test('explicit private mode uses exactly the dedicated active owned DID', async () => {
+  const privacy = { ...primary, id: 'privacy', phoneNumber: '+17165550199', isPrimary: false };
+  const boundary = makeBoundary([primary, privacy]);
+  const response = await boundary.request({
+    toNumber: '2125551212',
+    callerIdMode: 'private',
+    selectedNumberId: primary.id,
+  });
 
-  assert.equal(response.status, 422);
-  assert.equal(response.payload.code, 'PRIVATE_CALLER_ID_UNAVAILABLE');
-  assert.match(response.payload.message, /Select a company phone number/);
-  assert.deepEqual(boundary.calls, { inventory: 0, callLogs: 0, tokens: 0 });
+  assert.equal(response.status, 200);
+  assert.equal(response.payload.fromNumber, privacy.phoneNumber);
+  assert.equal(response.payload.isPrivate, true);
+  assert.equal(boundary.calls.signed.callerIdMode, 'PRIVACY');
+  assert.equal(boundary.calls.signed.callerIdNumberId, privacy.id);
+  assert.equal(boundary.calls.signed.callerId, privacy.phoneNumber);
+  assert.notEqual(boundary.calls.signed.callerId, primary.phoneNumber);
+});
+
+test('missing dedicated Privacy DID fails without log or token and never falls back', async () => {
+  const boundary = makeBoundary();
+  const response = await boundary.request({ toNumber: '2125551212', callerIdMode: 'PRIVATE' });
+  assert.equal(response.status, 409);
+  assert.equal(response.payload.code, 'PRIVACY_LINE_UNAVAILABLE');
+  assert.equal(boundary.calls.inventory, 1);
+  assert.equal(boundary.calls.callLogs, 0);
+  assert.equal(boundary.calls.tokens, 0);
 });
 
 test('uncovered Local Presence never reveals the primary fallback', async () => {
@@ -97,7 +120,9 @@ test('uncovered Local Presence never reveals the primary fallback', async () => 
   assert.equal(response.status, 422);
   assert.equal(response.payload.code, 'PRIVATE_CALLER_ID_UNAVAILABLE');
   assert.equal(response.payload.fromNumber, undefined);
-  assert.deepEqual(boundary.calls, { inventory: 1, callLogs: 0, tokens: 0 });
+  assert.equal(boundary.calls.inventory, 1);
+  assert.equal(boundary.calls.callLogs, 0);
+  assert.equal(boundary.calls.tokens, 0);
 });
 
 test('missing normal company inventory is a clear conflict', async () => {
@@ -107,7 +132,9 @@ test('missing normal company inventory is a clear conflict', async () => {
   assert.equal(response.status, 409);
   assert.equal(response.payload.code, 'NO_ACTIVE_CALLER_ID');
   assert.doesNotMatch(response.payload.message, /company-a/);
-  assert.deepEqual(boundary.calls, { inventory: 1, callLogs: 0, tokens: 0 });
+  assert.equal(boundary.calls.inventory, 1);
+  assert.equal(boundary.calls.callLogs, 0);
+  assert.equal(boundary.calls.tokens, 0);
 });
 
 test('an unavailable selected number preserves primary fallback semantics', async () => {
@@ -125,11 +152,14 @@ test('a malformed dial string is rejected before inventory or side effects', asy
 
   assert.equal(response.status, 400);
   assert.equal(response.payload.code, 'INVALID_DIAL_STRING');
-  assert.deepEqual(boundary.calls, { inventory: 0, callLogs: 0, tokens: 0 });
+  assert.equal(boundary.calls.inventory, 0);
+  assert.equal(boundary.calls.callLogs, 0);
+  assert.equal(boundary.calls.tokens, 0);
 });
 
 test('stale signed private selections are identified regardless of legacy shape', () => {
   assert.equal(isUnsupportedPrivateSelection({ callerIdMode: 'PRIVATE', callerId: '+17165550100' }), true);
   assert.equal(isUnsupportedPrivateSelection({ callerIdMode: 'NUMBER', callerId: 'anonymous' }), true);
   assert.equal(isUnsupportedPrivateSelection({ callerIdMode: 'NUMBER', callerId: '+17165550100' }), false);
+  assert.equal(isUnsupportedPrivateSelection({ callerIdMode: 'PRIVACY', callerId: '+17165550100' }), false);
 });

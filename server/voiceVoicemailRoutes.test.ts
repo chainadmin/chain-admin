@@ -6,8 +6,8 @@ import { registerVoiceVoicemailRoutes } from './voiceVoicemailRoutes';
 
 test('voicemail HTTP routes enforce admin access and tenant isolation', async () => {
   const items = [
-    { id: 'vm-a', tenantId: 'tenant-a', recordingSid: 'RE-a', isRead: false },
-    { id: 'vm-b', tenantId: 'tenant-b', recordingSid: 'RE-b', isRead: false },
+    { id: 'vm-a', tenantId: 'tenant-a', recordingSid: 'RE-a', isRead: false, isPrivacy: true },
+    { id: 'vm-b', tenantId: 'tenant-b', recordingSid: 'RE-b', isRead: false, isPrivacy: false },
   ];
   const app = express();
   app.use(express.json());
@@ -41,6 +41,8 @@ test('voicemail HTTP routes enforce admin access and tenant isolation', async ()
   try {
     const list = await fetch(`${base}/api/voip/voicemail`, { headers: ownerA });
     assert.deepEqual((await list.json()).map((item: any) => item.id), ['vm-a']);
+    const privacy = await fetch(`${base}/api/voip/voicemail?classification=privacy`, { headers: ownerA });
+    assert.deepEqual((await privacy.json()).map((item: any) => item.id), ['vm-a']);
     assert.equal((await fetch(`${base}/api/voip/voicemail/vm-b/listen`, { headers: ownerA })).status, 404);
     assert.equal((await fetch(`${base}/api/voip/voicemail/vm-b/read`, { method: 'PATCH', headers: { ...ownerA, 'content-type': 'application/json' }, body: '{}' })).status, 404);
     assert.equal((await fetch(`${base}/api/voip/voicemail/vm-b`, { method: 'DELETE', headers: ownerA })).status, 404);

@@ -15,7 +15,13 @@ export function registerVoiceVoicemailRoutes(app: Express, deps: {
   app.get('/api/voip/voicemail', deps.requireOwner, async (req, res) => {
     const user = await deps.getCurrentUser(req);
     if (!user) return res.status(401).json({ message: 'Unauthorized' });
-    res.json(await deps.list(user.tenantId));
+    const classification = req.query.classification;
+    const items = await deps.list(user.tenantId);
+    res.json(classification === 'privacy'
+      ? items.filter(item => item.isPrivacy === true)
+      : classification === 'standard'
+        ? items.filter(item => item.isPrivacy !== true)
+        : items);
   });
   app.patch('/api/voip/voicemail/:id/read', deps.requireOwner, async (req, res) => {
     const user = await deps.getCurrentUser(req);

@@ -57,3 +57,15 @@ test('voicemail completion hangs up without re-entering routing', () => {
   assert.match(completion, /<Hangup\/>/);
   assert.doesNotMatch(completion, /<Redirect|<Dial|<Record/);
 });
+
+test('privacy inbound bypasses ring team and uses separate greeting and marker', () => {
+  const xml = buildInboundTwiML({
+    ...base,
+    mode: 'VOICEMAIL',
+    privacy: true,
+    greeting: { enabled: true, type: 'TEXT', text: 'Private mailbox greeting.' },
+  });
+  assert.match(xml, /Private mailbox greeting/);
+  assert.match(xml, /privacy%3D1|privacy=1/);
+  assert.doesNotMatch(xml, /<Dial|tenant-user-/);
+});

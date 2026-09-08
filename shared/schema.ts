@@ -1330,17 +1330,6 @@ export const voipRoutingBuckets = pgTable("voip_routing_buckets", {
   tenantNameIdx: uniqueIndex("voip_routing_buckets_tenant_name_idx").on(table.tenantId, table.name),
 }));
 
-export const voipTenantSettings = pgTable("voip_tenant_settings", {
-  tenantId: uuid("tenant_id").primaryKey().references(() => tenants.id, { onDelete: "cascade" }),
-  inboundGreetingEnabled: boolean("inbound_greeting_enabled").notNull().default(false),
-  inboundGreetingType: text("inbound_greeting_type", { enum: ['TEXT', 'AUDIO'] }),
-  inboundGreetingText: text("inbound_greeting_text"),
-  inboundGreetingAudioUrl: text("inbound_greeting_audio_url"),
-  holdMusicKey: text("hold_music_key").notNull().default("art-gallery-museum"),
-  parkMusicKey: text("park_music_key").notNull().default("art-gallery-museum"),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
 // VoIP Phone Numbers (per tenant)
 export const voipPhoneNumbers = pgTable("voip_phone_numbers", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1364,6 +1353,21 @@ export const voipPhoneNumbers = pgTable("voip_phone_numbers", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+export const voipTenantSettings = pgTable("voip_tenant_settings", {
+  tenantId: uuid("tenant_id").primaryKey().references(() => tenants.id, { onDelete: "cascade" }),
+  inboundGreetingEnabled: boolean("inbound_greeting_enabled").notNull().default(false),
+  inboundGreetingType: text("inbound_greeting_type", { enum: ['TEXT', 'AUDIO'] }),
+  inboundGreetingText: text("inbound_greeting_text"),
+  inboundGreetingAudioUrl: text("inbound_greeting_audio_url"),
+  privacyLinePhoneNumberId: uuid("privacy_line_phone_number_id").references(() => voipPhoneNumbers.id, { onDelete: "set null" }),
+  privacyVoicemailGreetingType: text("privacy_voicemail_greeting_type", { enum: ['TEXT', 'AUDIO'] }),
+  privacyVoicemailGreetingText: text("privacy_voicemail_greeting_text"),
+  privacyVoicemailGreetingAudioUrl: text("privacy_voicemail_greeting_audio_url"),
+  holdMusicKey: text("hold_music_key").notNull().default("art-gallery-museum"),
+  parkMusicKey: text("park_music_key").notNull().default("art-gallery-museum"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export const voipVoicemails = pgTable("voip_voicemails", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
@@ -1376,6 +1380,7 @@ export const voipVoicemails = pgTable("voip_voicemails", {
   toNumber: text("to_number").notNull(),
   duration: integer("duration").notNull().default(0),
   status: text("status").notNull().default("RECORDING"),
+  isPrivacy: boolean("is_privacy").notNull().default(false),
   isRead: boolean("is_read").notNull().default(false),
   readAt: timestamp("read_at"),
   createdAt: timestamp("created_at").defaultNow(),
