@@ -120,8 +120,8 @@ export function selectDialingNumber(input: SelectDialingNumberInput): DialingDec
     }
 
     if (!selected) {
-      // A local-presence request must never leak the office, primary, or an
-      // out-of-state DID. Twilio supports the literal `anonymous` callerId.
+      // Signal that no safe geographic company DID exists. Outbound
+      // preparation must fail closed rather than disclose another number.
       selected = {
         tenantId: input.tenantId, phoneNumber: 'anonymous', areaCode: '',
         numberType: 'LOCAL_PRESENCE', isActive: true,

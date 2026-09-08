@@ -2583,7 +2583,7 @@ export async function runMigrations() {
         id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
         kind TEXT NOT NULL CHECK (kind IN ('HOLD','PARK')),
-        status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','RESUMING','EXPIRING','COMPLETED','EXPIRED')),
+        status TEXT NOT NULL DEFAULT 'PREPARING' CHECK (status IN ('PREPARING','RECONCILING','FAILED','ACTIVE','RESUMING','CANCELING','EXPIRING','COMPLETED','EXPIRED')),
         active_call_sid TEXT NOT NULL,
         retained_call_sid TEXT NOT NULL UNIQUE,
         created_by_user_id TEXT NOT NULL,
@@ -2596,9 +2596,16 @@ export async function runMigrations() {
       );
     `);
     await client.query(`
+      ALTER TABLE voip_suspended_calls ADD COLUMN IF NOT EXISTS music_key TEXT NOT NULL DEFAULT 'art-gallery-museum';
+      ALTER TABLE voip_suspended_calls ADD COLUMN IF NOT EXISTS retention_operation_id UUID;
+      ALTER TABLE voip_suspended_calls ADD COLUMN IF NOT EXISTS reconnect_token_hash TEXT;
+      ALTER TABLE voip_suspended_calls ADD COLUMN IF NOT EXISTS reconnecting_user_id TEXT;
+      ALTER TABLE voip_suspended_calls ADD COLUMN IF NOT EXISTS reconnect_expires_at TIMESTAMP;
+      ALTER TABLE voip_suspended_calls ADD COLUMN IF NOT EXISTS reconnect_answered_at TIMESTAMP;
+      ALTER TABLE voip_suspended_calls ALTER COLUMN status SET DEFAULT 'PREPARING';
       ALTER TABLE voip_suspended_calls DROP CONSTRAINT IF EXISTS voip_suspended_calls_status_check;
       ALTER TABLE voip_suspended_calls ADD CONSTRAINT voip_suspended_calls_status_check
-        CHECK (status IN ('ACTIVE','RESUMING','EXPIRING','COMPLETED','EXPIRED'));
+        CHECK (status IN ('PREPARING','RECONCILING','FAILED','ACTIVE','RESUMING','CANCELING','EXPIRING','COMPLETED','EXPIRED'));
     `);
     await client.query(`CREATE INDEX IF NOT EXISTS voip_voicemails_tenant_created_idx ON voip_voicemails(tenant_id, created_at DESC)`);
     await client.query(`CREATE INDEX IF NOT EXISTS voip_suspended_calls_active_tenant_idx ON voip_suspended_calls(tenant_id, kind, status, expires_at)`);

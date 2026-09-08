@@ -1,6 +1,6 @@
 import type { Express, Response } from "express";
 import { createServer, type Server } from "http";
-import { timingSafeEqual } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { SignedDocumentRetentionError, storage, type IStorage } from "./storage";
 import { ACCOUNT_STATUSES, isAccountStatus } from "../shared/constants";
 import { ANDROID_APP_URL, IOS_APP_URL } from "../shared/constants/appStoreLinks";
@@ -97,8 +97,10 @@ import { registerSoftphoneSessionRoutes } from "./softphoneSessionRoutes";
 import { registerChiamoNumberRoutes } from "./chiamoNumberRoutes";
 import { resolveChiamoBaseUrl } from "./chiamoOnboarding";
 import { CHIAMO_SUPPORT_EMAIL } from "@shared/chiamo";
+import { createOutboundCallPreparationHandler, isUnsupportedPrivateSelection } from "./outboundCallPreparation";
 import { chiamoLeads, chiamoServiceConfigurations, chiamoSubscriptions } from "@shared/chiamo-schema";
 import { hashPasswordResetToken, isChainActivationReset, passwordResetProduct } from "./passwordResetPolicy";
+import { beginReconnect, classifyRetainedCallback, hashReconnectToken, reconcilePreparedRetention, reconnectTokenSchema } from "./voiceRetainedCallLifecycle";
 import {
   findCanonicalTenant,
   getEffectivePhoneEntitlement,
@@ -26155,10 +26157,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // VoIP Phone Routes
   // =====================================================
 
-  async function suspendLiveVoipCall(tenantId: string, userId: string, activeCallSid: string, musicKey: string) {
-    const [{ getCompanyTwilioClient, voiceWebhookBaseUrl }, { buildWaitingMusicTwiML }, { isVoiceCallOwnedByUser }] = await Promise.all([
+  async function locateRetainedVoipCall(tenantId: string, userId: string, activeCallSid: string) {
+    const [{ getCompanyTwilioClient }, { isVoiceCallOwnedByUser }] = await Promise.all([
       import('./companyTwilioService'),
-      import('./voiceCallTreatment'),
       import('./voiceCallAccess'),
     ]);
     const client = await getCompanyTwilioClient(tenantId);
@@ -26173,41 +26174,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
       retainedCallSid = liveChild?.sid || '';
     }
     if (!retainedCallSid) throw new Error('The live caller leg could not be located');
+    return retainedCallSid;
+  }
+
+  async function redirectRetainedVoipCallToMusic(tenantId: string, retainedCallSid: string, musicKey: string) {
+    const [{ getCompanyTwilioClient, voiceWebhookBaseUrl }, { buildWaitingMusicTwiML }] = await Promise.all([
+      import('./companyTwilioService'),
+      import('./voiceCallTreatment'),
+    ]);
+    const client = await getCompanyTwilioClient(tenantId);
     await client.calls(retainedCallSid).update({
       twiml: buildWaitingMusicTwiML(musicKey, voiceWebhookBaseUrl()),
     });
-    return retainedCallSid;
   }
 
   async function reconnectSuspendedVoipCall(
     tenantId: string,
     retainedCallSid: string,
     userId: string,
+    retainedCallId: string,
+    reconnectToken: string,
   ) {
-    const [{ getCompanyTwilioClient }, { buildReconnectClientTwiML }] = await Promise.all([
+    const [{ getCompanyTwilioClient, voiceWebhookBaseUrl }, { buildReconnectClientTwiML }] = await Promise.all([
       import('./companyTwilioService'),
       import('./voiceCallTreatment'),
     ]);
     const client = await getCompanyTwilioClient(tenantId);
+    const callbackUrl = `${voiceWebhookBaseUrl()}/api/voice/retained-call-status?id=${encodeURIComponent(retainedCallId)}&reconnectToken=${encodeURIComponent(reconnectToken)}`;
     await client.calls(retainedCallSid).update({
-      twiml: buildReconnectClientTwiML(tenantId, userId),
+      twiml: buildReconnectClientTwiML(tenantId, userId, {
+        retainedCallId,
+        reconnectToken,
+        callbackUrl,
+      }),
     });
   }
 
   const suspendedCallExpiryMs = 4 * 60 * 60 * 1000;
+  const suspendedCallReconnectMs = 2 * 60 * 1000;
 
   async function cleanupExpiredSuspendedCalls() {
     const now = new Date();
-    const staleResumeCutoff = new Date(now.getTime() - 2 * 60 * 1000);
+    const stalePrepareCutoff = new Date(now.getTime() - 2 * 60 * 1000);
     const { getCompanyTwilioClient } = await import('./companyTwilioService');
+    const preparing = await db.update(voipSuspendedCalls).set({ status: 'RECONCILING', updatedAt: now }).where(and(
+      inArray(voipSuspendedCalls.status, ['PREPARING', 'RECONCILING']),
+      lte(voipSuspendedCalls.updatedAt, stalePrepareCutoff),
+    )).returning();
+    await Promise.allSettled(preparing.map(async record => {
+      try {
+        const client = await getCompanyTwilioClient(record.tenantId);
+        const [activeLeg, retainedLeg] = await Promise.all([
+          client.calls(record.activeCallSid).fetch(),
+          client.calls(record.retainedCallSid).fetch(),
+        ]);
+        const status = reconcilePreparedRetention(activeLeg.status, retainedLeg.status);
+        await db.update(voipSuspendedCalls).set({ status, updatedAt: new Date() }).where(and(
+          eq(voipSuspendedCalls.id, record.id),
+          eq(voipSuspendedCalls.status, 'RECONCILING'),
+        ));
+      } catch {
+        await db.update(voipSuspendedCalls).set({ status: 'PREPARING', updatedAt: new Date() }).where(and(
+          eq(voipSuspendedCalls.id, record.id),
+          eq(voipSuspendedCalls.status, 'RECONCILING'),
+        ));
+      }
+    }));
+    // FAILED means reconciliation proved the original agent leg was still live,
+    // so expiry removes only our metadata and must never hang up the provider leg.
+    await db.update(voipSuspendedCalls).set({ status: 'EXPIRED', updatedAt: now }).where(and(
+      eq(voipSuspendedCalls.status, 'FAILED'),
+      lte(voipSuspendedCalls.expiresAt, now),
+    ));
+
+    // A finite Dial timeout should deliver its action callback first. Move an
+    // abandoned claim into a callback grace state without touching the parent.
+    await db.update(voipSuspendedCalls).set({ status: 'CANCELING', updatedAt: now }).where(and(
+      eq(voipSuspendedCalls.status, 'RESUMING'),
+      lte(voipSuspendedCalls.reconnectExpiresAt, now),
+      isNull(voipSuspendedCalls.reconnectAnsweredAt),
+    ));
+    const staleCancelCutoff = new Date(now.getTime() - suspendedCallReconnectMs);
     const { runSuspendedCallCleanup } = await import('./voiceSuspendedCallCleanup');
     const result = await runSuspendedCallCleanup({
       claimExpired: () => db.update(voipSuspendedCalls)
         .set({ status: 'EXPIRING', updatedAt: now })
         .where(or(
           and(eq(voipSuspendedCalls.status, 'ACTIVE'), lte(voipSuspendedCalls.expiresAt, now)),
-          and(eq(voipSuspendedCalls.status, 'RESUMING'), lte(voipSuspendedCalls.updatedAt, staleResumeCutoff)),
-          and(eq(voipSuspendedCalls.status, 'EXPIRING'), lte(voipSuspendedCalls.updatedAt, staleResumeCutoff)),
+          and(eq(voipSuspendedCalls.status, 'EXPIRING'), lte(voipSuspendedCalls.updatedAt, stalePrepareCutoff)),
+        ))
+        .returning({ id: voipSuspendedCalls.id, tenantId: voipSuspendedCalls.tenantId, retainedCallSid: voipSuspendedCalls.retainedCallSid }),
+      claimStaleReconnects: () => db.update(voipSuspendedCalls)
+        .set({ status: 'CANCELING', updatedAt: now })
+        .where(and(
+          eq(voipSuspendedCalls.status, 'CANCELING'),
+          lte(voipSuspendedCalls.updatedAt, staleCancelCutoff),
+          isNull(voipSuspendedCalls.reconnectAnsweredAt),
         ))
         .returning({ id: voipSuspendedCalls.id, tenantId: voipSuspendedCalls.tenantId, retainedCallSid: voipSuspendedCalls.retainedCallSid }),
       terminateProviderCall: async call => {
@@ -26218,12 +26280,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
         await db.update(voipSuspendedCalls).set({ status: 'EXPIRED', updatedAt: new Date() })
           .where(and(eq(voipSuspendedCalls.id, call.id), eq(voipSuspendedCalls.status, 'EXPIRING')));
       },
+      markReconnectRestored: async call => {
+        await db.update(voipSuspendedCalls).set({
+          status: 'ACTIVE',
+          reconnectTokenHash: null,
+          reconnectingUserId: null,
+          reconnectExpiresAt: null,
+          updatedAt: new Date(),
+        }).where(and(eq(voipSuspendedCalls.id, call.id), eq(voipSuspendedCalls.status, 'CANCELING'), isNull(voipSuspendedCalls.reconnectAnsweredAt)));
+      },
       releaseFailed: async call => {
         await db.update(voipSuspendedCalls).set({ status: 'ACTIVE', expiresAt: new Date(), updatedAt: new Date() })
           .where(and(eq(voipSuspendedCalls.id, call.id), eq(voipSuspendedCalls.status, 'EXPIRING')));
       },
+      releaseReconnectFailed: async call => {
+        await db.update(voipSuspendedCalls).set({ status: 'CANCELING', updatedAt: new Date() })
+          .where(and(eq(voipSuspendedCalls.id, call.id), eq(voipSuspendedCalls.status, 'CANCELING')));
+      },
     });
-    if (result.failed) console.error(`[Voice] Failed to terminate ${result.failed} expired suspended call(s)`);
+    if (result.failed) console.error(`[Voice] Suspended cleanup failures code=provider_update_failed count=${result.failed}`);
   }
 
   const suspendedCallCleanupTimer = setInterval(() => {
@@ -26231,6 +26306,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }, 60_000);
   suspendedCallCleanupTimer.unref();
   void cleanupExpiredSuspendedCalls().catch(error => console.error('[Voice] Initial suspended call cleanup failed:', error));
+
+  // This callback is registered before the authenticated /api/voip router because
+  // Twilio, rather than a browser session, calls it. Keep its signature validation
+  // equivalent to the other /api/voice callbacks registered later in this file.
+  const validateRetainedCallSignature = async (req: any, res: any, next: any) => {
+    const signature = req.header('x-twilio-signature');
+    const accountSid = req.body?.AccountSid;
+    const forwardedProto = String(req.header('x-forwarded-proto') || req.protocol).split(',')[0].trim();
+    const forwardedHost = String(req.header('x-forwarded-host') || req.header('host') || '').split(',')[0].trim();
+    const configuredOrigin = process.env.TWILIO_VOICE_WEBHOOK_BASE_URL || process.env.PUBLIC_APP_URL || process.env.APP_URL;
+    const publicUrl = configuredOrigin ? `${configuredOrigin.replace(/\/$/, '')}${req.originalUrl}` : `${forwardedProto}://${forwardedHost}${req.originalUrl}`;
+    const { decryptCredential } = await import('./credentialCrypto');
+    const { verifyTwilioVoiceWebhook } = await import('./voiceWebhookSecurity');
+    const tenantId = await verifyTwilioVoiceWebhook({
+      signature,
+      publicUrl,
+      params: req.body || {},
+      accountSid,
+      resolveCredential: async sid => {
+        const [company] = await db.select({ id: tenants.id, authToken: tenants.twilioAuthToken })
+          .from(tenants).where(eq(tenants.twilioAccountSid, sid)).limit(1);
+        return company?.authToken ? { tenantId: company.id, authToken: decryptCredential(company.authToken) } : null;
+      },
+    });
+    if (!tenantId) return res.status(403).send('Invalid Twilio signature or account');
+    req.twilioTenantId = tenantId;
+    next();
+  };
+
+  app.post('/api/voice/retained-call-status', validateRetainedCallSignature, async (req, res) => {
+    res.type('text/xml');
+    try {
+      const id = typeof req.query.id === 'string' ? req.query.id : '';
+      const tokenResult = reconnectTokenSchema.safeParse(req.query.reconnectToken);
+      if (!id || !tokenResult.success) return res.status(400).send('<Response/>');
+      const tokenHash = hashReconnectToken(tokenResult.data);
+      const [record] = await db.select().from(voipSuspendedCalls).where(and(
+        eq(voipSuspendedCalls.id, id),
+        eq(voipSuspendedCalls.tenantId, (req as any).twilioTenantId),
+        eq(voipSuspendedCalls.reconnectTokenHash, tokenHash),
+      )).limit(1);
+      if (!record) return res.status(404).send('<Response/>');
+
+      const callbackDecision = classifyRetainedCallback(record.retainedCallSid, req.body || {});
+      if (callbackDecision === 'WRONG_PARENT') return res.status(409).send('<Response/>');
+      if (callbackDecision === 'ANSWERED') {
+        await db.update(voipSuspendedCalls).set({
+          status: 'COMPLETED',
+          reconnectAnsweredAt: new Date(),
+          updatedAt: new Date(),
+        }).where(and(
+          eq(voipSuspendedCalls.id, record.id),
+          inArray(voipSuspendedCalls.status, ['RESUMING', 'CANCELING']),
+          eq(voipSuspendedCalls.reconnectTokenHash, tokenHash),
+        ));
+        return res.send('<Response/>');
+      }
+
+      if (callbackDecision === 'RESTORE') {
+        const [restored] = await db.update(voipSuspendedCalls).set({
+          status: 'ACTIVE',
+          reconnectTokenHash: null,
+          reconnectingUserId: null,
+          reconnectExpiresAt: null,
+          updatedAt: new Date(),
+        }).where(and(
+          eq(voipSuspendedCalls.id, record.id),
+          inArray(voipSuspendedCalls.status, ['RESUMING', 'CANCELING']),
+          isNull(voipSuspendedCalls.reconnectAnsweredAt),
+          eq(voipSuspendedCalls.reconnectTokenHash, tokenHash),
+        )).returning({ musicKey: voipSuspendedCalls.musicKey });
+        if (restored) {
+          const { buildWaitingMusicTwiML } = await import('./voiceCallTreatment');
+          const { voiceWebhookBaseUrl } = await import('./companyTwilioService');
+          return res.send(buildWaitingMusicTwiML(restored.musicKey, voiceWebhookBaseUrl()));
+        }
+      }
+      return res.send('<Response/>');
+    } catch (error) {
+      console.error('[Voice] Retained callback failed code=retained_callback_failed');
+      return res.status(500).send('<Response/>');
+    }
+  });
 
   // All customer Voice endpoints share one entitlement gate. Provider webhooks remain
   // below under /api/voice and continue to use provider signature/account validation.
@@ -27267,7 +27425,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const [heldCall] = await db.select().from(voipSuspendedCalls).where(and(
         eq(voipSuspendedCalls.tenantId, user.tenantId),
         eq(voipSuspendedCalls.kind, 'HOLD'),
-        eq(voipSuspendedCalls.status, 'ACTIVE'),
+        inArray(voipSuspendedCalls.status, ['ACTIVE', 'RESUMING', 'CANCELING']),
         eq(voipSuspendedCalls.createdByUserId, user.id),
         gt(voipSuspendedCalls.expiresAt, new Date()),
       )).orderBy(desc(voipSuspendedCalls.createdAt)).limit(1);
@@ -27276,6 +27434,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         callerName: heldCall.callerName,
         callerNumber: heldCall.callerNumber,
         heldAt: heldCall.createdAt,
+        status: heldCall.status,
+        reconnectingByMe: heldCall.reconnectingUserId === user.id,
       } : null);
     } catch (error) {
       console.error('Error getting held call:', error);
@@ -27284,34 +27444,70 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post('/api/voip/held-calls', authenticateUser, async (req, res) => {
-    let retainedCallSid = '';
-    let recovery: { tenantId: string; userId: string } | null = null;
     try {
       const user = await getCurrentUser(req);
       if (!user) return res.status(401).json({ message: 'Unauthorized' });
       if (!canUseSoftphone(user)) return res.status(403).json({ message: 'VoIP access not enabled for this user' });
-      const { activeCallSid, callerName, callerNumber } = req.body;
-      if (!activeCallSid || !callerNumber) return res.status(400).json({ message: 'Active call and caller number are required' });
+      const parsed = z.object({
+        activeCallSid: z.string().trim().min(1),
+        callerName: z.string().max(200).optional().default(''),
+        callerNumber: z.string().trim().min(1).max(200),
+      }).safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: 'Active call and caller label are required' });
+      const { activeCallSid, callerName, callerNumber } = parsed.data;
       await cleanupExpiredSuspendedCalls();
       const settings = await voipStorage.getVoiceSettings(user.tenantId);
-      retainedCallSid = await suspendLiveVoipCall(user.tenantId, user.id, activeCallSid, settings?.holdMusicKey || 'art-gallery-museum');
-      recovery = { tenantId: user.tenantId, userId: user.id };
-      const [heldCall] = await db.insert(voipSuspendedCalls).values({
+      const musicKey = settings?.holdMusicKey || 'art-gallery-museum';
+      const retainedCallSid = await locateRetainedVoipCall(user.tenantId, user.id, activeCallSid);
+      const operationId = randomUUID();
+      const createdAt = new Date();
+      const values = {
         tenantId: user.tenantId,
-        kind: 'HOLD',
+        kind: 'HOLD' as const,
+        status: 'PREPARING' as const,
         activeCallSid,
         retainedCallSid,
         createdByUserId: user.id,
-        callerName: callerName || '',
+        callerName,
         callerNumber,
+        musicKey,
+        retentionOperationId: operationId,
+        reconnectTokenHash: null,
+        reconnectingUserId: null,
+        reconnectExpiresAt: null,
+        reconnectAnsweredAt: null,
         expiresAt: new Date(Date.now() + suspendedCallExpiryMs),
-      }).returning();
+        createdAt,
+        updatedAt: createdAt,
+      };
+      let [heldCall] = await db.update(voipSuspendedCalls).set(values).where(and(
+        eq(voipSuspendedCalls.retainedCallSid, retainedCallSid),
+        eq(voipSuspendedCalls.tenantId, user.tenantId),
+        inArray(voipSuspendedCalls.status, ['FAILED', 'COMPLETED', 'EXPIRED']),
+      )).returning();
+      if (!heldCall) {
+        [heldCall] = await db.insert(voipSuspendedCalls).values(values).onConflictDoNothing().returning();
+      }
+      if (!heldCall) {
+        const [existing] = await db.select().from(voipSuspendedCalls)
+          .where(and(eq(voipSuspendedCalls.retainedCallSid, retainedCallSid), eq(voipSuspendedCalls.tenantId, user.tenantId))).limit(1);
+        if (existing?.status === 'ACTIVE' && existing.kind === 'HOLD' && existing.createdByUserId === user.id) {
+          return res.json({ id: existing.id, callerName: existing.callerName, callerNumber: existing.callerNumber, heldAt: existing.createdAt });
+        }
+        return res.status(409).json({ message: 'This caller is already being retained' });
+      }
+      await redirectRetainedVoipCallToMusic(user.tenantId, retainedCallSid, musicKey);
+      const [activated] = await db.update(voipSuspendedCalls).set({ status: 'ACTIVE', updatedAt: new Date() }).where(and(
+        eq(voipSuspendedCalls.id, heldCall.id),
+        eq(voipSuspendedCalls.status, 'PREPARING'),
+        eq(voipSuspendedCalls.retentionOperationId, operationId),
+      )).returning();
+      if (!activated) throw new Error('retention_fence_lost');
       res.json({ id: heldCall.id, callerName: heldCall.callerName, callerNumber, heldAt: heldCall.createdAt });
     } catch (error) {
-      console.error('Error placing call on hold:', error);
-      if (retainedCallSid && recovery) {
-        await reconnectSuspendedVoipCall(recovery.tenantId, retainedCallSid, recovery.userId).catch(() => undefined);
-      }
+      console.error('Error placing call on hold code=retain_start_failed');
+      // Keep PREPARING on an ambiguous provider response. Cleanup reconciles the
+      // original agent leg before deciding whether the caller is retained.
       res.status(502).json({ message: 'The live call could not be placed on hold' });
     }
   });
@@ -27321,24 +27517,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = await getCurrentUser(req);
       if (!user) return res.status(401).json({ message: 'Unauthorized' });
       if (!canUseSoftphone(user)) return res.status(403).json({ message: 'VoIP access not enabled for this user' });
+      const tokenResult = reconnectTokenSchema.safeParse(req.body?.reconnectToken);
+      if (!tokenResult.success) return res.status(400).json({ message: 'A valid reconnect token is required' });
+      const reconnectToken = tokenResult.data;
+      const tokenHash = hashReconnectToken(reconnectToken);
+      const reconnectExpiresAt = new Date(Date.now() + suspendedCallReconnectMs);
       await cleanupExpiredSuspendedCalls();
-      const [heldCall] = await db.update(voipSuspendedCalls).set({ status: 'RESUMING', updatedAt: new Date() }).where(and(
-        eq(voipSuspendedCalls.id, req.params.id),
-        eq(voipSuspendedCalls.tenantId, user.tenantId),
-        eq(voipSuspendedCalls.kind, 'HOLD'),
-        eq(voipSuspendedCalls.status, 'ACTIVE'),
-        eq(voipSuspendedCalls.createdByUserId, user.id),
-        gt(voipSuspendedCalls.expiresAt, new Date()),
-      )).returning();
-      if (!heldCall) return res.status(404).json({ message: 'Held call not found' });
-      try {
-        await reconnectSuspendedVoipCall(user.tenantId, heldCall.retainedCallSid, user.id);
-        await db.update(voipSuspendedCalls).set({ status: 'COMPLETED', updatedAt: new Date() }).where(eq(voipSuspendedCalls.id, heldCall.id));
-      } catch (error) {
-        await db.update(voipSuspendedCalls).set({ status: 'ACTIVE', updatedAt: new Date() }).where(eq(voipSuspendedCalls.id, heldCall.id));
-        throw error;
-      }
-      res.json({ success: true });
+      const reconnectResult = await beginReconnect({
+        claimActive: async () => {
+          const [record] = await db.update(voipSuspendedCalls).set({
+            status: 'RESUMING',
+            reconnectTokenHash: tokenHash,
+            reconnectingUserId: user.id,
+            reconnectExpiresAt,
+            reconnectAnsweredAt: null,
+            updatedAt: new Date(),
+          }).where(and(
+            eq(voipSuspendedCalls.id, req.params.id),
+            eq(voipSuspendedCalls.tenantId, user.tenantId),
+            eq(voipSuspendedCalls.kind, 'HOLD'),
+            eq(voipSuspendedCalls.status, 'ACTIVE'),
+            eq(voipSuspendedCalls.createdByUserId, user.id),
+            gt(voipSuspendedCalls.expiresAt, new Date()),
+          )).returning();
+          return record || null;
+        },
+        findExactClaim: async () => {
+          const [record] = await db.select().from(voipSuspendedCalls).where(and(
+            eq(voipSuspendedCalls.id, req.params.id),
+            eq(voipSuspendedCalls.tenantId, user.tenantId),
+            eq(voipSuspendedCalls.kind, 'HOLD'),
+            eq(voipSuspendedCalls.status, 'RESUMING'),
+            eq(voipSuspendedCalls.createdByUserId, user.id),
+            eq(voipSuspendedCalls.reconnectingUserId, user.id),
+            eq(voipSuspendedCalls.reconnectTokenHash, tokenHash),
+            gt(voipSuspendedCalls.reconnectExpiresAt, new Date()),
+          )).limit(1);
+          return record || null;
+        },
+        hasCompetingClaim: async () => {
+          const [record] = await db.select({ id: voipSuspendedCalls.id }).from(voipSuspendedCalls).where(and(
+          eq(voipSuspendedCalls.id, req.params.id),
+          eq(voipSuspendedCalls.tenantId, user.tenantId),
+          eq(voipSuspendedCalls.kind, 'HOLD'),
+          eq(voipSuspendedCalls.createdByUserId, user.id),
+          inArray(voipSuspendedCalls.status, ['RESUMING', 'CANCELING']),
+        )).limit(1);
+          return Boolean(record);
+        },
+        startProviderReconnect: heldCall => reconnectSuspendedVoipCall(
+          user.tenantId, heldCall.retainedCallSid, user.id, heldCall.id, reconnectToken,
+        ),
+      });
+      if (reconnectResult.kind === 'CONFLICT') return res.status(409).json({ message: 'This call already has a reconnect claim' });
+      if (reconnectResult.kind === 'MISSING') return res.status(404).json({ message: 'Held call not found' });
+      if (!('record' in reconnectResult)) return res.status(409).json({ message: 'Reconnect claim unavailable' });
+      const heldCall = reconnectResult.record;
+      res.json({ success: true, reconnect: {
+        id: heldCall.id, token: reconnectToken, expiresAt: heldCall.reconnectExpiresAt || reconnectExpiresAt,
+        callerName: heldCall.callerName, callerNumber: heldCall.callerNumber,
+      } });
     } catch (error) {
       console.error('Error resuming held call:', error);
       res.status(502).json({ message: 'The held call could not be resumed' });
@@ -27358,7 +27596,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const tenantParkedCalls = await db.select().from(voipSuspendedCalls).where(and(
         eq(voipSuspendedCalls.tenantId, user.tenantId),
         eq(voipSuspendedCalls.kind, 'PARK'),
-        eq(voipSuspendedCalls.status, 'ACTIVE'),
+        inArray(voipSuspendedCalls.status, ['ACTIVE', 'RESUMING', 'CANCELING']),
         gt(voipSuspendedCalls.expiresAt, new Date()),
       )).orderBy(voipSuspendedCalls.createdAt);
       res.json(tenantParkedCalls.map(call => ({
@@ -27367,6 +27605,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         callerNumber: call.callerNumber,
         parkedBy: call.parkedBy,
         parkedAt: call.createdAt,
+        status: call.status,
+        reconnectingByMe: call.reconnectingUserId === user.id,
       })));
     } catch (error) {
       console.error("Error getting parked calls:", error);
@@ -27375,8 +27615,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post('/api/voip/parked-calls', authenticateUser, async (req, res) => {
-    let retainedCallSid = '';
-    let recovery: { tenantId: string; userId: string } | null = null;
     try {
       const user = await getCurrentUser(req);
       if (!user) {
@@ -27387,26 +27625,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "VoIP access not enabled for this user" });
       }
 
-      const { activeCallSid, callerName, callerNumber } = req.body;
-      if (!activeCallSid || !callerNumber) {
-        return res.status(400).json({ message: "Active call and caller number are required" });
-      }
+      const parsed = z.object({
+        activeCallSid: z.string().trim().min(1),
+        callerName: z.string().max(200).optional().default(''),
+        callerNumber: z.string().trim().min(1).max(200),
+      }).safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ message: 'Active call and caller label are required' });
+      const { activeCallSid, callerName, callerNumber } = parsed.data;
 
       await cleanupExpiredSuspendedCalls();
       const settings = await voipStorage.getVoiceSettings(user.tenantId);
-      retainedCallSid = await suspendLiveVoipCall(user.tenantId, user.id, activeCallSid, settings?.parkMusicKey || 'art-gallery-museum');
-      recovery = { tenantId: user.tenantId, userId: user.id };
-      const [parkedCall] = await db.insert(voipSuspendedCalls).values({
+      const musicKey = settings?.parkMusicKey || 'art-gallery-museum';
+      const retainedCallSid = await locateRetainedVoipCall(user.tenantId, user.id, activeCallSid);
+      const operationId = randomUUID();
+      const createdAt = new Date();
+      const values = {
         tenantId: user.tenantId,
-        kind: 'PARK',
+        kind: 'PARK' as const,
+        status: 'PREPARING' as const,
         activeCallSid,
         retainedCallSid,
         createdByUserId: user.id,
-        callerName: callerName || '',
+        callerName,
         callerNumber,
         parkedBy: (user as any).name || (user as any).username || 'Another agent',
+        musicKey,
+        retentionOperationId: operationId,
+        reconnectTokenHash: null,
+        reconnectingUserId: null,
+        reconnectExpiresAt: null,
+        reconnectAnsweredAt: null,
         expiresAt: new Date(Date.now() + suspendedCallExpiryMs),
-      }).returning();
+        createdAt,
+        updatedAt: createdAt,
+      };
+      let [parkedCall] = await db.update(voipSuspendedCalls).set(values).where(and(
+        eq(voipSuspendedCalls.retainedCallSid, retainedCallSid),
+        eq(voipSuspendedCalls.tenantId, user.tenantId),
+        inArray(voipSuspendedCalls.status, ['FAILED', 'COMPLETED', 'EXPIRED']),
+      )).returning();
+      if (!parkedCall) {
+        [parkedCall] = await db.insert(voipSuspendedCalls).values(values).onConflictDoNothing().returning();
+      }
+      if (!parkedCall) {
+        const [existing] = await db.select().from(voipSuspendedCalls)
+          .where(and(eq(voipSuspendedCalls.retainedCallSid, retainedCallSid), eq(voipSuspendedCalls.tenantId, user.tenantId))).limit(1);
+        if (existing?.status === 'ACTIVE' && existing.kind === 'PARK') {
+          return res.json({
+            id: existing.id, callerName: existing.callerName, callerNumber: existing.callerNumber,
+            parkedBy: existing.parkedBy, parkedAt: existing.createdAt,
+          });
+        }
+        return res.status(409).json({ message: 'This caller is already being retained' });
+      }
+      await redirectRetainedVoipCallToMusic(user.tenantId, retainedCallSid, musicKey);
+      const [activated] = await db.update(voipSuspendedCalls).set({ status: 'ACTIVE', updatedAt: new Date() }).where(and(
+        eq(voipSuspendedCalls.id, parkedCall.id),
+        eq(voipSuspendedCalls.status, 'PREPARING'),
+        eq(voipSuspendedCalls.retentionOperationId, operationId),
+      )).returning();
+      if (!activated) throw new Error('retention_fence_lost');
       res.json({
         id: parkedCall.id,
         callerName: parkedCall.callerName,
@@ -27415,10 +27693,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         parkedAt: parkedCall.createdAt,
       });
     } catch (error) {
-      console.error("Error parking call:", error);
-      if (retainedCallSid && recovery) {
-        await reconnectSuspendedVoipCall(recovery.tenantId, retainedCallSid, recovery.userId).catch(() => undefined);
-      }
+      console.error("Error parking call code=retain_start_failed");
       res.status(500).json({ message: "Failed to park call" });
     }
   });
@@ -27430,113 +27705,124 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Unauthorized" });
       }
       if (!canUseSoftphone(user)) return res.status(403).json({ message: 'VoIP access not enabled for this user' });
+      const tokenResult = reconnectTokenSchema.safeParse(req.body?.reconnectToken);
+      if (!tokenResult.success) return res.status(400).json({ message: 'A valid reconnect token is required' });
+      const reconnectToken = tokenResult.data;
+      const tokenHash = hashReconnectToken(reconnectToken);
+      const reconnectExpiresAt = new Date(Date.now() + suspendedCallReconnectMs);
       await cleanupExpiredSuspendedCalls();
-      const [parkedCall] = await db.update(voipSuspendedCalls).set({ status: 'RESUMING', updatedAt: new Date() }).where(and(
-        eq(voipSuspendedCalls.id, req.params.id),
-        eq(voipSuspendedCalls.tenantId, user.tenantId),
-        eq(voipSuspendedCalls.kind, 'PARK'),
-        eq(voipSuspendedCalls.status, 'ACTIVE'),
-        gt(voipSuspendedCalls.expiresAt, new Date()),
-      )).returning();
-      if (!parkedCall) return res.status(404).json({ message: "Parked call not found" });
-      try {
-        await reconnectSuspendedVoipCall(user.tenantId, parkedCall.retainedCallSid, user.id);
-        await db.update(voipSuspendedCalls).set({ status: 'COMPLETED', updatedAt: new Date() }).where(eq(voipSuspendedCalls.id, parkedCall.id));
-      } catch (error) {
-        await db.update(voipSuspendedCalls).set({ status: 'ACTIVE', updatedAt: new Date() }).where(eq(voipSuspendedCalls.id, parkedCall.id));
-        throw error;
-      }
-      res.json({ success: true });
+      const reconnectResult = await beginReconnect({
+        claimActive: async () => {
+          const [record] = await db.update(voipSuspendedCalls).set({
+            status: 'RESUMING',
+            reconnectTokenHash: tokenHash,
+            reconnectingUserId: user.id,
+            reconnectExpiresAt,
+            reconnectAnsweredAt: null,
+            updatedAt: new Date(),
+          }).where(and(
+            eq(voipSuspendedCalls.id, req.params.id),
+            eq(voipSuspendedCalls.tenantId, user.tenantId),
+            eq(voipSuspendedCalls.kind, 'PARK'),
+            eq(voipSuspendedCalls.status, 'ACTIVE'),
+            gt(voipSuspendedCalls.expiresAt, new Date()),
+          )).returning();
+          return record || null;
+        },
+        findExactClaim: async () => {
+          const [record] = await db.select().from(voipSuspendedCalls).where(and(
+            eq(voipSuspendedCalls.id, req.params.id),
+            eq(voipSuspendedCalls.tenantId, user.tenantId),
+            eq(voipSuspendedCalls.kind, 'PARK'),
+            eq(voipSuspendedCalls.status, 'RESUMING'),
+            eq(voipSuspendedCalls.reconnectingUserId, user.id),
+            eq(voipSuspendedCalls.reconnectTokenHash, tokenHash),
+            gt(voipSuspendedCalls.reconnectExpiresAt, new Date()),
+          )).limit(1);
+          return record || null;
+        },
+        hasCompetingClaim: async () => {
+          const [record] = await db.select({ id: voipSuspendedCalls.id }).from(voipSuspendedCalls).where(and(
+          eq(voipSuspendedCalls.id, req.params.id),
+          eq(voipSuspendedCalls.tenantId, user.tenantId),
+          eq(voipSuspendedCalls.kind, 'PARK'),
+          inArray(voipSuspendedCalls.status, ['RESUMING', 'CANCELING']),
+        )).limit(1);
+          return Boolean(record);
+        },
+        startProviderReconnect: parkedCall => reconnectSuspendedVoipCall(
+          user.tenantId, parkedCall.retainedCallSid, user.id, parkedCall.id, reconnectToken,
+        ),
+      });
+      if (reconnectResult.kind === 'CONFLICT') return res.status(409).json({ message: 'This call already has a reconnect claim' });
+      if (reconnectResult.kind === 'MISSING') return res.status(404).json({ message: "Parked call not found" });
+      if (!('record' in reconnectResult)) return res.status(409).json({ message: 'Reconnect claim unavailable' });
+      const parkedCall = reconnectResult.record;
+      res.json({ success: true, reconnect: {
+        id: parkedCall.id, token: reconnectToken, expiresAt: parkedCall.reconnectExpiresAt || reconnectExpiresAt,
+        callerName: parkedCall.callerName, callerNumber: parkedCall.callerNumber,
+      } });
     } catch (error) {
       console.error("Error picking up parked call:", error);
       res.status(500).json({ message: "Failed to pick up parked call" });
     }
   });
 
-  // Initiate an outbound call
-  app.post('/api/voip/call', authenticateUser, async (req, res) => {
+  app.post('/api/voip/suspended-calls/:id/cancel-reconnect', authenticateUser, async (req, res) => {
     try {
       const user = await getCurrentUser(req);
-      if (!user) {
-        return res.status(401).json({ message: "Unauthorized" });
-      }
-
-      // Check VoIP access
-      const isOwner = user.role === 'owner' || user.role === 'manager';
-      if (!isOwner && !user.voipAccess) {
-        return res.status(403).json({ message: "VoIP access not enabled for this user" });
-      }
-
-      const { toNumber, consumerId, accountId, selectedNumberId: requestedNumberId, callerIdMode } = req.body;
-
-      if (!toNumber) {
-        return res.status(400).json({ message: "Phone number to call is required" });
-      }
-
-      const allNumbers = await voipStorage.getVoipPhoneNumbersByTenant(user.tenantId);
-      const selectedNumberId = requestedNumberId
-        || (callerIdMode === 'office' ? allNumbers.find(number => number.numberType === 'TOLL_FREE' && number.isActive)?.id : undefined);
-      if (consumerId) {
-        const [owned] = await db.select({ id: consumers.id }).from(consumers).where(and(eq(consumers.id, consumerId), eq(consumers.tenantId, user.tenantId))).limit(1);
-        if (!owned) return res.status(400).json({ message: "Consumer does not belong to this company" });
-      }
-      if (accountId) {
-        const [owned] = await db.select({ id: accountsTable.id }).from(accountsTable).where(and(eq(accountsTable.id, accountId), eq(accountsTable.tenantId, user.tenantId))).limit(1);
-        if (!owned) return res.status(400).json({ message: "Account does not belong to this company" });
-      }
-      const packages = await db.select({ geographies: localPresencePackages.geographies }).from(localPresencePackages).where(eq(localPresencePackages.status, 'ACTIVE'));
-      const areaStates = new Map<string, string>();
-      for (const pkg of packages) for (const geo of pkg.geographies || []) areaStates.set(geo.areaCode, geo.state);
-      const { selectDialingNumber } = await import('./localPresenceService');
-      const decision = selectDialingNumber({
-        tenantId: user.tenantId,
-        dialString: toNumber,
-        numbers: allNumbers as any,
-        selectedNumberId,
-        areaCodeToState: areaCode => areaStates.get(areaCode),
-      });
-      const fromPhoneNumber = decision.selectedNumber;
-      const privateCallerId = decision.selectionReason === 'PRIVATE_FALLBACK' || callerIdMode === 'PRIVATE' || callerIdMode === 'private';
-
-      // Create call log entry
-      const callLog = await voipStorage.createVoipCallLog({
-        tenantId: user.tenantId,
-        consumerId: consumerId || null,
-        accountId: accountId || null,
-        agentCredentialId: user.credentialId || null,
-        direction: 'outbound',
-        fromNumber: privateCallerId ? 'anonymous' : fromPhoneNumber.phoneNumber,
-        toNumber: decision.destination,
-        status: 'initiated',
-        startedAt: new Date(),
-      });
-      const jwt = (await import('jsonwebtoken')).default;
-      const selectionToken = jwt.sign({
-        purpose: 'voice-call-selection',
-        tenantId: user.tenantId,
-        callLogId: callLog.id,
-        destination: decision.destination,
-        callerId: privateCallerId ? 'anonymous' : fromPhoneNumber.phoneNumber,
-        callerIdMode: privateCallerId ? 'PRIVATE' : 'NUMBER',
-      }, process.env.JWT_SECRET!, { expiresIn: '5m' });
-
-      res.json({
-        callLogId: callLog.id,
-        selectionToken,
-        fromNumber: privateCallerId ? 'anonymous' : fromPhoneNumber.phoneNumber,
-        actualFromNumber: privateCallerId ? 'anonymous' : fromPhoneNumber.phoneNumber,
-        toNumber: decision.destination,
-        status: 'initiated',
-        localPresenceRequested: decision.localPresenceRequested,
-        selectionReason: decision.selectionReason,
-        isPrivate: privateCallerId,
-        message: 'Call initiated. Use the Twilio Voice SDK to handle the call.'
-      });
+      if (!user) return res.status(401).json({ message: 'Unauthorized' });
+      if (!canUseSoftphone(user)) return res.status(403).json({ message: 'VoIP access not enabled for this user' });
+      const tokenResult = reconnectTokenSchema.safeParse(req.body?.reconnectToken);
+      if (!tokenResult.success) return res.status(400).json({ message: 'A valid reconnect token is required' });
+      const tokenHash = hashReconnectToken(tokenResult.data);
+      const [claimed] = await db.update(voipSuspendedCalls).set({ status: 'CANCELING', updatedAt: new Date() }).where(and(
+        eq(voipSuspendedCalls.id, req.params.id),
+        eq(voipSuspendedCalls.tenantId, user.tenantId),
+        eq(voipSuspendedCalls.status, 'RESUMING'),
+        eq(voipSuspendedCalls.reconnectingUserId, user.id),
+        eq(voipSuspendedCalls.reconnectTokenHash, tokenHash),
+        isNull(voipSuspendedCalls.reconnectAnsweredAt),
+      )).returning();
+      if (!claimed) return res.status(409).json({ message: 'Reconnect is no longer cancelable' });
+      // Do not redirect the parent while the child may be answering. The finite
+      // Dial timeout/action callback restores music; an answer callback wins.
+      return res.json({ success: true });
     } catch (error) {
-      console.error("Error initiating call:", error);
-      res.status(500).json({ message: "Failed to initiate call" });
+      console.error('[Voice] Cancel reconnect failed code=cancel_reconnect_failed');
+      return res.status(502).json({ message: 'Reconnect could not be canceled' });
     }
   });
+
+  // Initiate an outbound call. Preparation fails closed before creating call
+  // state when withheld caller ID cannot be provided.
+  app.post('/api/voip/call', authenticateUser, createOutboundCallPreparationHandler({
+    getCurrentUser,
+    getNumbers: tenantId => voipStorage.getVoipPhoneNumbersByTenant(tenantId) as any,
+    consumerBelongsToTenant: async (consumerId, tenantId) => {
+      const [owned] = await db.select({ id: consumers.id }).from(consumers)
+        .where(and(eq(consumers.id, consumerId), eq(consumers.tenantId, tenantId))).limit(1);
+      return Boolean(owned);
+    },
+    accountBelongsToTenant: async (accountId, tenantId) => {
+      const [owned] = await db.select({ id: accountsTable.id }).from(accountsTable)
+        .where(and(eq(accountsTable.id, accountId), eq(accountsTable.tenantId, tenantId))).limit(1);
+      return Boolean(owned);
+    },
+    getAreaCodeToState: async () => {
+      const packages = await db.select({ geographies: localPresencePackages.geographies })
+        .from(localPresencePackages).where(eq(localPresencePackages.status, 'ACTIVE'));
+      const areaStates = new Map<string, string>();
+      for (const pkg of packages) for (const geo of pkg.geographies || []) areaStates.set(geo.areaCode, geo.state);
+      return areaCode => areaStates.get(areaCode);
+    },
+    createCallLog: values => voipStorage.createVoipCallLog(values),
+    signSelectionToken: async payload => {
+      const jwt = (await import('jsonwebtoken')).default;
+      return jwt.sign(payload, process.env.JWT_SECRET!, { expiresIn: '5m' });
+    },
+    logError: (message, error) => console.error(`${message}:`, error),
+  }));
 
   // Update call log (for notes)
   app.patch('/api/voip/call-logs/:id', authenticateUser, async (req, res) => {
@@ -27624,10 +27910,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (selection?.purpose !== 'voice-call-selection' || selection.tenantId !== clientTenantId) {
         return res.status(403).send('<Response><Say>Invalid call authorization.</Say><Hangup/></Response>');
       }
+      if (isUnsupportedPrivateSelection(selection)) {
+        res.type('text/xml');
+        return res.status(422).send('<Response><Say>Withheld caller ID is not supported for outbound calls.</Say><Hangup/></Response>');
+      }
       const allNumbers = await voipStorage.getVoipPhoneNumbersByTenant(clientTenantId);
-       const isPrivate = selection.callerIdMode === 'PRIVATE' && selection.callerId === 'anonymous';
-       const callerId = isPrivate ? null : allNumbers.find(number => number.phoneNumber === selection.callerId && number.isActive);
-       if (!isPrivate && !callerId) {
+       const callerId = allNumbers.find(number => number.phoneNumber === selection.callerId && number.isActive);
+       if (!callerId) {
         res.type('text/xml');
         return res.status(409).send('<Response><Say>No active company caller ID is configured.</Say><Hangup/></Response>');
       }
@@ -27640,7 +27929,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const twiml = generateTwiML({
         action: 'dial',
         to: selection.destination,
-         from: isPrivate ? 'anonymous' : callerId!.phoneNumber,
+         from: callerId.phoneNumber,
         record: true,
       });
 

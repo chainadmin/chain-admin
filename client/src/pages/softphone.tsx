@@ -6,7 +6,6 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
-import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import { Loader2, Phone, PhoneCall, PhoneOff, PhoneOutgoing, PhoneIncoming, Mic, MicOff, Volume2, VolumeX, History, LogOut, EyeOff, Building2, Download, Pause, ParkingCircle, UserRound } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -27,6 +26,16 @@ import {
   type SoftphoneUser,
   type VoipSession,
 } from "@/lib/softphone-session";
+import {
+  SoftphoneCallController,
+  dedupeStatus,
+  providerErrorMessage,
+  type PendingReconnect,
+  type ProviderCall,
+} from "@/lib/softphone-call-lifecycle";
+import { cancelReconnect, requestReconnect, retainAgentCall } from "@/lib/softphone-call-requests";
+import { updateLiveDeviceToken } from "@/lib/softphone-call-device";
+import { ConnectPhoneWorkspace } from "@/components/softphone/ConnectPhoneWorkspace";
 
 interface VoipCallLog {
   id: string;
@@ -51,6 +60,9 @@ interface ParkedCall {
   callerNumber: string;
   parkedBy: string;
   parkedAt: string;
+  duration?: number | null;
+  status?: string;
+  reconnectingByMe?: boolean;
 }
 
 interface HeldCall {
@@ -58,6 +70,9 @@ interface HeldCall {
   callerName: string;
   callerNumber: string;
   heldAt: string;
+  duration?: number | null;
+  status?: string;
+  reconnectingByMe?: boolean;
 }
 
 const dialpadButtons = [
@@ -79,7 +94,6 @@ export default function SoftphonePage() {
   const product = detectBrand();
   // Presentation remains independent from the actual product used for authentication.
   const connectShell = isChiamoConnectPhoneShell();
-  const { toast } = useToast();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isRestoringSession, setIsRestoringSession] = useState(true);
   const [user, setUser] = useState<SoftphoneUser | null>(null);
@@ -91,6 +105,14 @@ export default function SoftphonePage() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [providerError, setProviderError] = useState("");
   const [isProviderRegistered, setIsProviderRegistered] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<"online" | "offline" | "reconnecting">(
+    typeof navigator !== "undefined" && !navigator.onLine ? "offline" : "online",
+  );
+  const [inlineStatus, setInlineStatus] = useState("");
+  const [listError, setListError] = useState("");
+  const [pendingReconnect, setPendingReconnect] = useState<PendingReconnect | null>(null);
+  const [isRetentionPending, setIsRetentionPending] = useState(false);
+  const [isDialPreparing, setIsDialPreparing] = useState(false);
 
   const [dialpadNumber, setDialpadNumber] = useState("");
   const [callState, setCallState] = useState<"idle" | "connecting" | "ringing" | "in-call" | "ended">("idle");
@@ -110,7 +132,61 @@ export default function SoftphonePage() {
 
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
   const deviceRef = useRef<Device | null>(null);
+  const deviceTokenRef = useRef<string | null>(null);
   const activeCallRef = useRef<Call | null>(null);
+  const lifecycleRef = useRef(new SoftphoneCallController());
+  const retentionLockRef = useRef(false);
+  const dialLockRef = useRef(false);
+
+  const setStableStatus = (message: string) => setInlineStatus((previous) => dedupeStatus(previous, message));
+
+  lifecycleRef.current.configure({
+    onActive: (call, recovered, metadata) => {
+      activeCallRef.current = call as Call;
+      setInboundCall(null);
+      setInboundCallerNumber("");
+      setInboundCallerName("");
+      if (metadata) {
+        setDialpadNumber(metadata.callerNumber);
+        setActiveCallerName(metadata.callerName);
+        if (metadata.kind === "held") setHeldCall(null);
+        else void refreshParkedCalls();
+      }
+      setIsOnHold(false);
+      setCallState("in-call");
+      if (recovered) setStableStatus("Retained call reconnected.");
+    },
+    onEnded: (call) => {
+      if (activeCallRef.current === call) activeCallRef.current = null;
+      setCallState("ended");
+      setTimeout(() => {
+        if (lifecycleRef.current.getActiveCall()) return;
+        setCallState("idle");
+        setDialpadNumber("");
+        setIsMuted(false);
+        setIsOnHold(false);
+        setActiveCallerName("");
+      }, 2000);
+      queryClient.invalidateQueries({ queryKey: callLogsQueryKey });
+    },
+    onIncoming: (call) => {
+      const providerCall = call as Call;
+      const callerNumber = providerCall.parameters.From || "Unknown";
+      setInboundCallerNumber(callerNumber);
+      setInboundCall(providerCall);
+      setInboundCallerName("");
+      void lookupCallerName(callerNumber).then((name) => {
+        if (lifecycleRef.current.isIncoming(providerCall as unknown as ProviderCall)) setInboundCallerName(name);
+      });
+    },
+    onIncomingCleared: (call) => {
+      setInboundCall((current) => current === call ? null : current);
+      setInboundCallerNumber("");
+      setInboundCallerName("");
+    },
+    onReconnectChanged: setPendingReconnect,
+    onError: setStableStatus,
+  });
 
   useEffect(() => {
     let active = true;
@@ -146,10 +222,6 @@ export default function SoftphonePage() {
 
     return () => {
       active = false;
-      if (deviceRef.current) {
-        deviceRef.current.destroy();
-        deviceRef.current = null;
-      }
     };
   }, [product]);
 
@@ -193,9 +265,11 @@ export default function SoftphonePage() {
   };
 
   const handleLogout = () => {
+    lifecycleRef.current.endSession();
     if (deviceRef.current) {
       deviceRef.current.destroy();
       deviceRef.current = null;
+      deviceTokenRef.current = null;
     }
     clearLegacySoftphoneCache(localStorage);
     if (user) localStorage.removeItem(`softphone:${softphoneScope(product, user)}:user`);
@@ -209,6 +283,8 @@ export default function SoftphonePage() {
     setUsername("");
     setPassword("");
     setProviderError("");
+    setInlineStatus("");
+    setPendingReconnect(null);
     setIsProviderRegistered(false);
   };
 
@@ -235,15 +311,30 @@ export default function SoftphonePage() {
   const refreshParkedCalls = async () => {
     try {
       const response = await fetch(softphoneApiUrl("/api/voip/parked-calls"), { headers: getAuthHeaders(), credentials: "include" });
-      if (response.ok) setParkedCalls(await response.json());
-    } catch (error) {
-      // Park list is non-critical for placing and receiving calls.
+      if (!response.ok) throw new Error("Parked calls could not be refreshed.");
+      const rows = await response.json() as ParkedCall[];
+      const reconnecting = lifecycleRef.current.getPendingReconnect();
+      setParkedCalls((current) => {
+        if (reconnecting?.kind !== "parked" || rows.some((row) => row.id === reconnecting.id)) return rows;
+        const retained = current.find((row) => row.id === reconnecting.id);
+        return retained ? [retained, ...rows] : rows;
+      });
+      setListError("");
+    } catch {
+      setListError("Retained-call lists could not be refreshed. Existing entries remain shown.");
     }
   };
 
   const refreshHeldCall = async () => {
-    const response = await fetch(softphoneApiUrl("/api/voip/held-calls"), { headers: getAuthHeaders(), credentials: "include" });
-    if (response.ok) setHeldCall(await response.json());
+    try {
+      const response = await fetch(softphoneApiUrl("/api/voip/held-calls"), { headers: getAuthHeaders(), credentials: "include" });
+      if (!response.ok) throw new Error("Held call could not be refreshed.");
+      const value = await response.json() as HeldCall | null;
+      if (value || lifecycleRef.current.getPendingReconnect()?.kind !== "held") setHeldCall(value);
+      setListError("");
+    } catch {
+      setListError("Retained-call lists could not be refreshed. Existing entries remain shown.");
+    }
   };
 
   const handleAuthError = () => {
@@ -251,11 +342,8 @@ export default function SoftphonePage() {
     setAuthToken(null);
     setIsAuthenticated(false);
     setUser(null);
-    toast({
-      title: "Session expired",
-      description: "Please sign in again",
-      variant: "destructive",
-    });
+    lifecycleRef.current.endSession();
+    setSessionError("Your session expired. Please sign in again.");
   };
 
   const sessionScope = user ? softphoneScope(product, user) : "signed-out";
@@ -264,6 +352,7 @@ export default function SoftphonePage() {
   const { data: callLogs = [], isLoading: loadingLogs } = useQuery<VoipCallLog[]>({
     queryKey: callLogsQueryKey,
     enabled: isAuthenticated,
+    retry: 1,
     queryFn: async () => {
       const response = await fetch(softphoneApiUrl("/api/voip/call-logs"), {
         headers: getAuthHeaders(),
@@ -281,6 +370,7 @@ export default function SoftphonePage() {
   const { data: voiceToken, error: voiceTokenError, refetch: retryVoiceToken, isFetching: isFetchingVoiceToken } = useQuery<{ token: string; identity: string }>({
     queryKey: voiceTokenQueryKey,
     enabled: isAuthenticated,
+    retry: false,
     refetchInterval: 1000 * 60 * 55,
     queryFn: async () => {
       const response = await fetch(softphoneApiUrl("/api/voip/token"), {
@@ -300,18 +390,46 @@ export default function SoftphonePage() {
   });
 
   useEffect(() => {
-    if (!voiceToken?.token) return;
+    const controller = lifecycleRef.current;
+    const headers = getAuthHeaders();
+    controller.setReconnectCanceller((pending) => cancelReconnect(pending, headers));
+    controller.startSession(
+      sessionScope,
+      isAuthenticated ? sessionStorage : undefined,
+    );
+  }, [isAuthenticated, sessionScope, authToken]);
 
-    if (deviceRef.current) {
-      try {
-        deviceRef.current.updateToken(voiceToken.token);
-      } catch (error) {
-        const failure = error instanceof Error ? error : new Error("Phone registration could not be refreshed.");
-        setProviderError(failure.message);
-        setIsProviderRegistered(false);
+  useEffect(() => {
+    const controller = lifecycleRef.current;
+    controller.resumePendingTimeout();
+    return () => controller.suspendForReload();
+  }, [sessionScope]);
+
+  useEffect(() => {
+    const offline = () => {
+      setConnectionStatus("offline");
+      setIsProviderRegistered(false);
+    };
+    const online = () => {
+      setConnectionStatus("reconnecting");
+      if (deviceRef.current) {
+        deviceRef.current.register()
+          .catch((error: unknown) => setProviderError(providerErrorMessage(error, "registration")));
+      } else {
+        void retryVoiceToken();
       }
-      return;
-    }
+    };
+    window.addEventListener("offline", offline);
+    window.addEventListener("online", online);
+    return () => {
+      window.removeEventListener("offline", offline);
+      window.removeEventListener("online", online);
+    };
+  }, [retryVoiceToken]);
+
+  // Device lifetime is scoped to the authenticated identity, not the rotating token.
+  useEffect(() => {
+    if (!voiceToken?.token) return;
 
     setProviderError("");
     setIsProviderRegistered(false);
@@ -321,65 +439,62 @@ export default function SoftphonePage() {
     });
 
     device.on("registered", () => {
+      if (deviceRef.current !== device) return;
       setProviderError("");
       setIsProviderRegistered(true);
+      setConnectionStatus("online");
     });
 
     device.on("unregistered", () => {
+      if (deviceRef.current !== device) return;
       setIsProviderRegistered(false);
+      if (navigator.onLine) setConnectionStatus("reconnecting");
     });
 
     device.on("error", (error) => {
-      setProviderError(error.message || "Phone registration failed.");
+      if (deviceRef.current !== device) return;
+      setProviderError(providerErrorMessage(error, "registration"));
       setIsProviderRegistered(false);
-      toast({
-        title: "Phone registration failed",
-        description: error.message || "An error occurred with the phone system",
-        variant: "destructive",
-      });
     });
 
     device.on("incoming", (call: Call) => {
-      const callerNumber = call.parameters.From || "Unknown";
-      setInboundCallerNumber(callerNumber);
-      setInboundCall(call);
-      setInboundCallerName("");
-      lookupCallerName(callerNumber).then(setInboundCallerName);
-
-      call.on("cancel", () => {
-        setInboundCall(null);
-        setInboundCallerNumber("");
-        setInboundCallerName("");
-      });
-
-      call.on("disconnect", () => {
-        setInboundCall(null);
-        setInboundCallerNumber("");
-        setInboundCallerName("");
-        activeCallRef.current = null;
-        setCallState("ended");
-        setTimeout(() => {
-          setCallState("idle");
-          setDialpadNumber("");
-          setIsMuted(false);
-          setIsOnHold(false);
-          setActiveCallerName("");
-        }, 2000);
-        queryClient.invalidateQueries({ queryKey: callLogsQueryKey });
-      });
+      if (deviceRef.current !== device) {
+        call.reject();
+        return;
+      }
+      lifecycleRef.current.receiveIncoming(call as unknown as ProviderCall);
     });
 
     deviceRef.current = device;
+    deviceTokenRef.current = voiceToken.token;
     device.register().catch((error: Error) => {
       if (deviceRef.current !== device) return;
-      setProviderError(error.message || "Phone registration failed. Please retry.");
+      setProviderError(providerErrorMessage(error, "registration"));
       setIsProviderRegistered(false);
     });
 
     return () => {
-      device.destroy();
-      deviceRef.current = null;
+      if (deviceRef.current === device) {
+        device.destroy();
+        deviceRef.current = null;
+        deviceTokenRef.current = null;
+      }
     };
+  }, [voiceToken?.identity, sessionScope]);
+
+  // Token rotation updates the live Device in place and must never tear down an active call.
+  useEffect(() => {
+    if (!voiceToken?.token || !deviceRef.current) return;
+    try {
+      deviceTokenRef.current = updateLiveDeviceToken(
+        deviceRef.current,
+        deviceTokenRef.current,
+        voiceToken.token,
+      );
+    } catch (error) {
+      setProviderError(providerErrorMessage(error, "registration"));
+      setIsProviderRegistered(false);
+    }
   }, [voiceToken?.token, sessionScope]);
 
   useEffect(() => {
@@ -390,24 +505,14 @@ export default function SoftphonePage() {
 
   const handleAcceptInbound = () => {
     if (!inboundCall) return;
-
-    inboundCall.accept();
-    activeCallRef.current = inboundCall;
+    if (!lifecycleRef.current.acceptIncoming(inboundCall as unknown as ProviderCall)) return;
     setDialpadNumber(inboundCallerNumber);
     setActiveCallerName(inboundCallerName);
-    setIsOnHold(false);
-    setCallState("in-call");
-    setInboundCall(null);
-    setInboundCallerNumber("");
-    setInboundCallerName("");
   };
 
   const handleRejectInbound = () => {
     if (!inboundCall) return;
-    inboundCall.reject();
-    setInboundCall(null);
-    setInboundCallerNumber("");
-    setInboundCallerName("");
+    lifecycleRef.current.rejectIncoming(inboundCall as unknown as ProviderCall);
   };
 
   const initiateCallMutation = useMutation({
@@ -445,58 +550,25 @@ export default function SoftphonePage() {
 
       const call = await deviceRef.current.connect({ params: connectParams });
 
-      activeCallRef.current = call;
+      lifecycleRef.current.attachActive(call as unknown as ProviderCall, false, undefined, false);
 
       call.on("ringing", () => {
-        setCallState("ringing");
-      });
-
-      call.on("accept", () => {
-        setCallState("in-call");
-      });
-
-      call.on("disconnect", () => {
-        activeCallRef.current = null;
-        setCallState("ended");
-        setTimeout(() => {
-          setCallState("idle");
-          setDialpadNumber("");
-          setIsMuted(false);
-          setIsOnHold(false);
-          setActiveCallerName("");
-        }, 2000);
-        queryClient.invalidateQueries({ queryKey: callLogsQueryKey });
-      });
-
-      call.on("error", (twilioError: Error) => {
-        console.error("Call error:", twilioError);
-        toast({
-          title: "Call error",
-          description: twilioError.message || "An error occurred during the call",
-          variant: "destructive",
-        });
-        activeCallRef.current = null;
-        setCallState("ended");
-        setTimeout(() => {
-          setCallState("idle");
-          setDialpadNumber("");
-          setIsMuted(false);
-          setIsOnHold(false);
-          setActiveCallerName("");
-        }, 2000);
+        if (lifecycleRef.current.getActiveCall() === call) setCallState("ringing");
       });
 
       return call;
     },
-    onSuccess: () => {
+    onMutate: () => {
+      setInlineStatus("");
       setCallState("connecting");
     },
     onError: (error: Error) => {
-      toast({
-        title: "Call failed",
-        description: error.message || "Could not initiate call",
-        variant: "destructive",
-      });
+      setCallState("idle");
+      setStableStatus(providerErrorMessage(error, "call"));
+    },
+    onSettled: () => {
+      dialLockRef.current = false;
+      setIsDialPreparing(false);
     },
   });
 
@@ -535,92 +607,122 @@ export default function SoftphonePage() {
   };
 
   const handleCall = async () => {
-    if (!dialpadNumber) return;
-    setActiveCallerName(await lookupCallerName(dialpadNumber));
-    setIsOnHold(false);
-    initiateCallMutation.mutate(dialpadNumber);
+    if (!dialpadNumber || dialLockRef.current || initiateCallMutation.isPending || lifecycleRef.current.getActiveCall()) return;
+    dialLockRef.current = true;
+    setIsDialPreparing(true);
+    try {
+      setActiveCallerName(await lookupCallerName(dialpadNumber));
+      setIsOnHold(false);
+      initiateCallMutation.mutate(dialpadNumber);
+    } catch {
+      dialLockRef.current = false;
+      setIsDialPreparing(false);
+    }
   };
 
   const handleToggleHold = async () => {
-    const activeCallSid = activeCallRef.current?.parameters.CallSid;
-    if (!activeCallSid) return;
-    const response = await fetch(softphoneApiUrl("/api/voip/held-calls"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-      credentials: "include",
-      body: JSON.stringify({ activeCallSid, callerName: activeCallerName, callerNumber: dialpadNumber }),
-    });
-    if (!response.ok) {
-      toast({ title: "Could not place call on hold", description: "The caller remains connected.", variant: "destructive" });
-      return;
+    const oldAgentCall = activeCallRef.current;
+    const activeCallSid = oldAgentCall?.parameters.CallSid;
+    if (!oldAgentCall || !activeCallSid || retentionLockRef.current) return;
+    retentionLockRef.current = true;
+    setIsRetentionPending(true);
+    setInlineStatus("");
+    try {
+      const retained = await retainAgentCall<HeldCall>(
+        "held",
+        oldAgentCall,
+        { callerName: activeCallerName, callerNumber: dialpadNumber, duration: callDuration },
+        getAuthHeaders(),
+        () => activeCallRef.current,
+      );
+      setHeldCall({ ...retained, callerName: retained.callerName || activeCallerName, callerNumber: retained.callerNumber || dialpadNumber, duration: retained.duration ?? callDuration });
+      setStableStatus("Caller is on hold. Select Resume to reconnect.");
+    } catch (error) {
+      setStableStatus(error instanceof Error ? error.message : "Could not retain the call. The caller remains connected.");
+    } finally {
+      retentionLockRef.current = false;
+      setIsRetentionPending(false);
     }
-    setHeldCall(await response.json());
-    setIsOnHold(true);
-    toast({ title: "Caller is on hold", description: "The selected hold music is playing. Resume when ready." });
   };
 
   const handleResumeHeldCall = async () => {
-    if (!heldCall) return;
-    const response = await fetch(softphoneApiUrl(`/api/voip/held-calls/${heldCall.id}/resume`), {
-      method: "POST",
-      headers: getAuthHeaders(),
-      credentials: "include",
-    });
-    if (!response.ok) {
-      toast({ title: "Could not resume call", description: "The caller remains on hold.", variant: "destructive" });
-      return;
-    }
-    setHeldCall(null);
-    setIsOnHold(false);
-    toast({ title: "Resuming call", description: "Answer the incoming call to reconnect." });
+    if (!heldCall || pendingReconnect) return;
+    await beginReconnect("held", heldCall);
   };
 
   const handleParkCall = async () => {
-    if (!activeCallRef.current || callState !== "in-call") return;
-    const activeCallSid = activeCallRef.current.parameters.CallSid;
+    const oldAgentCall = activeCallRef.current;
+    if (!oldAgentCall || callState !== "in-call" || retentionLockRef.current) return;
+    const activeCallSid = oldAgentCall.parameters.CallSid;
     if (!activeCallSid) return;
-    const response = await fetch(softphoneApiUrl("/api/voip/parked-calls"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-      credentials: "include",
-      body: JSON.stringify({ activeCallSid, callerName: activeCallerName, callerNumber: dialpadNumber }),
-    });
-    if (!response.ok) {
-      toast({ title: "Could not park call", description: "Please try again.", variant: "destructive" });
-      return;
+    retentionLockRef.current = true;
+    setIsRetentionPending(true);
+    try {
+      await retainAgentCall<ParkedCall>(
+        "parked",
+        oldAgentCall,
+        { callerName: activeCallerName, callerNumber: dialpadNumber, duration: callDuration },
+        getAuthHeaders(),
+        () => activeCallRef.current,
+      );
+      await refreshParkedCalls();
+      setStableStatus("Call parked. It remains available in Parked Calls.");
+    } catch (error) {
+      setStableStatus(error instanceof Error ? error.message : "Could not park the call. The caller remains connected.");
+    } finally {
+      retentionLockRef.current = false;
+      setIsRetentionPending(false);
     }
-    await refreshParkedCalls();
-    toast({ title: "Call parked", description: "Anyone with softphone access can pick it up from Parked Calls." });
   };
 
   const handlePickupParkedCall = async (parkedCall: ParkedCall) => {
-    const response = await fetch(softphoneApiUrl(`/api/voip/parked-calls/${parkedCall.id}/pickup`), { method: "POST", headers: getAuthHeaders(), credentials: "include" });
-    if (!response.ok) {
-      toast({ title: "Could not pick up call", description: "The caller remains parked.", variant: "destructive" });
-      return;
+    if (pendingReconnect) return;
+    await beginReconnect("parked", parkedCall);
+  };
+
+  const beginReconnect = async (kind: "held" | "parked", retained: HeldCall | ParkedCall) => {
+    const reconnectToken = crypto.randomUUID();
+    const headers = getAuthHeaders();
+    const pending = lifecycleRef.current.beginReconnect(
+      kind,
+      retained.id,
+      reconnectToken,
+      retained.callerName || "",
+      retained.callerNumber || "",
+      { cancel: (value) => cancelReconnect(value, headers) },
+    );
+    if (!pending) return;
+    setStableStatus(`Reconnecting ${retained.callerName || retained.callerNumber || "retained caller"}…`);
+    try {
+      const reconnect = await requestReconnect(kind, retained.id, reconnectToken, headers);
+      // The matching provider call is allowed to arrive before this HTTP response.
+      if (lifecycleRef.current.getPendingReconnect()?.token === reconnectToken) {
+        lifecycleRef.current.confirmReconnect(reconnect);
+      }
+    } catch (error) {
+      if (lifecycleRef.current.getPendingReconnect()?.token !== reconnectToken) return;
+      lifecycleRef.current.failReconnect(error instanceof Error ? error.message : "Reconnect failed. The caller remains retained.");
+      await Promise.all([refreshHeldCall(), refreshParkedCalls()]);
     }
-    await refreshParkedCalls();
-    toast({ title: "Picking up call", description: "Answer the incoming call to reconnect." });
   };
 
   const handleHangup = () => {
     if (activeCallRef.current) {
       activeCallRef.current.disconnect();
       activeCallRef.current = null;
+      return;
     }
-    setCallState("ended");
-    setTimeout(() => {
-      setCallState("idle");
-      setDialpadNumber("");
-      setIsMuted(false);
-    }, 2000);
+    setCallState("idle");
   };
 
   useEffect(() => {
     if (isAuthenticated) {
       refreshParkedCalls();
       refreshHeldCall();
-      const interval = setInterval(refreshParkedCalls, 10000);
+      const interval = setInterval(() => {
+        void refreshParkedCalls();
+        void refreshHeldCall();
+      }, 10000);
       return () => clearInterval(interval);
     }
   }, [isAuthenticated]);
@@ -734,45 +836,76 @@ export default function SoftphonePage() {
     );
   }
 
-  return (
-    <div className={`min-h-screen p-4 ${connectShell ? "bg-[#e9f5f1] bg-[radial-gradient(circle_at_top_right,_rgba(16,185,129,.16),_transparent_32%)]" : "bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800"}`}>
-      {/* Inbound call overlay */}
-      {inboundCall && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-          <Card className="w-full max-w-sm mx-4 shadow-2xl">
-            <CardHeader className="text-center pb-2">
-              <div className="mx-auto w-20 h-20 rounded-full bg-green-100 dark:bg-green-900 flex items-center justify-center mb-4 animate-pulse">
-                <PhoneIncoming className="h-10 w-10 text-green-600 dark:text-green-400" />
-              </div>
-              <CardTitle className="text-xl">Incoming Call</CardTitle>
-              <CardDescription className="text-lg font-mono font-medium text-gray-900 dark:text-white">
-                {inboundCallerName || inboundCallerNumber || "Unknown"}
-                {inboundCallerName && <span className="block text-sm font-normal text-gray-500">{inboundCallerNumber}</span>}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex gap-4 pt-4">
-              <Button
-                size="lg"
-                className="flex-1 h-14 bg-green-600 hover:bg-green-700 text-white"
-                onClick={handleAcceptInbound}
-              >
-                <Phone className="h-6 w-6 mr-2" /> Accept
-              </Button>
-              <Button
-                size="lg"
-                variant="destructive"
-                className="flex-1 h-14"
-                onClick={handleRejectInbound}
-              >
-                <PhoneOff className="h-6 w-6 mr-2" /> Reject
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+  const diagnosticDetail = connectionStatus === "offline"
+    ? "Network disconnected. Calling will reconnect when the network returns."
+    : connectionStatus === "reconnecting"
+      ? "Network restored. Reconnecting phone registration."
+      : pendingReconnect
+        ? `${pendingReconnect.phase === "preparing"
+          ? "Preparing"
+          : pendingReconnect.phase === "canceling"
+            ? "Canceling and restoring"
+            : pendingReconnect.phase === "restoring"
+              ? "Restoring"
+              : "Waiting for"} retained-call reconnect for ${pendingReconnect.callerName || pendingReconnect.callerNumber || "caller"}.`
+        : voiceTokenError
+          ? `Phone service could not be reached: ${voiceTokenError instanceof Error ? voiceTokenError.message : "Token request failed."}`
+          : providerError || listError || inlineStatus || "Registering this device with the phone provider.";
 
-      <div className="max-w-4xl mx-auto">
-        <div className={`mb-6 flex flex-wrap items-center justify-between gap-4 rounded-2xl ${connectShell ? "border border-emerald-950/10 bg-[#f7fbfa] p-4 shadow-sm" : ""}`}>
+  return <ConnectPhoneWorkspace
+    userName={user?.name}
+    agentStatus={agentStatus}
+    setAgentStatus={setAgentStatus}
+    connectionStatus={connectionStatus}
+    isProviderRegistered={isProviderRegistered}
+    hasDiagnostic={Boolean(voiceTokenError || providerError || !isProviderRegistered || inlineStatus || listError || pendingReconnect || connectionStatus !== "online")}
+    diagnosticDetail={diagnosticDetail}
+    showRetry={Boolean(voiceTokenError || providerError)}
+    retrying={isFetchingVoiceToken}
+    onRetry={() => {
+      if (voiceTokenError) void retryVoiceToken();
+      else if (deviceRef.current) {
+        setProviderError("");
+        setIsProviderRegistered(false);
+        deviceRef.current.register().catch((error: Error) => setProviderError(providerErrorMessage(error, "registration")));
+      }
+    }}
+    pendingReconnect={pendingReconnect}
+    onCancelReconnect={() => { void lifecycleRef.current.cancelReconnect("Reconnect cancelled. The caller remains retained.").finally(() => { void refreshHeldCall(); void refreshParkedCalls(); }); }}
+    inbound={inboundCall ? { callerName: inboundCallerName, callerNumber: inboundCallerNumber } : null}
+    onAcceptInbound={handleAcceptInbound}
+    onRejectInbound={handleRejectInbound}
+    callState={callState}
+    callDuration={formatDuration(callDuration)}
+    dialpadNumber={dialpadNumber}
+    setDialpadNumber={setDialpadNumber}
+    activeCallerName={activeCallerName}
+    onDial={handleDialpadPress}
+    onCall={() => { void handleCall(); }}
+    callPreparing={initiateCallMutation.isPending || isDialPreparing}
+    isMuted={isMuted}
+    onMute={() => setIsMuted(!isMuted)}
+    isSpeakerOn={isSpeakerOn}
+    onSpeaker={handleToggleSpeaker}
+    isRetentionPending={isRetentionPending}
+    onHold={() => { void handleToggleHold(); }}
+    onPark={() => { void handleParkCall(); }}
+    onHangup={handleHangup}
+    heldCall={heldCall}
+    parkedCalls={parkedCalls}
+    onResume={() => { void handleResumeHeldCall(); }}
+    onPickup={(call) => { void handlePickupParkedCall(call); }}
+    callerIdMode={callerIdMode}
+    setCallerIdMode={setCallerIdMode}
+    logs={callLogs}
+    loadingLogs={loadingLogs}
+    onLogClick={(log) => { if (callState === "idle") setDialpadNumber(log.direction === "outbound" ? log.toNumber : log.fromNumber); }}
+    formatRelative={(date) => formatDistanceToNow(new Date(date), { addSuffix: true })}
+    formatDuration={formatDuration}
+    statusClass={getStatusColor}
+    onLogout={handleLogout}
+  />;
+  /* Legacy authenticated rendering retired in favor of ConnectPhoneWorkspace.
           <div className="flex items-center gap-3">
             <div className={`flex h-10 w-10 items-center justify-center rounded-full ${connectShell ? "bg-emerald-600" : "bg-blue-600"}`}>
               <Phone className="h-5 w-5 text-white" />
@@ -811,15 +944,37 @@ export default function SoftphonePage() {
           </div>
         </div>
 
-        {(voiceTokenError || providerError || !isProviderRegistered) && (
+        {(voiceTokenError || providerError || !isProviderRegistered || inlineStatus || listError || pendingReconnect || connectionStatus !== "online") && (
           <div className={`mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3 text-sm ${
-            voiceTokenError || providerError ? "border-red-200 bg-red-50 text-red-800" : "border-amber-200 bg-amber-50 text-amber-800"
+            voiceTokenError || providerError || connectionStatus === "offline" ? "border-red-200 bg-red-50 text-red-800" : "border-amber-200 bg-amber-50 text-amber-800"
           }`}>
             <span>
-              {voiceTokenError
+              {connectionStatus === "offline"
+                ? "Network disconnected. Calling will reconnect when the network returns."
+                : connectionStatus === "reconnecting"
+                  ? "Network restored. Reconnecting phone registration…"
+                : pendingReconnect
+                  ? `${pendingReconnect.phase === "requesting" ? "Requesting" : "Waiting for"} retained-call reconnect for ${pendingReconnect.callerName || pendingReconnect.callerNumber || "caller"}…`
+                : voiceTokenError
                 ? `Phone service could not be reached: ${voiceTokenError instanceof Error ? voiceTokenError.message : "Token request failed."}`
-                : providerError || "Registering this device with the phone provider…"}
+                : providerError || listError || inlineStatus || "Registering this device with the phone provider…"}
             </span>
+            {pendingReconnect && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  void lifecycleRef.current.cancelReconnect("Reconnect cancelled. The caller remains retained.")
+                    .finally(() => {
+                      void refreshHeldCall();
+                      void refreshParkedCalls();
+                    });
+                }}
+              >
+                Cancel reconnect
+              </Button>
+            )}
             {(voiceTokenError || providerError) && (
               <Button
                 type="button"
@@ -827,12 +982,13 @@ export default function SoftphonePage() {
                 variant="outline"
                 disabled={isFetchingVoiceToken}
                 onClick={() => {
-                  setProviderError("");
-                  setIsProviderRegistered(false);
-                  void retryVoiceToken();
-                  if (deviceRef.current) {
+                  if (voiceTokenError) {
+                    void retryVoiceToken();
+                  } else if (deviceRef.current) {
+                    setProviderError("");
+                    setIsProviderRegistered(false);
                     deviceRef.current.register().catch((error: Error) => {
-                      setProviderError(error.message || "Phone registration failed. Please retry.");
+                      setProviderError(providerErrorMessage(error, "registration"));
                     });
                   }
                 }}
@@ -877,12 +1033,12 @@ export default function SoftphonePage() {
                     <div className="mb-4 rounded-xl border border-amber-500 bg-amber-950/40 p-4 text-amber-100">
                       <p className="font-semibold">{heldCall.callerName || heldCall.callerNumber} is on hold</p>
                       <p className="mb-3 text-sm text-amber-200">{heldCall.callerNumber}</p>
-                      <Button className="w-full bg-amber-500 text-black hover:bg-amber-400" onClick={handleResumeHeldCall}>
-                        <PhoneCall className="mr-2 h-4 w-4" /> Resume held call
+                      <Button className="w-full bg-amber-500 text-black hover:bg-amber-400" onClick={handleResumeHeldCall} disabled={!!pendingReconnect}>
+                        <PhoneCall className="mr-2 h-4 w-4" /> {pendingReconnect?.id === heldCall.id ? "Reconnecting…" : "Resume held call"}
                       </Button>
                     </div>
                   )}
-                  {/* Caller ID Mode Toggles */}
+                  {/* Caller ID Mode Toggles * /}
                   <div className="flex items-center justify-center gap-2 pb-2 border-b border-gray-200 dark:border-gray-700">
                     <span className="text-xs text-gray-500 mr-2">Caller ID:</span>
                     <Button
@@ -905,7 +1061,7 @@ export default function SoftphonePage() {
                     </Button>
                     {callerIdMode !== "auto" && (
                       <span className="text-xs text-gray-400 ml-1">
-                        {callerIdMode === "private" ? "(Anonymous)" : "(Toll-Free)"}
+                        {callerIdMode === "private" ? "(only when supported; otherwise the call will not be placed)" : "(configured office number required)"}
                       </span>
                     )}
                   </div>
@@ -931,9 +1087,9 @@ export default function SoftphonePage() {
                       size="lg"
                       className="w-full h-14 bg-green-600 hover:bg-green-700 text-white"
                       onClick={handleCall}
-                      disabled={!dialpadNumber || initiateCallMutation.isPending}
+                      disabled={!dialpadNumber || initiateCallMutation.isPending || isDialPreparing}
                     >
-                      {initiateCallMutation.isPending ? (
+                      {initiateCallMutation.isPending || isDialPreparing ? (
                         <Loader2 className="h-6 w-6 animate-spin" />
                       ) : (
                         <Phone className="h-6 w-6" />
@@ -980,8 +1136,8 @@ export default function SoftphonePage() {
                     >
                       {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
                     </Button>
-                    <Button variant="outline" size="lg" className={isOnHold ? "bg-yellow-100 text-yellow-900" : ""} onClick={handleToggleHold}>
-                      <Pause className="h-5 w-5" />
+                    <Button variant="outline" size="lg" className={isOnHold ? "bg-yellow-100 text-yellow-900" : ""} onClick={handleToggleHold} disabled={isRetentionPending}>
+                      {isRetentionPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <><Pause className="mr-2 h-5 w-5" /> Hold</>}
                     </Button>
                     <Button
                       variant="outline"
@@ -996,7 +1152,7 @@ export default function SoftphonePage() {
                       )}
                     </Button>
                   </div>
-                  <Button variant="outline" className="w-full" onClick={handleParkCall}>
+                  <Button variant="outline" className="w-full" onClick={handleParkCall} disabled={isRetentionPending}>
                     <ParkingCircle className="h-5 w-5 mr-2" /> Park call for anyone
                   </Button>
                   <Button
@@ -1039,7 +1195,9 @@ export default function SoftphonePage() {
                         {parkedCall.callerName && <p className="text-sm text-gray-500">{parkedCall.callerNumber}</p>}
                         <p className="text-xs text-gray-400">Parked by {parkedCall.parkedBy}</p>
                       </div>
-                      <Button size="sm" onClick={() => handlePickupParkedCall(parkedCall)}>Pick up</Button>
+                      <Button size="sm" onClick={() => handlePickupParkedCall(parkedCall)} disabled={!!pendingReconnect}>
+                        {pendingReconnect?.id === parkedCall.id ? "Reconnecting…" : "Pick up"}
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -1115,5 +1273,5 @@ export default function SoftphonePage() {
         </div>
       </div>
     </div>
-  );
+  ); */
 }

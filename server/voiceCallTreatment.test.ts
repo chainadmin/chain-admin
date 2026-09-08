@@ -23,7 +23,16 @@ test('hold and park treatments can use distinct approved music URLs', () => {
 });
 
 test('resuming a held or parked caller reconnects only to the tenant-bound user identity', () => {
-  const xml = buildReconnectClientTwiML('tenant-a', 'agent-a');
-  assert.match(xml, /<Dial><Client>tenant-user-[a-f0-9]{64}<\/Client><\/Dial>/);
+  const xml = buildReconnectClientTwiML('tenant-a', 'agent-a', {
+    retainedCallId: 'retained-id',
+    reconnectToken: '434c518b-cc43-4fa6-85d6-22e2e0586930',
+    callbackUrl: 'https://voice.example.test/api/voice/retained-call-status?id=retained-id',
+  });
+  assert.match(xml, /<Dial action="https:\/\/voice\.example\.test\/api\/voice\/retained-call-status\?id=retained-id" method="POST" timeout="25">/);
+  assert.match(xml, /<Client statusCallback=/);
+  assert.match(xml, /<Identity>tenant-user-[a-f0-9]{64}<\/Identity>/);
+  assert.match(xml, /<Parameter name="RetainedCallId" value="retained-id"\/>/);
+  assert.match(xml, /<Parameter name="ReconnectToken" value="434c518b-cc43-4fa6-85d6-22e2e0586930"\/>/);
+  assert.match(xml, /tenant-user-[a-f0-9]{64}/);
   assert.doesNotMatch(xml, /tenant-b|agent-b/);
 });

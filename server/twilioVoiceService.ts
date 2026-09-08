@@ -1,4 +1,5 @@
 import twilio from 'twilio';
+import { isValidPstnCallerId } from './outboundCallPreparation';
 import { createHash } from 'node:crypto';
 import AccessToken from 'twilio/lib/jwt/AccessToken.js';
 import {
@@ -132,6 +133,9 @@ export function generateTwiML(options: {
   switch (options.action) {
     case 'dial':
       if (options.to) {
+        if (!isValidPstnCallerId(options.from)) {
+          throw new Error('A valid E.164 PSTN caller ID is required for outbound dialing');
+        }
         const dial = response.dial({
           callerId: options.from,
           record: options.record ? 'record-from-answer-dual' : undefined,

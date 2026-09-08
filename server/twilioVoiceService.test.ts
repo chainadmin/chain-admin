@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { selectCompanyCallerId, type CallerIdCandidate } from './companyCallerId';
+import { generateTwiML } from './twilioVoiceService';
 
 const inventory: CallerIdCandidate[] = [
   { tenantId: 'company-a', phoneNumber: '+17165550100', areaCode: '716', numberType: 'PRIMARY', isActive: true },
@@ -20,4 +21,25 @@ test('falls back to the company Primary DID and never crosses tenants', () => {
 
 test('does not select an inactive Local Presence DID', () => {
   assert.equal(selectCompanyCallerId('company-a', '305-555-0199', inventory)?.phoneNumber, '+17165550100');
+});
+
+test('outbound TwiML refuses anonymous or malformed PSTN caller IDs', () => {
+  assert.throws(
+    () => generateTwiML({ action: 'dial', to: '+12125551212', from: 'anonymous' }),
+    /valid E\.164 PSTN caller ID/,
+  );
+  assert.throws(
+    () => generateTwiML({ action: 'dial', to: '+12125551212', from: '7165550100' }),
+    /valid E\.164 PSTN caller ID/,
+  );
+});
+
+test('outbound TwiML accepts a valid E.164 company caller ID', () => {
+  const twiml = generateTwiML({
+    action: 'dial',
+    to: '+12125551212',
+    from: '+17165550100',
+  });
+  assert.match(twiml, /callerId="\+17165550100"/);
+  assert.match(twiml, />\+12125551212</);
 });

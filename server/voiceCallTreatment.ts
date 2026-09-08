@@ -8,8 +8,30 @@ export function buildWaitingMusicTwiML(musicKey: string, callbackBase: string): 
   return response.toString();
 }
 
-export function buildReconnectClientTwiML(tenantId: string, userId: string): string {
+export type ReconnectClientOptions = {
+  retainedCallId: string;
+  reconnectToken: string;
+  callbackUrl: string;
+};
+
+export function buildReconnectClientTwiML(
+  tenantId: string,
+  userId: string,
+  options: ReconnectClientOptions,
+): string {
   const response = new twilio.twiml.VoiceResponse();
-  response.dial().client(buildTenantVoiceIdentity(tenantId, userId));
+  const dial = response.dial({
+    action: options.callbackUrl,
+    method: 'POST',
+    timeout: 25,
+  });
+  const client = dial.client({
+    statusCallback: options.callbackUrl,
+    statusCallbackEvent: ['answered', 'completed'],
+    statusCallbackMethod: 'POST',
+  });
+  client.identity(buildTenantVoiceIdentity(tenantId, userId));
+  client.parameter({ name: 'RetainedCallId', value: options.retainedCallId });
+  client.parameter({ name: 'ReconnectToken', value: options.reconnectToken });
   return response.toString();
 }
