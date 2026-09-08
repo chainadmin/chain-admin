@@ -100,7 +100,7 @@ import { CHIAMO_SUPPORT_EMAIL } from "@shared/chiamo";
 import { createOutboundCallPreparationHandler, isUnsupportedPrivateSelection } from "./outboundCallPreparation";
 import { chiamoLeads, chiamoServiceConfigurations, chiamoSubscriptions } from "@shared/chiamo-schema";
 import { hashPasswordResetToken, isChainActivationReset, passwordResetProduct } from "./passwordResetPolicy";
-import { beginReconnect, classifyRetainedCallback, hashReconnectToken, reconcilePreparedRetention, reconnectTokenSchema } from "./voiceRetainedCallLifecycle";
+import { beginReconnect, classifyRetainedCallback, hashReconnectToken, isIdempotentCancelState, reconcilePreparedRetention, reconnectTokenSchema } from "./voiceRetainedCallLifecycle";
 import {
   findCanonicalTenant,
   getEffectivePhoneEntitlement,
@@ -26254,6 +26254,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       lte(voipSuspendedCalls.reconnectExpiresAt, now),
       isNull(voipSuspendedCalls.reconnectAnsweredAt),
     ));
+    // A no-answer action intentionally leaves the claim hash briefly so the
+    // browser's already-scheduled cancel can be acknowledged idempotently.
+    await db.update(voipSuspendedCalls).set({
+      reconnectTokenHash: null,
+      reconnectingUserId: null,
+      reconnectExpiresAt: null,
+      updatedAt: now,
+    }).where(and(
+      eq(voipSuspendedCalls.status, 'ACTIVE'),
+      lte(voipSuspendedCalls.reconnectExpiresAt, now),
+    ));
     const staleCancelCutoff = new Date(now.getTime() - suspendedCallReconnectMs);
     const { runSuspendedCallCleanup } = await import('./voiceSuspendedCallCleanup');
     const result = await runSuspendedCallCleanup({
@@ -26354,6 +26365,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (callbackDecision === 'ANSWERED') {
         await db.update(voipSuspendedCalls).set({
           status: 'COMPLETED',
+          reconnectTokenHash: null,
+          reconnectingUserId: null,
+          reconnectExpiresAt: null,
           reconnectAnsweredAt: new Date(),
           updatedAt: new Date(),
         }).where(and(
@@ -26367,9 +26381,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (callbackDecision === 'RESTORE') {
         const [restored] = await db.update(voipSuspendedCalls).set({
           status: 'ACTIVE',
-          reconnectTokenHash: null,
-          reconnectingUserId: null,
-          reconnectExpiresAt: null,
+          // Retain only the hash and owner through a short grace period so a
+          // browser timeout/cancel for this exact no-answer attempt is safe.
+          reconnectExpiresAt: new Date(Date.now() + suspendedCallReconnectMs),
           updatedAt: new Date(),
         }).where(and(
           eq(voipSuspendedCalls.id, record.id),
@@ -27784,10 +27798,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
         eq(voipSuspendedCalls.reconnectTokenHash, tokenHash),
         isNull(voipSuspendedCalls.reconnectAnsweredAt),
       )).returning();
-      if (!claimed) return res.status(409).json({ message: 'Reconnect is no longer cancelable' });
-      // Do not redirect the parent while the child may be answering. The finite
-      // Dial timeout/action callback restores music; an answer callback wins.
-      return res.json({ success: true });
+      if (claimed) {
+        // Do not redirect the parent while the child may be answering. The finite
+        // Dial timeout/action callback restores music; an answer callback wins.
+        return res.json({ success: true, status: 'CANCELING' });
+      }
+      const [current] = await db.select({
+        status: voipSuspendedCalls.status,
+        reconnectTokenHash: voipSuspendedCalls.reconnectTokenHash,
+        reconnectingUserId: voipSuspendedCalls.reconnectingUserId,
+        reconnectExpiresAt: voipSuspendedCalls.reconnectExpiresAt,
+      }).from(voipSuspendedCalls).where(and(
+        eq(voipSuspendedCalls.id, req.params.id),
+        eq(voipSuspendedCalls.tenantId, user.tenantId),
+      )).limit(1);
+      if (!current) return res.status(404).json({ message: 'Suspended call not found' });
+      const exactCurrentClaim = current.reconnectingUserId === user.id
+        && current.reconnectTokenHash === tokenHash
+        && current.reconnectExpiresAt !== null
+        && current.reconnectExpiresAt > new Date();
+      if (exactCurrentClaim && isIdempotentCancelState(current.status)) {
+        return res.json({ success: true, status: current.status, resolved: current.status === 'ACTIVE' });
+      }
+      return res.status(409).json({
+        message: 'Reconnect is no longer current',
+        code: 'RECONNECT_NO_LONGER_CURRENT',
+      });
     } catch (error) {
       console.error('[Voice] Cancel reconnect failed code=cancel_reconnect_failed');
       return res.status(502).json({ message: 'Reconnect could not be canceled' });

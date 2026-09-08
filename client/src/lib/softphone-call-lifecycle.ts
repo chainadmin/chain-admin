@@ -114,6 +114,18 @@ export class SoftphoneCallController {
     return this.pending;
   }
 
+  reconcileRetainedState(id: string, status: string | null | undefined, reconnectingByMe = false): boolean {
+    const pending = this.pending;
+    if (!pending || pending.id !== id) return false;
+    const normalized = (status || "").toUpperCase();
+    if (!normalized || normalized === "COMPLETED" || normalized === "EXPIRED" ||
+        (normalized === "ACTIVE" && !reconnectingByMe)) {
+      this.clearPending(true);
+      return true;
+    }
+    return false;
+  }
+
   resumePendingTimeout(now = Date.now()): void {
     if (this.pending) this.scheduleTimeout(this.pending.expiresAt - now);
   }
@@ -277,17 +289,26 @@ export class SoftphoneCallController {
     if (cancel) {
       try {
         await cancel(this.pending!);
-      } catch {
-        if (this.pending?.id === pending.id && this.pending.token === pending.token) {
-          this.updatePending({ ...this.pending, phase: "restoring", cancelRequested: true });
+      } catch (error) {
+        const code = (error as { code?: string } | undefined)?.code;
+        const current = this.pending;
+        const isSamePending = current?.id === pending.id && current.token === pending.token;
+        if (!isSamePending) return;
+        if (code === "RECONNECT_NO_LONGER_CURRENT" && isSamePending) {
+          this.clearPending(true);
+          return;
         }
+        this.updatePending({ ...current!, phase: "restoring", cancelRequested: true });
+        this.scheduleTimeout(Math.max(1_000, Math.min(10_000, pending.expiresAt - Date.now())));
         this.callbacks.onError("Reconnect cancellation could not be confirmed. The retained-call list will refresh.");
         return;
       }
     }
     // Backend cancellation may wait for its finite Dial action before restoring hold music.
-    this.clearPending(true);
-    if (message) this.callbacks.onError(message);
+    if (this.pending?.id === pending.id && this.pending.token === pending.token) {
+      this.clearPending(true);
+      if (message) this.callbacks.onError(message);
+    }
   }
 
   endSession(): void {

@@ -23,6 +23,10 @@ export function reconcilePreparedRetention(
   return 'COMPLETED';
 }
 
+export function isIdempotentCancelState(status: string): boolean {
+  return status === 'ACTIVE' || status === 'CANCELING';
+}
+
 export function classifyRetainedCallback(
   retainedCallSid: string,
   body: Record<string, unknown>,

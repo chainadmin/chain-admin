@@ -4,6 +4,7 @@ import {
   beginReconnect,
   classifyRetainedCallback,
   hashReconnectToken,
+  isIdempotentCancelState,
   reconcilePreparedRetention,
   reconnectTokenSchema,
   runDurableRetentionStart,
@@ -120,4 +121,13 @@ test('crash reconciliation never publishes a still-live original agent leg', () 
   assert.equal(reconcilePreparedRetention('in-progress', 'in-progress'), 'FAILED');
   assert.equal(reconcilePreparedRetention('completed', 'in-progress'), 'ACTIVE');
   assert.equal(reconcilePreparedRetention('completed', 'completed'), 'COMPLETED');
+});
+
+test('no-answer restored and canceled reconnects acknowledge only the exact current claim', () => {
+  assert.equal(isIdempotentCancelState('ACTIVE'), true);
+  assert.equal(isIdempotentCancelState('CANCELING'), true);
+  assert.equal(isIdempotentCancelState('RESUMING'), false);
+  // An old hash after a new ACTIVE claim is not an idempotent retry because
+  // exact hash/user matching is performed by the route before this decision.
+  assert.notEqual(hashReconnectToken('434c518b-cc43-4fa6-85d6-22e2e0586930'), hashReconnectToken('03976c2f-8110-4d17-a1b8-7eb113ec5f83'));
 });

@@ -35,6 +35,7 @@ import {
 } from "@/lib/softphone-call-lifecycle";
 import { cancelReconnect, requestReconnect, retainAgentCall } from "@/lib/softphone-call-requests";
 import { updateLiveDeviceToken } from "@/lib/softphone-call-device";
+import { SoftphoneOutboundCallCoordinator, type AbortableAttempt } from "@/lib/softphone-outbound-call";
 import { ConnectPhoneWorkspace } from "@/components/softphone/ConnectPhoneWorkspace";
 
 interface VoipCallLog {
@@ -137,6 +138,7 @@ export default function SoftphonePage() {
   const lifecycleRef = useRef(new SoftphoneCallController());
   const retentionLockRef = useRef(false);
   const dialLockRef = useRef(false);
+  const outboundRef = useRef(new SoftphoneOutboundCallCoordinator());
 
   const setStableStatus = (message: string) => setInlineStatus((previous) => dedupeStatus(previous, message));
 
@@ -157,6 +159,7 @@ export default function SoftphonePage() {
       if (recovered) setStableStatus("Retained call reconnected.");
     },
     onEnded: (call) => {
+      outboundRef.current.completeCall(call);
       if (activeCallRef.current === call) activeCallRef.current = null;
       setCallState("ended");
       setTimeout(() => {
@@ -265,6 +268,7 @@ export default function SoftphonePage() {
   };
 
   const handleLogout = () => {
+    outboundRef.current.cancel();
     lifecycleRef.current.endSession();
     if (deviceRef.current) {
       deviceRef.current.destroy();
@@ -314,6 +318,10 @@ export default function SoftphonePage() {
       if (!response.ok) throw new Error("Parked calls could not be refreshed.");
       const rows = await response.json() as ParkedCall[];
       const reconnecting = lifecycleRef.current.getPendingReconnect();
+      if (reconnecting?.kind === "parked") {
+        const retained = rows.find((row) => row.id === reconnecting.id);
+        lifecycleRef.current.reconcileRetainedState(reconnecting.id, retained?.status, !!retained?.reconnectingByMe);
+      }
       setParkedCalls((current) => {
         if (reconnecting?.kind !== "parked" || rows.some((row) => row.id === reconnecting.id)) return rows;
         const retained = current.find((row) => row.id === reconnecting.id);
@@ -330,6 +338,10 @@ export default function SoftphonePage() {
       const response = await fetch(softphoneApiUrl("/api/voip/held-calls"), { headers: getAuthHeaders(), credentials: "include" });
       if (!response.ok) throw new Error("Held call could not be refreshed.");
       const value = await response.json() as HeldCall | null;
+      const reconnecting = lifecycleRef.current.getPendingReconnect();
+      if (reconnecting?.kind === "held") {
+        lifecycleRef.current.reconcileRetainedState(reconnecting.id, value?.status, !!value?.reconnectingByMe);
+      }
       if (value || lifecycleRef.current.getPendingReconnect()?.kind !== "held") setHeldCall(value);
       setListError("");
     } catch {
@@ -338,6 +350,7 @@ export default function SoftphonePage() {
   };
 
   const handleAuthError = () => {
+    outboundRef.current.cancel();
     clearLegacySoftphoneCache(localStorage);
     setAuthToken(null);
     setIsAuthenticated(false);
@@ -516,8 +529,9 @@ export default function SoftphonePage() {
   };
 
   const initiateCallMutation = useMutation({
-    mutationFn: async (toNumber: string) => {
-      if (!deviceRef.current) {
+    mutationFn: async ({ toNumber, attempt }: { toNumber: string; attempt: AbortableAttempt }) => {
+      const device = deviceRef.current;
+      if (!device) {
         throw new Error("Phone device not initialized. Please wait a moment and try again.");
       }
 
@@ -529,7 +543,9 @@ export default function SoftphonePage() {
         },
         credentials: "include",
         body: JSON.stringify({ toNumber, callerIdMode }),
+        signal: attempt.signal,
       });
+      if (!outboundRef.current.isCurrent(attempt)) throw new DOMException("Call cancelled", "AbortError");
       if (response.status === 401 || response.status === 403) {
         handleAuthError();
         throw new Error("Access denied");
@@ -548,25 +564,32 @@ export default function SoftphonePage() {
         connectParams.From = callInfo.actualFromNumber;
       }
 
-      const call = await deviceRef.current.connect({ params: connectParams });
+      const call = await device.connect({ params: connectParams });
+      if (!outboundRef.current.attachConnectedCall(attempt, call as unknown as { disconnect(): void })) {
+        return call;
+      }
 
       lifecycleRef.current.attachActive(call as unknown as ProviderCall, false, undefined, false);
 
       call.on("ringing", () => {
-        if (lifecycleRef.current.getActiveCall() === call) setCallState("ringing");
+        if (outboundRef.current.isCurrent(attempt) && lifecycleRef.current.getActiveCall() === call) setCallState("ringing");
       });
 
       return call;
     },
-    onMutate: () => {
+    onMutate: ({ attempt }) => {
+      if (!outboundRef.current.isCurrent(attempt)) return;
       setInlineStatus("");
       setCallState("connecting");
     },
-    onError: (error: Error) => {
+    onError: (error: Error, variables) => {
+      if (!outboundRef.current.isCurrent(variables.attempt)) return;
+      outboundRef.current.complete(variables.attempt);
       setCallState("idle");
-      setStableStatus(providerErrorMessage(error, "call"));
+      if (error.name !== "AbortError") setStableStatus(providerErrorMessage(error, "call"));
     },
-    onSettled: () => {
+    onSettled: (_data, _error, variables) => {
+      if (!outboundRef.current.isCurrent(variables.attempt)) return;
       dialLockRef.current = false;
       setIsDialPreparing(false);
     },
@@ -610,13 +633,18 @@ export default function SoftphonePage() {
     if (!dialpadNumber || dialLockRef.current || initiateCallMutation.isPending || lifecycleRef.current.getActiveCall()) return;
     dialLockRef.current = true;
     setIsDialPreparing(true);
+    const attempt = outboundRef.current.begin();
     try {
       setActiveCallerName(await lookupCallerName(dialpadNumber));
+      if (!outboundRef.current.isCurrent(attempt)) return;
       setIsOnHold(false);
-      initiateCallMutation.mutate(dialpadNumber);
+      initiateCallMutation.mutate({ toNumber: dialpadNumber, attempt });
     } catch {
-      dialLockRef.current = false;
-      setIsDialPreparing(false);
+      if (outboundRef.current.isCurrent(attempt)) {
+        outboundRef.current.complete(attempt);
+        dialLockRef.current = false;
+        setIsDialPreparing(false);
+      }
     }
   };
 
@@ -707,6 +735,13 @@ export default function SoftphonePage() {
   };
 
   const handleHangup = () => {
+    if (outboundRef.current.cancel()) {
+      lifecycleRef.current.getActiveCall()?.disconnect();
+      setCallState("idle");
+      setIsDialPreparing(false);
+      dialLockRef.current = false;
+      return;
+    }
     if (activeCallRef.current) {
       activeCallRef.current.disconnect();
       activeCallRef.current = null;

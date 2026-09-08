@@ -11,6 +11,7 @@ import {
   type ReconnectStorage,
 } from "../../lib/softphone-call-lifecycle";
 import { updateLiveDeviceToken } from "../../lib/softphone-call-device";
+import { SoftphoneOutboundCallCoordinator } from "../../lib/softphone-outbound-call";
 import {
   cancelReconnect as requestCancelReconnect,
   requestReconnect,
@@ -301,6 +302,60 @@ test("cancel-reconnect request targets suspended call with the same nonce", asyn
   }
 });
 
+test("old cancel 409 RECONNECT_NO_LONGER_CURRENT is authoritative and clears only its pending intent", async () => {
+  const { controller, events } = controllerHarness();
+  controller.beginReconnect("held", "held-old", "nonce-old", "", "+1", {
+    timeoutMs: 60_000,
+    cancel: async () => { throw { code: "RECONNECT_NO_LONGER_CURRENT" }; },
+  });
+  await controller.cancelReconnect();
+  assert.equal(controller.getPendingReconnect(), null);
+  assert.deepEqual(events.errors, []);
+});
+
+test("a late old cancel 409 cannot clear a newer reconnect intent", async () => {
+  const { controller } = controllerHarness();
+  let rejectOld!: (error: unknown) => void;
+  const oldCancel = new Promise<void>((_resolve, reject) => { rejectOld = reject; });
+  controller.beginReconnect("held", "held-old", "nonce-old", "", "+1", {
+    timeoutMs: 60_000,
+    cancel: async () => oldCancel,
+  });
+  const cancellation = controller.cancelReconnect();
+  controller.reconcileRetainedState("held-old", undefined);
+  controller.beginReconnect("parked", "park-new", "nonce-new", "", "+2", {
+    timeoutMs: 60_000, cancel: async () => {},
+  });
+  rejectOld({ code: "RECONNECT_NO_LONGER_CURRENT" });
+  await cancellation;
+  assert.equal(controller.getPendingReconnect()?.id, "park-new");
+  controller.endSession();
+});
+
+test("provider no-answer terminal condition cancels retained reconnect and reconciliation clears only ACTIVE ownership", async () => {
+  const { controller } = controllerHarness();
+  const cancelled: PendingReconnect[] = [];
+  controller.beginReconnect("parked", "park-no-answer", "nonce-no-answer", "", "+1", {
+    timeoutMs: 60_000,
+    cancel: async (pending) => { cancelled.push(pending); },
+  });
+  const noAnswer = new FakeCall({ retainedId: "park-no-answer", token: "nonce-no-answer" });
+  controller.receiveIncoming(noAnswer);
+  noAnswer.emit("disconnect");
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(cancelled.length, 1);
+  assert.equal(controller.getPendingReconnect(), null);
+
+  controller.beginReconnect("parked", "park-reconcile", "nonce-reconcile", "", "+2", {
+    timeoutMs: 60_000, cancel: async () => {},
+  });
+  assert.equal(controller.reconcileRetainedState("park-reconcile", "RESUMING", true), false);
+  assert.ok(controller.getPendingReconnect());
+  assert.equal(controller.reconcileRetainedState("park-reconcile", "ACTIVE", false), true);
+  assert.equal(controller.getPendingReconnect(), null);
+});
+
 test("recovery disconnect followed synchronously by SDK 31208 still reports microphone denial and cancels safely", async () => {
   const { controller, events } = controllerHarness();
   const cancelled: PendingReconnect[] = [];
@@ -396,4 +451,41 @@ test("token refresh updates the live device without destroying it or its active 
   token = updateLiveDeviceToken(device, token, "token-2");
   assert.deepEqual(device.updated, ["token-2"]);
   assert.equal(device.destroyed, 0);
+});
+
+test("outbound coordinator fences delayed fetch and connect results after cancel", async () => {
+  const coordinator = new SoftphoneOutboundCallCoordinator();
+  const attempt = coordinator.begin();
+  let releaseFetch!: () => void;
+  const fetchGate = new Promise<void>((resolve) => { releaseFetch = resolve; });
+  let connectCalls = 0;
+  const setup = async () => {
+    await fetchGate;
+    if (!coordinator.isCurrent(attempt)) return;
+    connectCalls += 1;
+  };
+  const pending = setup();
+  coordinator.cancel();
+  releaseFetch();
+  await pending;
+  assert.equal(connectCalls, 0);
+
+  const connectedAttempt = coordinator.begin();
+  const lateCall = new FakeCall({ sid: "late" });
+  coordinator.cancel();
+  assert.equal(coordinator.attachConnectedCall(connectedAttempt, lateCall), false);
+  assert.equal(lateCall.disconnected, 1);
+});
+
+test("outbound coordinator tracks the pre-accept provider call so cancel disconnects it", () => {
+  const { controller } = controllerHarness();
+  const coordinator = new SoftphoneOutboundCallCoordinator();
+  const attempt = coordinator.begin();
+  const call = new FakeCall({ sid: "outbound-ringing" });
+  assert.equal(coordinator.attachConnectedCall(attempt, call), true);
+  controller.attachActive(call, false, undefined, false);
+  assert.equal(controller.getActiveCall(), call);
+  coordinator.cancel();
+  assert.equal(call.disconnected, 1);
+  assert.equal(controller.getActiveCall(), null);
 });
