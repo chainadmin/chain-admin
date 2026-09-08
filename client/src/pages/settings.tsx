@@ -2683,12 +2683,7 @@ export default function Settings() {
                           type="button"
                           onClick={async () => {
                             try {
-                              const response = await apiRequest("POST", "/api/settings/test-dmp", {
-                                dmpEnabled: (localSettings as any)?.dmpEnabled ?? false,
-                                dmpApiUrl: (localSettings as any)?.dmpApiUrl,
-                                dmpUsername: (localSettings as any)?.dmpUsername,
-                                dmpPassword: (localSettings as any)?.dmpPassword,
-                              });
+                              const response = await apiRequest("POST", "/api/settings/test-dmp", {});
                               const result = await response.json();
 
                               if (result.success) {
@@ -2699,14 +2694,15 @@ export default function Settings() {
                               } else {
                                 toast({
                                   title: "Connection Failed",
-                                  description: result.message || "Failed to connect to DMP",
+                                  description: result.message || result.error || "Failed to connect to DMP",
                                   variant: "destructive",
                                 });
                               }
                             } catch (error: any) {
+                              const responseError = error?.data;
                               toast({
                                 title: "Connection Error",
-                                description: error.message || "Failed to test DMP connection",
+                                description: responseError?.message || responseError?.error || error.message || "Failed to test DMP connection",
                                 variant: "destructive",
                               });
                             }
@@ -2768,9 +2764,10 @@ export default function Settings() {
                               });
                             }
                           } catch (error: any) {
+                            const responseError = error?.data;
                             toast({
                               title: "Import Error",
-                              description: error.message || "Failed to import accounts from DMP",
+                              description: responseError?.error || responseError?.message || error.message || "Failed to import accounts from DMP",
                               variant: "destructive",
                             });
                           }

@@ -93,6 +93,7 @@ import { registerWalletRoutes } from "./walletRoutes";
 import { registerChiamoRoutes } from "./chiamoRoutes";
 import { registerChiamoCredentialRoutes } from "./chiamoCredentialRoutes";
 import { registerChiamoUserRoutes } from "./chiamoUserRoutes";
+import { registerSoftphoneSessionRoutes } from "./softphoneSessionRoutes";
 import { registerChiamoNumberRoutes } from "./chiamoNumberRoutes";
 import { resolveChiamoBaseUrl } from "./chiamoOnboarding";
 import { CHIAMO_SUPPORT_EMAIL } from "@shared/chiamo";
@@ -8145,6 +8146,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
        });
 
        if (registration.mode === "chiamo_handoff") {
+         if (!registration.credential.email) {
+           return res.status(409).json({ message: "This existing account has no recovery email. Contact Global Admin to verify ownership before activating Chain." });
+         }
          const baseUrl = process.env.BASE_URL || "https://chainsoftwaregroup.com";
          const activationUrl = `${baseUrl}/agency/reset-password?token=${registration.activationToken}`;
          const delivery = await emailService.sendEmail({
@@ -8402,6 +8406,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         message: "Login successful",
         token,
+        product: req.body.product === "chiamo" ? "chiamo" : "chain",
          requiresPasswordChange,
         user: {
           id: credentials.id,
@@ -8410,6 +8415,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           firstName: credentials.firstName,
           lastName: credentials.lastName,
           role: credentials.role,
+          tenantId: credentials.tenantId,
+          voipAccess: credentials.voipAccess === true,
+          product: req.body.product === "chiamo" ? "chiamo" : "chain",
         },
         tenant: {
           id: tenant.id,
@@ -8440,6 +8448,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .where(sql`lower(trim(${agencyCredentials.email})) = ${normalizedEmail}`).limit(2);
       if (matches.length !== 1 || !matches[0].credential.isActive) return res.json({ message:genericMessage });
       const { credential:credentials, tenant } = matches[0];
+      if (!credentials.email) return res.json({ message:genericMessage });
       const isChiamoOnly = passwordResetProduct(tenant) === "chiamo";
       if (isChiamoOnly && (!tenant.postmarkServerId || !tenant.postmarkServerToken)) {
         throw new Error("Chiamo tenant email provider is not configured");
@@ -10917,6 +10926,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (req.user.role !== 'owner' && req.user.role !== 'platform_admin') return res.status(403).json({ message: 'Only administrators can initiate password resets' });
     const member = await storage.getAgencyCredentialsById(req.params.id);
     if (!member || member.tenantId !== tenantId) return res.status(404).json({ message: 'Team member not found' });
+    if (!member.email) return res.status(400).json({ message: 'This user has no email address. Use Chiamo company-managed password replacement instead.' });
     const token = crypto.randomBytes(32).toString('hex');
     await storage.createPasswordResetToken(member.id, token, new Date(Date.now() + 60 * 60 * 1000));
     const baseUrl = process.env.BASE_URL || 'https://chainsoftwaregroup.com';
@@ -11142,19 +11152,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { dmpService } = await import('./dmpService');
-      const {
-        dmpEnabled,
-        dmpApiUrl,
-        dmpUsername,
-        dmpPassword,
-      } = req.body || {};
-
-      const result = await dmpService.testConnection(tenantId, {
-        enabled: typeof dmpEnabled === 'boolean' ? dmpEnabled : undefined,
-        apiUrl: typeof dmpApiUrl === 'string' ? dmpApiUrl : undefined,
-        username: typeof dmpUsername === 'string' ? dmpUsername : undefined,
-        password: typeof dmpPassword === 'string' ? dmpPassword : undefined,
-      });
+      // Test the same saved configuration used by imports. Unsaved form
+      // credentials must not make the test pass while the import later fails.
+      const result = await dmpService.testConnection(tenantId);
 
       res.json(result);
     } catch (error: any) {
@@ -11202,78 +11202,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const results = {
-        imported: 0,
-        updated: 0,
-        skipped: 0,
-        errors: [] as string[]
-      };
-
-      for (const dmpAccount of dmpAccounts) {
-        try {
-          // Check if account already exists by filenumber
-          const existingAccounts = await storage.getAccountsByTenant(tenantId);
-          const existing = existingAccounts.find(a => 
-            a.filenumber === dmpAccount.filenumber || 
-            a.accountNumber === dmpAccount.accountNumber
-          );
-
-          if (existing) {
-            // Update existing account with DMP data
-            await storage.updateAccount(existing.id, {
-              balanceCents: dmpAccount.balance || 0,
-              status: dmpAccount.status || existing.status,
-              creditor: dmpAccount.creditorName || existing.creditor,
-            });
-            results.updated++;
-          } else {
-            // Create new consumer and account
-            // First check if consumer exists (case-insensitive email match, then name+phone fallback)
-            let consumer: any = null;
-            if (dmpAccount.consumerEmail) {
-              consumer = await storage.getConsumerByEmailAndTenant(dmpAccount.consumerEmail, tenantId) || null;
-            }
-            if (!consumer && dmpAccount.consumerPhone) {
-              consumer = await storage.getConsumerByPhoneAndTenant(dmpAccount.consumerPhone, tenantId) || null;
-            }
-            if (!consumer && dmpAccount.firstName && dmpAccount.lastName) {
-              const nameMatches = await storage.findConsumersByNameAndTenant(dmpAccount.firstName, dmpAccount.lastName, tenantId);
-              consumer = nameMatches[0] || null;
-            }
-
-            if (!consumer) {
-              // Create new consumer
-              consumer = await storage.createConsumer({
-                tenantId,
-                firstName: dmpAccount.firstName || 'Unknown',
-                lastName: dmpAccount.lastName || 'Consumer',
-                email: dmpAccount.consumerEmail || null,
-                phone: dmpAccount.consumerPhone || null,
-                address: dmpAccount.address || null,
-                city: dmpAccount.city || null,
-                state: dmpAccount.state || null,
-                zipCode: dmpAccount.zipCode || null,
-              });
-            }
-
-            // Create account
-            await storage.createAccount({
-              tenantId,
-              consumerId: consumer.id,
-              accountNumber: dmpAccount.accountNumber || dmpAccount.filenumber,
-              filenumber: dmpAccount.filenumber,
-              balanceCents: dmpAccount.balance || 0,
-              creditor: dmpAccount.creditorName || 'Unknown Creditor',
-              status: dmpAccount.status || 'active',
-              folderId: folderId || null,
-            });
-            results.imported++;
-          }
-        } catch (err: any) {
-          results.errors.push(`Account ${dmpAccount.filenumber}: ${err.message}`);
-          results.skipped++;
-        }
-      }
+      const { importDmpAccounts } = await import('./dmpAccountImport');
+      const results = await importDmpAccounts(storage, tenantId, dmpAccounts, folderId);
 
       res.json({
         success: true,
@@ -11282,9 +11212,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error: any) {
       console.error("Error importing accounts from DMP:", error);
-      res.status(500).json({
+      const statusCode = Number.isInteger(error?.statusCode) ? error.statusCode : 500;
+      const message = error.message || "Failed to import accounts from DMP";
+      res.status(statusCode).json({
         success: false,
-        error: error.message || "Failed to import accounts from DMP" 
+        error: message,
+        message,
       });
     }
   });
@@ -21695,6 +21628,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   registerChiamoRoutes(app, isPlatformAdmin);
   registerChiamoUserRoutes(app);
+  registerSoftphoneSessionRoutes(app);
   registerChiamoNumberRoutes(app);
 
   // Impersonate tenant (Global Admin only) - generates a JWT token to log in as any tenant

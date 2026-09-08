@@ -11,7 +11,22 @@ import { Link } from "wouter";
 import { Loader2, Phone, PhoneCall, PhoneOff, PhoneOutgoing, PhoneIncoming, Mic, MicOff, Volume2, VolumeX, History, LogOut, EyeOff, Building2, Download, Pause, ParkingCircle, UserRound } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Device, Call } from "@twilio/voice-sdk";
+import { detectBrand } from "@/config/brands";
 import { isChiamoConnectPhoneShell } from "@/lib/app-detection";
+import { ChiamoLogin } from "@/chiamo/chiamo-login";
+import { deleteCookie, getAuthToken, setCookie } from "@/lib/cookies";
+import {
+  cacheVerifiedSoftphoneUser,
+  clearLegacySoftphoneCache,
+  isMatchingVoipSession,
+  requestSoftphoneLogin,
+  requestVoipSession,
+  safeResponseJson,
+  softphoneApiUrl,
+  softphoneScope,
+  type SoftphoneUser,
+  type VoipSession,
+} from "@/lib/softphone-session";
 
 interface VoipCallLog {
   id: string;
@@ -45,15 +60,6 @@ interface HeldCall {
   heldAt: string;
 }
 
-interface AgentUser {
-  id: string;
-  username: string;
-  name: string;
-  role: string;
-  tenantId: string;
-  voipAccess: boolean;
-}
-
 const dialpadButtons = [
   { digit: "1", letters: "" },
   { digit: "2", letters: "ABC" },
@@ -70,14 +76,21 @@ const dialpadButtons = [
 ];
 
 export default function SoftphonePage() {
+  const product = detectBrand();
+  // Presentation remains independent from the actual product used for authentication.
   const connectShell = isChiamoConnectPhoneShell();
   const { toast } = useToast();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState<AgentUser | null>(null);
+  const [isRestoringSession, setIsRestoringSession] = useState(true);
+  const [user, setUser] = useState<SoftphoneUser | null>(null);
+  const [authToken, setAuthToken] = useState<string | null>(null);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loginError, setLoginError] = useState("");
+  const [sessionError, setSessionError] = useState("");
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [providerError, setProviderError] = useState("");
+  const [isProviderRegistered, setIsProviderRegistered] = useState(false);
 
   const [dialpadNumber, setDialpadNumber] = useState("");
   const [callState, setCallState] = useState<"idle" | "connecting" | "ringing" | "in-call" | "ended">("idle");
@@ -100,31 +113,45 @@ export default function SoftphonePage() {
   const activeCallRef = useRef<Call | null>(null);
 
   useEffect(() => {
-    const token = localStorage.getItem("softphone_token");
-    const storedUser = localStorage.getItem("softphone_user");
-    if (token && storedUser) {
-      try {
-        const parsedUser = JSON.parse(storedUser);
-        if (parsedUser.voipAccess) {
-          setUser(parsedUser);
-          setIsAuthenticated(true);
-        } else {
-          localStorage.removeItem("softphone_token");
-          localStorage.removeItem("softphone_user");
-        }
-      } catch (e) {
-        localStorage.removeItem("softphone_token");
-        localStorage.removeItem("softphone_user");
+    let active = true;
+    const restore = async () => {
+      clearLegacySoftphoneCache(localStorage);
+      const token = getAuthToken();
+      if (!token) {
+        if (active) setIsRestoringSession(false);
+        return;
       }
-    }
+      try {
+        const session = await requestVoipSession(token);
+        if (!isMatchingVoipSession(session, product)) {
+          return;
+        }
+        if (!session.callingAllowed) {
+          if (active) setSessionError("This account is signed in but does not have calling access. Contact your administrator.");
+          return;
+        }
+        cacheVerifiedSoftphoneUser(localStorage, session);
+        if (!active) return;
+        setAuthToken(token);
+        setUser(session.user);
+        setIsAuthenticated(true);
+      } catch {
+        // Expired and password-change-only tokens return to the normal login flow.
+        // A cached token or user is never enough to create a phone session.
+      } finally {
+        if (active) setIsRestoringSession(false);
+      }
+    };
+    void restore();
 
     return () => {
+      active = false;
       if (deviceRef.current) {
         deviceRef.current.destroy();
         deviceRef.current = null;
       }
     };
-  }, []);
+  }, [product]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -132,38 +159,31 @@ export default function SoftphonePage() {
     setIsLoggingIn(true);
 
     try {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        setLoginError(data.message || "Login failed");
-        setIsLoggingIn(false);
+      const data = await requestSoftphoneLogin(username, password, product);
+      if (data.requiresPasswordChange) {
+        if (product === "chiamo") {
+          setLoginError("");
+          setIsRestoringSession(false);
+        } else {
+          setLoginError("This product does not support temporary-password recovery on the softphone. Use your company sign-in page.");
+        }
         return;
       }
-
-      if (!data.credential?.voipAccess) {
+      const session: VoipSession = await requestVoipSession(data.token);
+      if (!isMatchingVoipSession(session, product)) {
+        setLoginError("This account belongs to a different product. Use the correct sign-in page.");
+        return;
+      }
+      if (!session.callingAllowed) {
         setLoginError(connectShell ? "You don't have calling access. Please contact your administrator." : "You don't have VoIP access. Please contact your administrator.");
-        setIsLoggingIn(false);
         return;
       }
-
-      const agentUser: AgentUser = {
-        id: data.credential.id,
-        username: data.credential.username,
-        name: data.credential.name,
-        role: data.credential.role,
-        tenantId: data.credential.tenantId,
-        voipAccess: data.credential.voipAccess,
-      };
-
-      localStorage.setItem("softphone_token", data.token);
-      localStorage.setItem("softphone_user", JSON.stringify(agentUser));
-      setUser(agentUser);
+      clearLegacySoftphoneCache(localStorage);
+      cacheVerifiedSoftphoneUser(localStorage, session);
+      localStorage.setItem("authToken", data.token);
+      setCookie("authToken", data.token);
+      setAuthToken(data.token);
+      setUser(session.user);
       setIsAuthenticated(true);
     } catch (error) {
       setLoginError("Connection error. Please try again.");
@@ -177,24 +197,31 @@ export default function SoftphonePage() {
       deviceRef.current.destroy();
       deviceRef.current = null;
     }
-    localStorage.removeItem("softphone_token");
-    localStorage.removeItem("softphone_user");
+    clearLegacySoftphoneCache(localStorage);
+    if (user) localStorage.removeItem(`softphone:${softphoneScope(product, user)}:user`);
+    localStorage.removeItem("authToken");
+    deleteCookie("authToken");
+    queryClient.removeQueries({ queryKey: callLogsQueryKey });
+    queryClient.removeQueries({ queryKey: voiceTokenQueryKey });
+    setAuthToken(null);
     setIsAuthenticated(false);
     setUser(null);
     setUsername("");
     setPassword("");
+    setProviderError("");
+    setIsProviderRegistered(false);
   };
 
   const getAuthHeaders = (): Record<string, string> => {
-    const token = localStorage.getItem("softphone_token");
-    return token ? { Authorization: `Bearer ${token}` } : {};
+    return authToken ? { Authorization: `Bearer ${authToken}` } : {};
   };
 
   const lookupCallerName = async (phone: string) => {
     if (!phone || phone === "Unknown") return "";
     try {
-      const response = await fetch(`/api/consumers/lookup-by-phone?phone=${encodeURIComponent(phone)}`, {
+      const response = await fetch(softphoneApiUrl(`/api/consumers/lookup-by-phone?phone=${encodeURIComponent(phone)}`), {
         headers: getAuthHeaders(),
+        credentials: "include",
       });
       if (!response.ok) return "";
       const data: CallerLookup = await response.json();
@@ -207,7 +234,7 @@ export default function SoftphonePage() {
 
   const refreshParkedCalls = async () => {
     try {
-      const response = await fetch("/api/voip/parked-calls", { headers: getAuthHeaders() });
+      const response = await fetch(softphoneApiUrl("/api/voip/parked-calls"), { headers: getAuthHeaders(), credentials: "include" });
       if (response.ok) setParkedCalls(await response.json());
     } catch (error) {
       // Park list is non-critical for placing and receiving calls.
@@ -215,13 +242,13 @@ export default function SoftphonePage() {
   };
 
   const refreshHeldCall = async () => {
-    const response = await fetch("/api/voip/held-calls", { headers: getAuthHeaders() });
+    const response = await fetch(softphoneApiUrl("/api/voip/held-calls"), { headers: getAuthHeaders(), credentials: "include" });
     if (response.ok) setHeldCall(await response.json());
   };
 
   const handleAuthError = () => {
-    localStorage.removeItem("softphone_token");
-    localStorage.removeItem("softphone_user");
+    clearLegacySoftphoneCache(localStorage);
+    setAuthToken(null);
     setIsAuthenticated(false);
     setUser(null);
     toast({
@@ -231,12 +258,16 @@ export default function SoftphonePage() {
     });
   };
 
+  const sessionScope = user ? softphoneScope(product, user) : "signed-out";
+  const callLogsQueryKey = ["/api/voip/call-logs", sessionScope] as const;
+  const voiceTokenQueryKey = ["/api/voip/token", sessionScope] as const;
   const { data: callLogs = [], isLoading: loadingLogs } = useQuery<VoipCallLog[]>({
-    queryKey: ["/api/voip/call-logs"],
+    queryKey: callLogsQueryKey,
     enabled: isAuthenticated,
     queryFn: async () => {
-      const response = await fetch("/api/voip/call-logs", {
+      const response = await fetch(softphoneApiUrl("/api/voip/call-logs"), {
         headers: getAuthHeaders(),
+        credentials: "include",
       });
       if (response.status === 401 || response.status === 403) {
         handleAuthError();
@@ -247,19 +278,23 @@ export default function SoftphonePage() {
     },
   });
 
-  const { data: voiceToken } = useQuery<{ token: string; identity: string }>({
-    queryKey: ["/api/voip/token"],
+  const { data: voiceToken, error: voiceTokenError, refetch: retryVoiceToken, isFetching: isFetchingVoiceToken } = useQuery<{ token: string; identity: string }>({
+    queryKey: voiceTokenQueryKey,
     enabled: isAuthenticated,
     refetchInterval: 1000 * 60 * 55,
     queryFn: async () => {
-      const response = await fetch("/api/voip/token", {
+      const response = await fetch(softphoneApiUrl("/api/voip/token"), {
         headers: getAuthHeaders(),
+        credentials: "include",
       });
-      if (response.status === 401 || response.status === 403) {
+      if (response.status === 401) {
         handleAuthError();
         throw new Error("Access denied");
       }
-      if (!response.ok) throw new Error("Failed to fetch voice token");
+      if (!response.ok) {
+        const data = await safeResponseJson(response);
+        throw new Error(data && typeof data.message === "string" ? data.message : "Phone provider registration is unavailable.");
+      }
       return response.json();
     },
   });
@@ -268,23 +303,37 @@ export default function SoftphonePage() {
     if (!voiceToken?.token) return;
 
     if (deviceRef.current) {
-      deviceRef.current.updateToken(voiceToken.token);
+      try {
+        deviceRef.current.updateToken(voiceToken.token);
+      } catch (error) {
+        const failure = error instanceof Error ? error : new Error("Phone registration could not be refreshed.");
+        setProviderError(failure.message);
+        setIsProviderRegistered(false);
+      }
       return;
     }
 
+    setProviderError("");
+    setIsProviderRegistered(false);
     const device = new Device(voiceToken.token, {
       logLevel: 1,
       codecPreferences: [Call.Codec.Opus, Call.Codec.PCMU],
     });
 
     device.on("registered", () => {
-      console.log("Twilio Device registered");
+      setProviderError("");
+      setIsProviderRegistered(true);
+    });
+
+    device.on("unregistered", () => {
+      setIsProviderRegistered(false);
     });
 
     device.on("error", (error) => {
-      console.error("Twilio Device error:", error);
+      setProviderError(error.message || "Phone registration failed.");
+      setIsProviderRegistered(false);
       toast({
-        title: "Phone system error",
+        title: "Phone registration failed",
         description: error.message || "An error occurred with the phone system",
         variant: "destructive",
       });
@@ -316,18 +365,22 @@ export default function SoftphonePage() {
           setIsOnHold(false);
           setActiveCallerName("");
         }, 2000);
-        queryClient.invalidateQueries({ queryKey: ["/api/voip/call-logs"] });
+        queryClient.invalidateQueries({ queryKey: callLogsQueryKey });
       });
     });
 
-    device.register();
     deviceRef.current = device;
+    device.register().catch((error: Error) => {
+      if (deviceRef.current !== device) return;
+      setProviderError(error.message || "Phone registration failed. Please retry.");
+      setIsProviderRegistered(false);
+    });
 
     return () => {
       device.destroy();
       deviceRef.current = null;
     };
-  }, [voiceToken?.token]);
+  }, [voiceToken?.token, sessionScope]);
 
   useEffect(() => {
     if (activeCallRef.current) {
@@ -363,12 +416,13 @@ export default function SoftphonePage() {
         throw new Error("Phone device not initialized. Please wait a moment and try again.");
       }
 
-      const response = await fetch("/api/voip/call", {
+      const response = await fetch(softphoneApiUrl("/api/voip/call"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           ...getAuthHeaders(),
         },
+        credentials: "include",
         body: JSON.stringify({ toNumber, callerIdMode }),
       });
       if (response.status === 401 || response.status === 403) {
@@ -376,8 +430,8 @@ export default function SoftphonePage() {
         throw new Error("Access denied");
       }
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message || "Failed to initiate call");
+        const data = await safeResponseJson(response);
+        throw new Error(data && typeof data.message === "string" ? data.message : "Failed to initiate call");
       }
       const callInfo: { actualFromNumber: string; toNumber: string; isPrivate: boolean; selectionToken: string } = await response.json();
 
@@ -411,7 +465,7 @@ export default function SoftphonePage() {
           setIsOnHold(false);
           setActiveCallerName("");
         }, 2000);
-        queryClient.invalidateQueries({ queryKey: ["/api/voip/call-logs"] });
+        queryClient.invalidateQueries({ queryKey: callLogsQueryKey });
       });
 
       call.on("error", (twilioError: Error) => {
@@ -490,9 +544,10 @@ export default function SoftphonePage() {
   const handleToggleHold = async () => {
     const activeCallSid = activeCallRef.current?.parameters.CallSid;
     if (!activeCallSid) return;
-    const response = await fetch("/api/voip/held-calls", {
+    const response = await fetch(softphoneApiUrl("/api/voip/held-calls"), {
       method: "POST",
       headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      credentials: "include",
       body: JSON.stringify({ activeCallSid, callerName: activeCallerName, callerNumber: dialpadNumber }),
     });
     if (!response.ok) {
@@ -506,9 +561,10 @@ export default function SoftphonePage() {
 
   const handleResumeHeldCall = async () => {
     if (!heldCall) return;
-    const response = await fetch(`/api/voip/held-calls/${heldCall.id}/resume`, {
+    const response = await fetch(softphoneApiUrl(`/api/voip/held-calls/${heldCall.id}/resume`), {
       method: "POST",
       headers: getAuthHeaders(),
+      credentials: "include",
     });
     if (!response.ok) {
       toast({ title: "Could not resume call", description: "The caller remains on hold.", variant: "destructive" });
@@ -523,9 +579,10 @@ export default function SoftphonePage() {
     if (!activeCallRef.current || callState !== "in-call") return;
     const activeCallSid = activeCallRef.current.parameters.CallSid;
     if (!activeCallSid) return;
-    const response = await fetch("/api/voip/parked-calls", {
+    const response = await fetch(softphoneApiUrl("/api/voip/parked-calls"), {
       method: "POST",
       headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      credentials: "include",
       body: JSON.stringify({ activeCallSid, callerName: activeCallerName, callerNumber: dialpadNumber }),
     });
     if (!response.ok) {
@@ -537,7 +594,7 @@ export default function SoftphonePage() {
   };
 
   const handlePickupParkedCall = async (parkedCall: ParkedCall) => {
-    const response = await fetch(`/api/voip/parked-calls/${parkedCall.id}/pickup`, { method: "POST", headers: getAuthHeaders() });
+    const response = await fetch(softphoneApiUrl(`/api/voip/parked-calls/${parkedCall.id}/pickup`), { method: "POST", headers: getAuthHeaders(), credentials: "include" });
     if (!response.ok) {
       toast({ title: "Could not pick up call", description: "The caller remains parked.", variant: "destructive" });
       return;
@@ -597,7 +654,14 @@ export default function SoftphonePage() {
     }
   };
 
+  if (isRestoringSession) {
+    return <div className="flex min-h-screen items-center justify-center" aria-label="Verifying phone session">
+      <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
+    </div>;
+  }
+
   if (!isAuthenticated) {
+    if (product === "chiamo") return <ChiamoLogin returnTo="/softphone" initialError={sessionError} />;
     return (
       <div className={`min-h-screen flex items-center justify-center p-4 ${connectShell ? "bg-[#062d31] bg-[radial-gradient(circle_at_top_right,_rgba(103,232,249,.2),_transparent_35%),linear-gradient(135deg,#062d31,#084b57)]" : "bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800"}`}>
         <Card className={`w-full max-w-md ${connectShell ? "border-emerald-100/20 bg-[#f7fbfa] shadow-2xl shadow-black/30" : ""}`}>
@@ -615,6 +679,11 @@ export default function SoftphonePage() {
                   {loginError}
                 </div>
               )}
+              {sessionError && (
+                <div role="alert" className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">
+                  {sessionError}
+                </div>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="softphone-username">Username</Label>
                 <Input
@@ -625,6 +694,7 @@ export default function SoftphonePage() {
                   placeholder="Enter your username"
                   autoComplete="off"
                   required
+                  disabled={!!sessionError}
                 />
               </div>
               <div className="space-y-2">
@@ -638,9 +708,10 @@ export default function SoftphonePage() {
                   placeholder="Enter your password"
                   autoComplete="new-password"
                   required
+                  disabled={!!sessionError}
                 />
               </div>
-              <Button type="submit" className={`w-full ${connectShell ? "bg-emerald-600 hover:bg-emerald-700" : ""}`} disabled={isLoggingIn}>
+              <Button type="submit" className={`w-full ${connectShell ? "bg-emerald-600 hover:bg-emerald-700" : ""}`} disabled={isLoggingIn || !!sessionError}>
                 {isLoggingIn ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -739,6 +810,39 @@ export default function SoftphonePage() {
             </Button>
           </div>
         </div>
+
+        {(voiceTokenError || providerError || !isProviderRegistered) && (
+          <div className={`mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border p-3 text-sm ${
+            voiceTokenError || providerError ? "border-red-200 bg-red-50 text-red-800" : "border-amber-200 bg-amber-50 text-amber-800"
+          }`}>
+            <span>
+              {voiceTokenError
+                ? `Phone service could not be reached: ${voiceTokenError instanceof Error ? voiceTokenError.message : "Token request failed."}`
+                : providerError || "Registering this device with the phone provider…"}
+            </span>
+            {(voiceTokenError || providerError) && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={isFetchingVoiceToken}
+                onClick={() => {
+                  setProviderError("");
+                  setIsProviderRegistered(false);
+                  void retryVoiceToken();
+                  if (deviceRef.current) {
+                    deviceRef.current.register().catch((error: Error) => {
+                      setProviderError(error.message || "Phone registration failed. Please retry.");
+                    });
+                  }
+                }}
+              >
+                {isFetchingVoiceToken ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Retry phone registration
+              </Button>
+            )}
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card className="overflow-hidden rounded-[2rem] border-gray-900 bg-gray-950 text-white shadow-2xl">

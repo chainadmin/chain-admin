@@ -11,7 +11,20 @@ import { chiamoServiceConfigurations } from "@shared/chiamo-schema";
 import { eq } from "drizzle-orm";
 
 function enforceProductRoute(req: any, res: any, product: AgencyProduct): boolean {
-  if (canAgencyProductAccessPath(product, (req.originalUrl || req.url || req.path || "/").split("?")[0])) return true;
+  const path = (req.originalUrl || req.url || req.path || "/").split("?")[0];
+  // Chiamo credential mutations must use its reauthenticated, versioned handlers.
+  // Keep legacy read access and Chain behavior, but close the weaker alternate
+  // create/password/activation routes that would bypass Chiamo billing and policy.
+  if (product === "chiamo" &&
+      !["GET", "HEAD", "OPTIONS"].includes(String(req.method || "GET").toUpperCase()) &&
+      /^\/api\/team-members(?:\/|$)/i.test(path)) {
+    res.status(403).json({
+      code: "CHIAMO_USER_MANAGEMENT_REQUIRED",
+      message: "Manage Chiamo phone users from Chiamo Users & phone access.",
+    });
+    return false;
+  }
+  if (canAgencyProductAccessPath(product, path)) return true;
   res.status(403).json({
     code: "PRODUCT_ROUTE_FORBIDDEN",
     message: "This API is not available to the signed-in product.",
@@ -113,6 +126,7 @@ export const authenticateUser: RequestHandler = async (req: any, res, next) => {
         restrictedServices: restrictedServices,
         product,
         voipAccess,
+        credentialVersion: decoded.credentialVersion,
         passwordChangeOnly: decoded.passwordChangeOnly === true,
         claims: {
           sub: decoded.userId

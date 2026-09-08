@@ -7,7 +7,7 @@ import { db } from "./db";
 
 type Result = { status?: number; body?: any; next: boolean };
 
-async function authenticate(path: string, claims: Record<string, unknown>, credential: Record<string, unknown>, mountedPath = path, serviceState: Record<string, unknown> = {}): Promise<Result> {
+async function authenticate(path: string, claims: Record<string, unknown>, credential: Record<string, unknown>, mountedPath = path, serviceState: Record<string, unknown> = {}, method = "GET"): Promise<Result> {
   const secret = "restricted-session-test-secret";
   const previousSecret = process.env.JWT_SECRET;
   process.env.JWT_SECRET = secret;
@@ -18,7 +18,7 @@ async function authenticate(path: string, claims: Record<string, unknown>, crede
     id: "tenant",
     isActive: true,
     chiamoConnectEnabled: true,
-    chainCoreEnabled: false,
+    chainCoreEnabled: claims.product === "chain",
   });
   (storage as any).getAgencyCredentialsById = async () => credential;
   (db as any).select = () => {
@@ -32,6 +32,7 @@ async function authenticate(path: string, claims: Record<string, unknown>, crede
   };
   const result: Result = { next: false };
   const req: any = {
+    method,
     path: mountedPath,
     originalUrl: path,
     headers: { authorization: `Bearer ${jwt.sign(claims, secret, { expiresIn: "5m" })}` },
@@ -106,6 +107,30 @@ test("credential version increment invalidates an already-issued normal token", 
   });
   assert.equal(result.status, 401);
   assert.equal(result.next, false);
+  const phoneSession = await authenticate("/api/voip/session", oldToken, {
+    ...baseCredential, mustChangePassword: false, temporaryPasswordExpiresAt: null, credentialVersion: 5,
+  });
+  assert.equal(phoneSession.status, 401);
+  assert.equal(phoneSession.next, false);
+});
+
+test("Chiamo cannot bypass secure credential policy through legacy team mutations", async () => {
+  const credential = { ...baseCredential, mustChangePassword: false, temporaryPasswordExpiresAt: null };
+  for (const [method, path] of [
+    ["POST", "/api/team-members"],
+    ["PATCH", "/api/team-members/member"],
+    ["DELETE", "/api/team-members/member"],
+    ["POST", "/api/team-members/member/password-reset"],
+  ]) {
+    const chiamo = await authenticate(path, baseClaims, credential, path, {}, method);
+    assert.equal(chiamo.status, 403);
+    assert.equal(chiamo.body.code, "CHIAMO_USER_MANAGEMENT_REQUIRED");
+    assert.equal(chiamo.next, false);
+    const chain = await authenticate(path, { ...baseClaims, product: "chain" }, credential, path, {}, method);
+    assert.equal(chain.next, true);
+  }
+  assert.equal((await authenticate("/api/team-members", baseClaims, credential)).next, true);
+  assert.equal((await authenticate("/api/chiamo/team-members/member/password", baseClaims, credential, "/api/chiamo/team-members/member/password", {}, "PUT")).next, true);
 });
 
 test("originalUrl preserves Chiamo product classification through mounted routers", async () => {

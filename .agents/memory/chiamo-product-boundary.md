@@ -13,9 +13,21 @@ unrelated messaging must not strand a phone customer.
 
 **How to apply:** Keep provider readiness separate from login authorization,
 preserve deliberate account and billing restrictions, and preserve historical
-messaging resources and invoices. Deliver customer access through a
-Global-Admin-generated, one-time temporary password, not a recoverable password
-or an emailed invitation.
+messaging resources and invoices. Phone-user access must not depend on an emailed
+invitation or a fabricated email address.
+
+Company-created phone users use company-selected passwords and optional email.
+Owners may explicitly replace their non-owner users' passwords. Do not generate
+temporary passwords for these company-managed actions or force a first-login
+password change on a company-selected password.
+
+**Why:** The product owner explicitly superseded automatic generated credentials
+for company-managed users on 2026-09-08, while retaining Global Admin recovery and
+the existing initial company-owner onboarding policy.
+
+**How to apply:** Keep Global Admin's temporary-password recovery available, with
+its required password-change restriction. Never mass-reset existing users or
+remove their deliberate calling restrictions when changing credential policy.
 
 Legacy disabled-login flags are ambiguous: they represented both unfinished
 invitation delivery and deliberate administrator restrictions. Preserve them

@@ -40,6 +40,8 @@ export async function runMigrations() {
         updated_at TIMESTAMP DEFAULT NOW()
       )
     `);
+    // Additive-compatible: existing email values and all other tables are retained.
+    await client.query(`ALTER TABLE agency_credentials ALTER COLUMN email DROP NOT NULL`);
     await client.query(`ALTER TABLE agency_credentials ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE`);
     await client.query(`ALTER TABLE agency_credentials ADD COLUMN IF NOT EXISTS temporary_password_expires_at TIMESTAMP`);
     await client.query(`ALTER TABLE agency_credentials ADD COLUMN IF NOT EXISTS credential_version INTEGER NOT NULL DEFAULT 1`);

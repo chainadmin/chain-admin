@@ -842,6 +842,8 @@ export class DatabaseStorage implements IStorage {
 
   async createAgencyCredentials(credentials: InsertAgencyCredentials): Promise<SelectAgencyCredentials> {
     const normalizedUsername = normalizeUsernameValue(credentials.username);
+    // Legacy/Chain creation remains email-required; Chiamo uses its own input and insert.
+    if (!credentials.email) throw new Error("Email is required for agency credentials");
     const normalizedEmail = normalizeEmailValue(credentials.email);
 
     if (!normalizedUsername) {

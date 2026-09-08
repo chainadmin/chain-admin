@@ -2,10 +2,16 @@ import { useState } from "react";
 import { brands } from "@/config/brands";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ApiError, apiRequest, parseErrorResponse, queryClient } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
 import { persistTenantMetadata, setCookie } from "@/lib/cookies";
+import {
+  isMatchingVoipSession,
+  requestSoftphoneLogin,
+  requestTemporaryPasswordChange,
+  requestVoipSession,
+} from "@/lib/softphone-session";
 
-export function ChiamoLogin() {
+export function ChiamoLogin({ returnTo, initialError = "" }: { returnTo?: string; initialError?: string } = {}) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -13,16 +19,23 @@ export function ChiamoLogin() {
   // A password-change-only token is not an application session; never persist it.
   const [changeToken, setChangeToken] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(initialError);
 
   async function signIn(secret: string) {
-    const response = await apiRequest("POST", "/api/agency/login", { username, password: secret, product: "chiamo" });
-    const result = await response.json();
+    const result = await requestSoftphoneLogin(username, secret, "chiamo");
     if (result.requiresPasswordChange) {
       setChangeToken(result.token);
       return;
     }
-    if (!result.token) throw new Error("Sign-in did not return a valid session.");
+    if (returnTo === "/softphone") {
+      const session = await requestVoipSession(result.token);
+      if (!isMatchingVoipSession(session, "chiamo")) {
+        throw new Error("This account belongs to a different product.");
+      }
+      if (!session.callingAllowed) {
+        throw new Error("You don't have calling access. Please contact your administrator.");
+      }
+    }
     setPassword("");
     setNewPassword("");
     setConfirmation("");
@@ -32,7 +45,8 @@ export function ChiamoLogin() {
     setCookie("authToken", result.token);
     persistTenantMetadata({ slug: result.tenant?.slug, name: result.tenant?.name });
     const previewBrand = new URLSearchParams(window.location.search).get("brand") === "chiamo";
-    window.location.assign(previewBrand ? "/dashboard?brand=chiamo" : "/dashboard");
+    const safeReturnTo = returnTo === "/softphone" ? returnTo : "/dashboard";
+    window.location.assign(previewBrand ? `${safeReturnTo}?brand=chiamo` : safeReturnTo);
   }
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -45,18 +59,7 @@ export function ChiamoLogin() {
     setBusy(true);
     try {
       if (changeToken) {
-        const response = await fetch("/api/chiamo/change-password", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${changeToken}` },
-          credentials: "include",
-          body: JSON.stringify({ currentPassword: password, newPassword }),
-        });
-        if (!response.ok) {
-          const data = await parseErrorResponse(response);
-          const detail = data && typeof data === "object"
-            ? ("message" in data ? data.message : "error" in data ? data.error : undefined) : undefined;
-          throw new ApiError(response.status, detail ? String(detail) : "Your password could not be changed.", data);
-        }
+        await requestTemporaryPasswordChange(changeToken, password, newPassword);
         const updatedPassword = newPassword;
         setChangeToken(null);
         setNewPassword("");
@@ -106,7 +109,7 @@ export function ChiamoLogin() {
           </Button>
           {changeToken ? <Button className="w-full" type="button" variant="ghost" disabled={busy}
             onClick={() => { setChangeToken(null); setPassword(""); setNewPassword(""); setConfirmation(""); setError(""); }}>Back to sign in</Button> :
-            <p className="text-center text-sm text-slate-600">Need a password? Ask Global Admin to generate a temporary password for your username. No email is required.</p>}
+            <p className="text-center text-sm text-slate-600">Your company provides your password. Global Admin can generate a temporary password for your username when needed. No email is required.</p>}
         </form>
       </div>
     </main>

@@ -279,8 +279,9 @@ function Router() {
   if (detectBrand() === "chiamo") {
     if (!isAuthenticated) {
       return <Switch>
-        <Route path="/agency-login" component={ChiamoLogin} />
-        <Route path="/login" component={ChiamoLogin} />
+        <Route path="/softphone">{() => <ChiamoLogin returnTo="/softphone" />}</Route>
+        <Route path="/agency-login">{() => <ChiamoLogin />}</Route>
+        <Route path="/login">{() => <ChiamoLogin />}</Route>
         <Route path="/features" component={ChiamoFeatures} />
         <Route path="/pricing" component={ChiamoPricing} />
         <Route path="/get-started" component={ChiamoGetStarted} />

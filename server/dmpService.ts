@@ -122,6 +122,56 @@ interface DmpDisposition {
   status_mapping?: string;
 }
 
+export class DmpImportError extends Error {
+  constructor(message: string, public readonly statusCode = 502) {
+    super(message);
+    this.name = 'DmpImportError';
+  }
+}
+
+type DmpListKind = 'portfolios' | 'accounts';
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * DMP installations return list endpoints either as a bare array or in a
+ * named/data envelope. Do not treat an arbitrary truthy response as a list.
+ */
+export function normalizeDmpList<T>(payload: unknown, kind: DmpListKind): T[] {
+  let candidate: unknown = payload;
+
+  if (isRecord(candidate)) {
+    candidate = candidate[kind] ?? candidate.data;
+  }
+  if (isRecord(candidate)) {
+    candidate = candidate[kind];
+  }
+  if (!Array.isArray(candidate)) {
+    throw new DmpImportError(`DMP returned an unsupported ${kind} response format`);
+  }
+
+  for (const item of candidate) {
+    if (!isRecord(item)) {
+      throw new DmpImportError(`DMP returned a malformed ${kind} list`);
+    }
+    const requiredValue = kind === 'portfolios' ? item.id : item.filenumber;
+    if (
+      (typeof requiredValue !== 'string' && typeof requiredValue !== 'number') ||
+      String(requiredValue).trim() === ''
+    ) {
+      throw new DmpImportError(
+        kind === 'portfolios'
+          ? 'DMP returned a portfolio without a valid ID'
+          : 'DMP returned an account without a valid file number'
+      );
+    }
+  }
+
+  return candidate as T[];
+}
+
 export class DebtManagerProService {
   private tokenCache: Map<string, { token: string; expires: number }> = new Map();
 
@@ -182,7 +232,7 @@ export class DebtManagerProService {
       const token = data.token || data.access_token || data.bearer_token;
       
       if (!token) {
-        console.error('DMP auth response missing token:', data);
+        console.error('DMP auth response was missing a token');
         return null;
       }
 
@@ -241,6 +291,86 @@ export class DebtManagerProService {
     }
   }
 
+  private async makeImportRequest(
+    config: DmpConfig,
+    method: string,
+    endpoint: string,
+    body?: unknown
+  ): Promise<unknown> {
+    const cacheKey = `${config.username}:${config.apiUrl}`;
+    const cached = this.tokenCache.get(cacheKey);
+    let token = cached && Date.now() < cached.expires ? cached.token : undefined;
+
+    if (!token) {
+      let authResponse: Response;
+      try {
+        authResponse = await fetch(`${config.apiUrl}/api/v2/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: config.username,
+            password: config.password,
+          }),
+        });
+      } catch {
+        throw new DmpImportError('Unable to reach DMP authentication. Check the saved API URL and network connection.');
+      }
+      if (!authResponse.ok) {
+        throw new DmpImportError(
+          `DMP authentication failed (HTTP ${authResponse.status}). Check the saved username and password.`,
+          authResponse.status === 403 ? 403 : 401
+        );
+      }
+
+      let authData: DmpAuthResponse;
+      try {
+        authData = await authResponse.json() as DmpAuthResponse;
+      } catch {
+        throw new DmpImportError('DMP authentication returned an invalid JSON response');
+      }
+      token = authData.token || authData.access_token || authData.bearer_token;
+      if (!token) {
+        throw new DmpImportError('DMP authentication response did not include an access token', 401);
+      }
+      this.tokenCache.set(cacheKey, {
+        token,
+        expires: Date.now() + ((authData.expires_in || 3300) * 1000),
+      });
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(`${config.apiUrl}${endpoint}`, {
+        method,
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: body !== undefined && (method === 'POST' || method === 'PUT')
+          ? JSON.stringify(body)
+          : undefined,
+      });
+    } catch {
+      throw new DmpImportError('Unable to reach DMP. Check the saved API URL and network connection.');
+    }
+
+    if (!response.ok) {
+      const permissionHint = response.status === 401 || response.status === 403
+        ? ' Authentication or permission was denied.'
+        : '';
+      throw new DmpImportError(
+        `DMP request failed (HTTP ${response.status}).${permissionHint}`,
+        response.status === 401 || response.status === 403 ? response.status : 502
+      );
+    }
+
+    try {
+      return await response.json();
+    } catch {
+      throw new DmpImportError('DMP returned an invalid JSON response');
+    }
+  }
+
   async testConnection(
     tenantId: string,
     overrides?: Partial<DmpConfig>
@@ -251,20 +381,18 @@ export class DebtManagerProService {
       return { success: false, message: 'DMP not configured or disabled' };
     }
 
-    const token = await this.authenticate(config);
-    
-    if (!token) {
-      return { success: false, message: 'Failed to authenticate with DMP' };
-    }
-
-    // Try to fetch portfolios as a connection test
-    const portfolios = await this.makeRequest<any>(config, 'GET', '/api/v2/getportfoliolist');
-    
-    if (portfolios) {
+    try {
+      const payload = await this.makeImportRequest(config, 'GET', '/api/v2/getportfoliolist');
+      normalizeDmpList<DmpPortfolio>(payload, 'portfolios');
       return { success: true, message: 'Successfully connected to Debt Manager Pro' };
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof DmpImportError
+          ? error.message
+          : 'Failed to validate the DMP connection',
+      };
     }
-
-    return { success: false, message: 'Connection successful but failed to fetch data' };
   }
 
   async getPortfolios(tenantId: string): Promise<DmpPortfolio[] | null> {
@@ -642,53 +770,61 @@ export class DebtManagerProService {
 
   // Fetch accounts from DMP (for import)
   async getAccounts(tenantId: string, options?: { portfolioId?: string }): Promise<any[]> {
-    if (options?.portfolioId) {
-      const accounts = await this.getAccountsInPortfolio(tenantId, options.portfolioId);
-      return accounts?.map(acc => ({
-        filenumber: acc.filenumber,
-        accountNumber: acc.accountnumber || acc.filenumber,
-        firstName: acc.debtor_firstname,
-        lastName: acc.debtor_lastname,
-        dateOfBirth: acc.debtor_dob,
-        address: acc.debtor_address,
-        city: acc.debtor_city,
-        state: acc.debtor_state,
-        zipCode: acc.debtor_zip,
-        consumerEmail: acc.email,
-        consumerPhone: acc.phone_cell || acc.phone_home || acc.phone_work,
-        balance: acc.balance ? Math.round(acc.balance * 100) : 0,
-        creditorName: acc.creditor,
-        status: acc.status || 'active',
-      })) || [];
+    const config = await this.getDmpConfig(tenantId);
+    if (!config) {
+      throw new DmpImportError('DMP is not enabled or the saved configuration is incomplete', 400);
+    }
+
+    const requestedPortfolioId = options?.portfolioId;
+    if (requestedPortfolioId !== undefined && (
+      typeof requestedPortfolioId !== 'string' || requestedPortfolioId.trim() === ''
+    )) {
+      throw new DmpImportError('A valid DMP portfolio ID is required', 400);
+    }
+
+    const mapAccount = (acc: DmpAccount) => ({
+      filenumber: acc.filenumber,
+      accountNumber: acc.accountnumber || acc.filenumber,
+      firstName: acc.debtor_firstname,
+      lastName: acc.debtor_lastname,
+      dateOfBirth: acc.debtor_dob,
+      address: acc.debtor_address,
+      city: acc.debtor_city,
+      state: acc.debtor_state,
+      zipCode: acc.debtor_zip,
+      consumerEmail: acc.email,
+      consumerPhone: acc.phone_cell || acc.phone_home || acc.phone_work,
+      balance: acc.balance ? Math.round(acc.balance * 100) : 0,
+      creditorName: acc.creditor,
+      status: acc.status || 'active',
+    });
+
+    const fetchAccounts = async (portfolioId: string): Promise<DmpAccount[]> => {
+      const payload = await this.makeImportRequest(
+        config,
+        'POST',
+        '/api/v2/get_accounts_in_portfolio',
+        { portfolio_id: portfolioId }
+      );
+      return normalizeDmpList<DmpAccount>(payload, 'accounts');
+    };
+
+    if (requestedPortfolioId) {
+      const accounts = await fetchAccounts(requestedPortfolioId.trim());
+      return accounts.map(mapAccount);
     }
 
     // If no portfolio specified, get all portfolios and then get accounts from each
-    const portfolios = await this.getPortfolios(tenantId);
-    if (!portfolios || portfolios.length === 0) {
+    const portfolioPayload = await this.makeImportRequest(config, 'GET', '/api/v2/getportfoliolist');
+    const portfolios = normalizeDmpList<DmpPortfolio>(portfolioPayload, 'portfolios');
+    if (portfolios.length === 0) {
       return [];
     }
 
     const allAccounts: any[] = [];
     for (const portfolio of portfolios.slice(0, 5)) { // Limit to first 5 portfolios for safety
-      const accounts = await this.getAccountsInPortfolio(tenantId, portfolio.id);
-      if (accounts) {
-        allAccounts.push(...accounts.map(acc => ({
-          filenumber: acc.filenumber,
-          accountNumber: acc.accountnumber || acc.filenumber,
-          firstName: acc.debtor_firstname,
-          lastName: acc.debtor_lastname,
-          dateOfBirth: acc.debtor_dob,
-          address: acc.debtor_address,
-          city: acc.debtor_city,
-          state: acc.debtor_state,
-          zipCode: acc.debtor_zip,
-          consumerEmail: acc.email,
-          consumerPhone: acc.phone_cell || acc.phone_home || acc.phone_work,
-          balance: acc.balance ? Math.round(acc.balance * 100) : 0,
-          creditorName: acc.creditor,
-          status: acc.status || 'active',
-        })));
-      }
+      const accounts = await fetchAccounts(String(portfolio.id));
+      allAccounts.push(...accounts.map(mapAccount));
     }
     return allAccounts;
   }

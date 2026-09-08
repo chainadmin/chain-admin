@@ -225,7 +225,7 @@ export const agencyCredentials = pgTable("agency_credentials", {
   departmentId: uuid("department_id").references(() => tenantDepartments.id, { onDelete: "set null" }),
   username: text("username").unique().notNull(),
   passwordHash: text("password_hash").notNull(), // Hashed password using bcrypt
-  email: text("email").notNull(),
+  email: text("email"), // Optional for company-managed Chiamo users; Chain validates email at its API boundary.
   firstName: text("first_name"),
   lastName: text("last_name"),
   role: text("role", { enum: ['owner', 'manager', 'agent', 'viewer', 'uploader'] }).default('owner').notNull(),
@@ -1970,6 +1970,9 @@ export const insertAgencyCredentialsSchema = createInsertSchema(agencyCredential
   createdAt: true, 
   updatedAt: true,
   lastLoginAt: true 
+}).extend({
+  // This legacy insert contract is used by Chain. Chiamo has its own optional-email input.
+  email: z.string().trim().email(),
 });
 export const agencyTrialRegistrationSchema = createInsertSchema(tenants).pick({
   ownerFirstName: true,

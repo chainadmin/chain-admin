@@ -46,6 +46,105 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
+    // Chiamo credentials are their own authentication identity. In particular,
+    // email is optional for these accounts, so never route them through the
+    // legacy users/platformUsers linkage below.
+    if (product === 'chiamo') {
+      if (credentials.isActive !== true) {
+        return res.status(403).json({ error: 'Account has been deactivated. Please contact support.' });
+      }
+
+      const isValid = await bcrypt.compare(password, credentials.passwordHash);
+      if (!isValid) {
+        return res.status(401).json({ error: 'Invalid email or password' });
+      }
+
+      const [tenant] = await db
+        .select()
+        .from(tenants)
+        .where(eq(tenants.id, credentials.tenantId))
+        .limit(1);
+
+      if (!tenant) {
+        return res.status(401).json({ error: 'Agency not found' });
+      }
+      if (!tenant.isActive) {
+        return res.status(403).json({ error: 'Agency account is not active' });
+      }
+      if (tenant.chiamoConnectEnabled !== true) {
+        return res.status(403).json({ error: 'Chiamo access is not active' });
+      }
+
+      const [service] = await db.select({
+        accountActive: chiamoServiceConfigurations.accountActive,
+        explicitLoginDisabled: chiamoServiceConfigurations.explicitLoginDisabled,
+      }).from(chiamoServiceConfigurations)
+        .where(eq(chiamoServiceConfigurations.tenantId, tenant.id))
+        .limit(1);
+      if (service?.accountActive !== true || service.explicitLoginDisabled === true) {
+        return res.status(403).json({ error: 'Chiamo Connect login has been disabled' });
+      }
+
+      const requiresPasswordChange = credentials.mustChangePassword === true;
+      if (
+        requiresPasswordChange &&
+        (!credentials.temporaryPasswordExpiresAt ||
+          credentials.temporaryPasswordExpiresAt.getTime() <= Date.now())
+      ) {
+        return res.status(401).json({
+          code: 'TEMPORARY_PASSWORD_EXPIRED',
+          error: 'Temporary password has expired',
+        });
+      }
+
+      const token = generateToken(
+        credentials.id,
+        tenant.id,
+        tenant.slug,
+        tenant.name,
+        'chiamo',
+        credentials.credentialVersion,
+        requiresPasswordChange,
+      );
+
+      const hostname = req.headers.host || req.headers['x-forwarded-host'] || '';
+      const origin = req.headers.origin || '';
+      const isCustomDomain = hostname.includes('chainsoftwaregroup.com') || origin.includes('chainsoftwaregroup.com');
+      const domain = isCustomDomain ? '.chainsoftwaregroup.com' : undefined;
+
+      res.setHeader('Set-Cookie', [
+        requiresPasswordChange ? `authToken=; Path=/; SameSite=Lax; Max-Age=0${domain ? `; Domain=${domain}` : ''}` : `authToken=${token}; Path=/; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}${domain ? `; Domain=${domain}` : ''}`,
+        `tenantSlug=${tenant.slug}; Path=/; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}${domain ? `; Domain=${domain}` : ''}`,
+        `tenantName=${encodeURIComponent(tenant.name)}; Path=/; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}${domain ? `; Domain=${domain}` : ''}`,
+      ].join(', '));
+
+      const name = `${credentials.firstName || ''} ${credentials.lastName || ''}`.trim() || credentials.username;
+      return res.status(200).json({
+        success: true,
+        requiresPasswordChange,
+        token,
+        product: 'chiamo',
+        user: {
+          id: credentials.id,
+          username: credentials.username,
+          firstName: credentials.firstName,
+          lastName: credentials.lastName,
+          name,
+          role: credentials.role,
+          tenantId: credentials.tenantId,
+          voipAccess: credentials.voipAccess,
+          product: 'chiamo',
+        },
+        tenant: {
+          id: tenant.id,
+          name: tenant.name,
+          slug: tenant.slug,
+          isTrialAccount: tenant.isTrialAccount,
+          isPaidAccount: tenant.isPaidAccount,
+        },
+      });
+    }
+
     // Verify password
     const isValid = await bcrypt.compare(password, credentials.passwordHash);
     if (!isValid) {
@@ -53,7 +152,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Get or create user  
-    const email = credentials.email;
+    const email = credentials.email!;
     let [user] = await db
       .select()
       .from(users)
@@ -116,27 +215,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!tenant.isActive) {
       return res.status(403).json({ error: 'Agency account is not active' });
     }
-    if (
-      (product === 'chain' && tenant.chainCoreEnabled !== true) ||
-      (product === 'chiamo' && tenant.chiamoConnectEnabled !== true)
-    ) {
-      return res.status(403).json({ error: `${product === 'chain' ? 'Chain' : 'Chiamo'} access is not active` });
-    }
-    if (product === 'chiamo') {
-      const [service] = await db.select({
-        accountActive: chiamoServiceConfigurations.accountActive,
-        explicitLoginDisabled: chiamoServiceConfigurations.explicitLoginDisabled,
-      }).from(chiamoServiceConfigurations).where(eq(chiamoServiceConfigurations.tenantId, tenant.id)).limit(1);
-      if (service?.accountActive === false || service?.explicitLoginDisabled === true) {
-        return res.status(403).json({ error: 'Chiamo Connect login has been disabled' });
-      }
+    if (tenant.chainCoreEnabled !== true) {
+      return res.status(403).json({ error: 'Chain access is not active' });
     }
 
     // Generate JWT token with tenant info
-    const requiresPasswordChange = product === 'chiamo' && credentials.mustChangePassword === true;
-    if (requiresPasswordChange && (!credentials.temporaryPasswordExpiresAt || credentials.temporaryPasswordExpiresAt.getTime() <= Date.now())) {
-      return res.status(401).json({ code: 'TEMPORARY_PASSWORD_EXPIRED', error: 'Temporary password has expired' });
-    }
+    const requiresPasswordChange = false;
     const token = generateToken(credentials.id, tenant.id, tenant.slug, tenant.name, product, credentials.credentialVersion, requiresPasswordChange);
 
     // Set cookie that works across subdomains (only in production with custom domain)

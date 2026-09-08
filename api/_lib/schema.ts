@@ -90,7 +90,7 @@ export const agencyCredentials = pgTable("agency_credentials", {
   departmentId: uuid("department_id").references(() => tenantDepartments.id, { onDelete: "set null" }),
   username: text("username").unique().notNull(),
   passwordHash: text("password_hash").notNull(), // Hashed password using bcrypt
-  email: text("email").notNull(),
+  email: text("email"), // Chiamo phone users may sign in using only their username.
   firstName: text("first_name"),
   lastName: text("last_name"),
   role: text("role", { enum: ['owner', 'manager', 'agent', 'viewer', 'uploader'] }).default('owner').notNull(),
