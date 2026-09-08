@@ -337,6 +337,7 @@ export const getCurrentUser = async (req: any) => {
     tenantSlug: req.user.tenantSlug || tenant?.slug, // Include slug from token or tenant
     tenant: tenant,
     isJwtAuth: true,
+    product: req.user.product,
     role: req.user.role,
     voipAccess: req.user.voipAccess,
     credentialId: req.user.credentialId,

@@ -1485,6 +1485,11 @@ export const voipCallLogs = pgTable("voip_call_logs", {
   recordingSid: text("recording_sid"), // Twilio Recording SID
   recordingDuration: integer("recording_duration"), // Recording duration in seconds
   recordingStatus: text("recording_status"), // "processing", "completed", "absent"
+  // Durable inbound DID context for recording-status callbacks, whose provider
+  // payload intentionally does not include To/From.
+  inboundPhoneNumberId: uuid("inbound_phone_number_id").references(() => voipPhoneNumbers.id, { onDelete: "set null" }),
+  inboundRoutingBucketId: uuid("inbound_routing_bucket_id").references(() => voipRoutingBuckets.id, { onDelete: "set null" }),
+  isPrivacyInbound: boolean("is_privacy_inbound").notNull().default(false),
   transcription: text("transcription"), // Transcription of the recording (if enabled)
   notes: text("notes"), // Agent notes about the call
   metadata: jsonb("metadata").default(sql`'{}'::jsonb`), // Additional call data

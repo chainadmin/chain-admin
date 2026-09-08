@@ -1,7 +1,10 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
+import { chiamoUserManagementPath } from "@/chiamo/chiamo-users";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -61,6 +64,8 @@ interface TeamMembersSectionProps {
 export default function TeamMembersSection({ cardBaseClasses, inputClasses }: TeamMembersSectionProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user: authUser } = useAuth();
+  const chiamoManagementPath = chiamoUserManagementPath((authUser as any)?.product);
   
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -82,10 +87,11 @@ export default function TeamMembersSection({ cardBaseClasses, inputClasses }: Te
 
   const { data: teamMembers = [], isLoading } = useQuery<TeamMember[]>({
     queryKey: ["/api/team-members"],
+    enabled: !chiamoManagementPath,
   });
-  const { data: settings } = useQuery<any>({ queryKey: ["/api/settings"] });
+  const { data: settings } = useQuery<any>({ queryKey: ["/api/settings"], enabled: !chiamoManagementPath });
   const isMunicipality = settings?.businessType === 'municipality';
-  const { data: departments = [] } = useQuery<any[]>({ queryKey: ["/api/municipality/departments"], enabled: isMunicipality });
+  const { data: departments = [] } = useQuery<any[]>({ queryKey: ["/api/municipality/departments"], enabled: !chiamoManagementPath && isMunicipality });
 
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
@@ -247,6 +253,30 @@ export default function TeamMembersSection({ cardBaseClasses, inputClasses }: Te
   const includedUsers = isMunicipality ? 66 : (settings?.maxActiveUsers || 2);
   const additionalBillableUsers = isMunicipality ? Math.max(0, activeUsers - includedUsers) : 0;
   const canAddSubUser = isMunicipality || activeUsers < includedUsers;
+
+  if (chiamoManagementPath) {
+    return (
+      <Card className={cardBaseClasses} data-testid="chiamo-team-members-route">
+        <CardHeader className="space-y-1 text-white">
+          <CardTitle className="text-xl font-semibold text-white flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            Users & phone access
+          </CardTitle>
+          <CardDescription className="text-blue-100/70">
+            Chiamo users are managed in the dedicated phone-user manager so owner verification, password confirmation, VoIP access, and seat pricing remain protected.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button asChild className="bg-gradient-to-r from-emerald-500/80 to-teal-500/80 hover:from-emerald-400/80 hover:to-teal-400/80">
+            <Link href={chiamoManagementPath} data-testid="link-manage-chiamo-users">
+              <UserPlus className="h-4 w-4 mr-2" />
+              Add or manage Chiamo users
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className={cardBaseClasses}>

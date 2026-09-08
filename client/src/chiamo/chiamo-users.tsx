@@ -34,6 +34,9 @@ export function chiamoCreatePayload(form:CreateForm) {
 export function chiamoPasswordPayload(form:{password:string;passwordConfirmation:string;ownerPassword:string}) {
   return {password:form.password,passwordConfirmation:form.passwordConfirmation,ownerPassword:form.ownerPassword};
 }
+export function chiamoUserManagementPath(product:unknown):"/users"|null {
+  return product==="chiamo"?"/users":null;
+}
 
 export function ChiamoUsersPanel() {
   const users=useQuery<Response>({queryKey:["/api/chiamo/team-members"],queryFn:()=>request("/api/chiamo/team-members")});

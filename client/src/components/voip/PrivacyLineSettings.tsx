@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { apiRequest } from "@/lib/queryClient";
+import { GreetingAudioInput } from "./GreetingAudioInput";
 import {
   privacyGreeting,
   privacyLineChoices,
@@ -23,6 +24,7 @@ export function PrivacyLineSettings({ dark, accent }: { dark: boolean; accent: s
   const [text, setText] = useState("");
   const [greetingType, setGreetingType] = useState<"TEXT" | "AUDIO">("TEXT");
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   useEffect(() => {
     setPhoneNumberId(query.data?.phoneNumberId || selected?.id || "");
@@ -30,7 +32,8 @@ export function PrivacyLineSettings({ dark, accent }: { dark: boolean; accent: s
     setText(greeting.text || "");
     setGreetingType(greeting.type || "TEXT");
     setAudioUrl(greeting.audioUrl || null);
-  }, [query.data, selected?.id, greeting.type, greeting.text, greeting.audioUrl]);
+    setPreviewUrl(greeting.previewUrl || null);
+  }, [query.data, selected?.id, greeting.type, greeting.text, greeting.audioUrl, greeting.previewUrl]);
 
   const save = useMutation({
     mutationFn: () => apiRequest(
@@ -67,9 +70,9 @@ export function PrivacyLineSettings({ dark, accent }: { dark: boolean; accent: s
     </Label>
     {!choices.length && <p className={`mt-2 text-xs ${muted}`}>No active company DIDs are available to assign.</p>}
     <div className="mt-5 flex items-center justify-between gap-4"><div><p className="text-sm font-semibold">Separate voicemail greeting</p><p className={`mt-1 text-xs ${muted}`}>Used only when a caller reaches the Privacy Line.</p></div><Switch checked={enabled} onCheckedChange={(value) => { setEnabled(value); if (value && greetingType !== "AUDIO") setGreetingType("TEXT"); }} /></div>
+    {enabled && <div className="mt-4 flex gap-2"><Button type="button" size="sm" variant={greetingType === "TEXT" ? "default" : "outline"} onClick={() => setGreetingType("TEXT")}>Typed greeting</Button><Button type="button" size="sm" variant={greetingType === "AUDIO" ? "default" : "outline"} onClick={() => setGreetingType("AUDIO")}>Recorded or uploaded audio</Button></div>}
     {enabled && greetingType === "TEXT" && <Label className="mt-4 block">Greeting text<textarea value={text} onChange={(event) => setText(event.target.value)} className="mt-2 min-h-24 w-full rounded-md border bg-transparent p-3" placeholder="Please leave a message after the tone." /></Label>}
-    {enabled && greetingType === "AUDIO" && <p className={`mt-4 rounded-lg border p-3 text-xs ${muted}`}>The existing audio greeting is preserved. Audio replacement is available only through the approved greeting upload flow.</p>}
-    {enabled && greetingType === "AUDIO" && <button type="button" className={`mt-3 text-xs font-semibold underline ${dark ? "text-sky-200" : "text-emerald-700"}`} onClick={() => setGreetingType("TEXT")}>Replace with typed greeting</button>}
+    {enabled && greetingType === "AUDIO" && <GreetingAudioInput dark={dark} audioUrl={audioUrl} previewUrl={previewUrl} onUploaded={(upload) => { setAudioUrl(upload.audioUrl); setPreviewUrl(upload.previewUrl); }} />}
     {save.isError && <p role="alert" className="mt-3 text-sm text-rose-600">Privacy Line settings could not be saved. Please try again.</p>}
     <Button className={`mt-5 ${accent}`} disabled={save.isPending} onClick={() => save.mutate()}><Save className="mr-2 h-4 w-4" />{save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save Privacy Line"}</Button>
   </section>;

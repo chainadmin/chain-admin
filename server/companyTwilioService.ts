@@ -133,8 +133,8 @@ export async function resolveCompanyTwilioAccount(
     if (current?.sid) return;
     await tx.update(tenants).set({
       twilioAccountSid: created.sid,
-      // Kept for the existing tenant-isolated SMS client. New Voice operations use
-      // the master credential with the subaccount SID and never expose this value.
+      // Runtime Voice operations strictly decrypt this tenant credential; master
+      // credentials remain limited to provisioning and resource administration.
       twilioAuthToken: created.authToken ? encryptCredential(created.authToken) : tenant.authToken,
       twilioSubaccountStatus: created.status || 'active',
     }).where(eq(tenants.id, tenantId));
@@ -168,6 +168,38 @@ export async function getCompanyTwilioClient(tenantId: string, createIfMissing =
   if (!masterSid || !masterToken) throw new Error('Twilio master credentials are not configured');
   const account = await resolveCompanyTwilioAccount(tenantId, { createIfMissing });
   return twilio(masterSid, masterToken, { accountSid: account.subaccountSid, timeout: TWILIO_PROVIDER_TIMEOUT_MS });
+}
+
+export type CompanyTwilioRuntimeCredentials = {
+  accountSid: string;
+  authToken: string;
+};
+
+/**
+ * Runtime Voice traffic must authenticate as the tenant subaccount itself. It
+ * must never provision an account or silently fall back to master credentials.
+ */
+export async function resolveCompanyTwilioRuntimeCredentials(
+  tenantId: string,
+): Promise<CompanyTwilioRuntimeCredentials> {
+  const [tenant] = await db.select({
+    accountSid: tenants.twilioAccountSid,
+    encryptedAuthToken: tenants.twilioAuthToken,
+  }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+  if (!tenant) throw new Error('Organization not found');
+  if (!tenant.accountSid) throw new Error('Organization Voice credentials are not configured');
+  const authToken = decryptEncryptedCredentialOrNull(tenant.encryptedAuthToken);
+  if (!authToken) throw new Error('Organization Voice credentials are unavailable');
+  return { accountSid: tenant.accountSid, authToken };
+}
+
+export async function getCompanyTwilioRuntimeClient(
+  tenantId: string,
+  credentialsResolver: (tenantId: string) => Promise<CompanyTwilioRuntimeCredentials>
+    = resolveCompanyTwilioRuntimeCredentials,
+): Promise<twilio.Twilio> {
+  const credentials = await credentialsResolver(tenantId);
+  return twilio(credentials.accountSid, credentials.authToken, { timeout: TWILIO_PROVIDER_TIMEOUT_MS });
 }
 
 /** Conservative removal cleanup: suspend only; numbers, recordings and ports stay intact. */

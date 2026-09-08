@@ -62,6 +62,7 @@ export function useAuth() {
               tenantId: payload.tenantId,
               tenantSlug: tenantSlug,
               tenantName: tenantName,
+              product: payload.product,
               role: payload.role || 'agent',
               email: payload.email,
               username: payload.username,

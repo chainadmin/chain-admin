@@ -35,7 +35,7 @@ import {
 } from "@/lib/softphone-call-lifecycle";
 import { cancelReconnect, requestReconnect, retainAgentCall } from "@/lib/softphone-call-requests";
 import { updateLiveDeviceToken } from "@/lib/softphone-call-device";
-import { SoftphoneOutboundCallCoordinator, type AbortableAttempt } from "@/lib/softphone-outbound-call";
+import { completeOutboundAttempt, SoftphoneOutboundCallCoordinator, type AbortableAttempt } from "@/lib/softphone-outbound-call";
 import { ConnectPhoneWorkspace } from "@/components/softphone/ConnectPhoneWorkspace";
 import { privacyLineNumber, type PrivacyLineResponse } from "@/components/voip/privacy-line";
 
@@ -603,8 +603,13 @@ export default function SoftphonePage() {
       setCallState("connecting");
     },
     onError: (error: Error, variables) => {
-      if (!outboundRef.current.isCurrent(variables.attempt)) return;
-      outboundRef.current.complete(variables.attempt);
+      const wasCurrent = completeOutboundAttempt(outboundRef.current, variables.attempt, () => {
+        // onSettled preserves stale-attempt fencing and therefore cannot do
+        // this after complete() has invalidated the failing attempt.
+        dialLockRef.current = false;
+        setIsDialPreparing(false);
+      });
+      if (!wasCurrent) return;
       setCallState("idle");
       if (error.name !== "AbortError") setStableStatus(providerErrorMessage(error, "call"));
     },

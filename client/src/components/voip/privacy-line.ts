@@ -9,6 +9,7 @@ export type PrivacyGreeting = {
   type?: "TEXT" | "AUDIO" | null;
   text?: string | null;
   audioUrl?: string | null;
+  previewUrl?: string | null;
 };
 
 export type PrivacyLineResponse = {
@@ -41,6 +42,8 @@ export function privacyGreeting(value?: PrivacyLineResponse | null): PrivacyGree
     enabled: value?.greetingEnabled,
     type: value?.greetingType,
     text: value?.greetingText,
+    audioUrl: null,
+    previewUrl: null,
   };
 }
 

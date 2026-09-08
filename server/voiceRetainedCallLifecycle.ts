@@ -12,6 +12,13 @@ export type RetentionReconciliationStatus = 'FAILED' | 'ACTIVE' | 'COMPLETED';
 
 const TERMINAL_PROVIDER_STATUSES = new Set(['completed', 'canceled', 'failed', 'busy', 'no-answer']);
 
+/** Only a synchronous, non-retryable provider rejection proves no redirect was accepted. */
+export function isDefiniteProviderRejection(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const status = Number((error as { status?: unknown }).status);
+  return Number.isInteger(status) && status >= 400 && status < 500 && status !== 408 && status !== 429;
+}
+
 export function reconcilePreparedRetention(
   activeLegStatus: string,
   retainedLegStatus: string,

@@ -2601,6 +2601,12 @@ export async function runMigrations() {
       );
     `);
     await client.query(`
+      ALTER TABLE voip_call_logs ADD COLUMN IF NOT EXISTS inbound_phone_number_id UUID REFERENCES voip_phone_numbers(id) ON DELETE SET NULL;
+      ALTER TABLE voip_call_logs ADD COLUMN IF NOT EXISTS inbound_routing_bucket_id UUID REFERENCES voip_routing_buckets(id) ON DELETE SET NULL;
+      ALTER TABLE voip_call_logs ADD COLUMN IF NOT EXISTS is_privacy_inbound BOOLEAN NOT NULL DEFAULT false;
+      CREATE INDEX IF NOT EXISTS voip_call_logs_tenant_call_sid_idx ON voip_call_logs(tenant_id, call_sid);
+    `);
+    await client.query(`
       ALTER TABLE voip_tenant_settings ADD COLUMN IF NOT EXISTS privacy_line_phone_number_id UUID REFERENCES voip_phone_numbers(id) ON DELETE SET NULL;
       ALTER TABLE voip_tenant_settings ADD COLUMN IF NOT EXISTS privacy_voicemail_greeting_type TEXT;
       ALTER TABLE voip_tenant_settings ADD COLUMN IF NOT EXISTS privacy_voicemail_greeting_text TEXT;

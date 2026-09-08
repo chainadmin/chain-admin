@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { chiamoActivationPayload, chiamoCreatePayload, chiamoPasswordPayload, request } from "./chiamo-users";
+import { chiamoActivationPayload, chiamoCreatePayload, chiamoPasswordPayload, chiamoUserManagementPath, request } from "./chiamo-users";
+
+test("generic settings routes only Chiamo sessions to the safe user manager",()=>{
+  assert.equal(chiamoUserManagementPath("chiamo"),"/users");
+  assert.equal(chiamoUserManagementPath("chain"),null);
+  assert.equal(chiamoUserManagementPath(undefined),null);
+});
 
 test("active-user UI payload omits activation-only price confirmation",()=>{
   assert.deepEqual(chiamoActivationPayload({id:"member",isActive:true}),{id:"member",isActive:false});

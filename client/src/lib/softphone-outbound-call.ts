@@ -55,3 +55,19 @@ export class SoftphoneOutboundCallCoordinator {
     if (this.current?.call === call) this.current = null;
   }
 }
+
+/**
+ * Releases UI preparation state only for the attempt that still owns it.
+ * The release happens before fencing the coordinator, because mutation
+ * onSettled intentionally ignores attempts that have already been completed.
+ */
+export function completeOutboundAttempt(
+  coordinator: SoftphoneOutboundCallCoordinator,
+  attempt: AbortableAttempt,
+  release: () => void,
+): boolean {
+  if (!coordinator.isCurrent(attempt)) return false;
+  release();
+  coordinator.complete(attempt);
+  return true;
+}

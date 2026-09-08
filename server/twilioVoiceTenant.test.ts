@@ -57,6 +57,21 @@ test('provider readiness accepts only decryptable encrypted secrets', async () =
   assert.equal(decryptEncryptedCredentialOrNull('enc:v1:not-valid'), null);
 });
 
+test('runtime client uses only resolved tenant credentials with no master fallback', async () => {
+  process.env.TWILIO_ACCOUNT_SID = 'AC-master-must-not-be-used';
+  process.env.TWILIO_AUTH_TOKEN = 'master-token-must-not-be-used';
+  const { getCompanyTwilioRuntimeClient } = await import('./companyTwilioService');
+  const requested: string[] = [];
+  const client = await getCompanyTwilioRuntimeClient('tenant-runtime', async tenantId => {
+    requested.push(tenantId);
+    return { accountSid: 'AC-tenant-runtime', authToken: 'tenant-runtime-token' };
+  });
+  assert.deepEqual(requested, ['tenant-runtime']);
+  assert.equal((client as any).username, 'AC-tenant-runtime');
+  assert.equal((client as any).password, 'tenant-runtime-token');
+  assert.notEqual((client as any).username, process.env.TWILIO_ACCOUNT_SID);
+});
+
 test('malformed encrypted Voice secrets enter the controlled API-key replacement flow', async () => {
   process.env.JWT_SECRET ||= 'synthetic-test-encryption-key';
   const { decryptEncryptedCredentialOrNull } = await import('./credentialCrypto');

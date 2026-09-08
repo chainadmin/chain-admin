@@ -4,11 +4,20 @@ import {
   beginReconnect,
   classifyRetainedCallback,
   hashReconnectToken,
+  isDefiniteProviderRejection,
   isIdempotentCancelState,
   reconcilePreparedRetention,
   reconnectTokenSchema,
   runDurableRetentionStart,
 } from './voiceRetainedCallLifecycle';
+
+test('definite provider rejection is fenced while timeout remains reconcilable', () => {
+  assert.equal(isDefiniteProviderRejection({ status: 401, message: 'authentication failed' }), true);
+  assert.equal(isDefiniteProviderRejection({ status: 400, code: 21220 }), true);
+  assert.equal(isDefiniteProviderRejection({ status: 408, message: 'request timeout' }), false);
+  assert.equal(isDefiniteProviderRejection({ status: 429, message: 'retry later' }), false);
+  assert.equal(isDefiniteProviderRejection(Object.assign(new Error('socket timeout'), { code: 'ETIMEDOUT' })), false);
+});
 
 test('reconnect intention nonce must be a UUID and is stored only as a hash', () => {
   const token = '434c518b-cc43-4fa6-85d6-22e2e0586930';

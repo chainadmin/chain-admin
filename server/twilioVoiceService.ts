@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import AccessToken from 'twilio/lib/jwt/AccessToken.js';
 import {
   getCompanyTwilioClient,
+  getCompanyTwilioRuntimeClient,
   resolveCompanyTwilioAccount,
   resolveCompanyTwilioVoiceConfiguration,
   voiceWebhookBaseUrl,
@@ -65,7 +66,7 @@ export async function initiateOutboundCall(
   toNumber: string,
   fromNumber: string,
   callbackUrl: string,
-  clientFactory: CompanyTwilioClientFactory = getCompanyTwilioClient,
+  clientFactory: CompanyTwilioClientFactory = getCompanyTwilioRuntimeClient,
 ): Promise<{ callSid: string; status: string } | null> {
   try {
     const client = await clientFactory(tenantId);
@@ -92,7 +93,7 @@ export async function initiateOutboundCall(
 export async function getRecordingUrl(
   tenantId: string,
   recordingSid: string,
-  clientFactory: CompanyTwilioClientFactory = getCompanyTwilioClient,
+  clientFactory: CompanyTwilioClientFactory = getCompanyTwilioRuntimeClient,
 ): Promise<string | null> {
   try {
     const client = await clientFactory(tenantId);
@@ -107,7 +108,7 @@ export async function getRecordingUrl(
 export async function hangupCall(
   tenantId: string,
   callSid: string,
-  clientFactory: CompanyTwilioClientFactory = getCompanyTwilioClient,
+  clientFactory: CompanyTwilioClientFactory = getCompanyTwilioRuntimeClient,
 ): Promise<boolean> {
   try {
     const client = await clientFactory(tenantId);
