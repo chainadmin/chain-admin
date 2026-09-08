@@ -4,6 +4,8 @@ import {
   DebtManagerProService,
   DmpImportError,
   normalizeDmpList,
+  REDACTED_DMP_PASSWORD,
+  sanitizeDmpTestOverrides,
 } from './dmpService';
 import { importDmpAccounts } from './dmpAccountImport';
 import { storage } from './storage';
@@ -55,6 +57,76 @@ test('connection test fails when DMP returns a truthy non-list object', async ()
     const result = await new DebtManagerProService().testConnection('tenant-1');
     assert.equal(result.success, false);
     assert.match(result.message, /unsupported portfolios response format/);
+  } finally {
+    storage.getTenantSettings = originalSettings;
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('DMP connection-test overrides use entered values without replacing a saved masked password', () => {
+  assert.deepEqual(sanitizeDmpTestOverrides({
+    dmpEnabled: true,
+    dmpApiUrl: ' https://new-dmp.example/ ',
+    dmpUsername: ' new-user ',
+    dmpPassword: ' new-password ',
+  }), {
+    enabled: true,
+    apiUrl: 'https://new-dmp.example/',
+    username: 'new-user',
+    password: 'new-password',
+  });
+  assert.deepEqual(sanitizeDmpTestOverrides({
+    dmpPassword: REDACTED_DMP_PASSWORD,
+  }), {});
+  assert.deepEqual(sanitizeDmpTestOverrides({
+    dmpPassword: '   ',
+  }), {});
+});
+
+test('connection test authenticates with unsaved form overrides and leaves saved settings untouched', async () => {
+  const originalSettings = storage.getTenantSettings;
+  const originalFetch = globalThis.fetch;
+  let settingsReads = 0;
+  const requests: Array<{ url: string; body?: unknown }> = [];
+  storage.getTenantSettings = (async () => {
+    settingsReads++;
+    return {
+      dmpEnabled: false,
+      dmpApiUrl: 'https://saved.example',
+      dmpUsername: 'saved-user',
+      dmpPassword: 'saved-password',
+    };
+  }) as typeof storage.getTenantSettings;
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    requests.push({
+      url,
+      body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined,
+    });
+    return url.endsWith('/api/v2/login')
+      ? new Response(JSON.stringify({ token: 'test-token' }), { status: 200 })
+      : new Response(JSON.stringify([{ id: 'portfolio-1', name: 'Primary' }]), { status: 200 });
+  }) as typeof fetch;
+
+  try {
+    const result = await new DebtManagerProService().testConnection('tenant-1', {
+      enabled: true,
+      apiUrl: 'https://entered.example',
+      username: 'entered-user',
+      password: 'entered-password',
+    });
+    assert.equal(result.success, true);
+    assert.equal(settingsReads, 1);
+    assert.deepEqual(requests, [
+      {
+        url: 'https://entered.example/api/v2/login',
+        body: { username: 'entered-user', password: 'entered-password' },
+      },
+      {
+        url: 'https://entered.example/api/v2/getportfoliolist',
+        body: undefined,
+      },
+    ]);
   } finally {
     storage.getTenantSettings = originalSettings;
     globalThis.fetch = originalFetch;

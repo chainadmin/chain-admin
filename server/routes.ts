@@ -10184,6 +10184,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Redact sensitive SMAX credentials in response
         smaxApiKey: settings?.smaxApiKey ? '••••••••' : '',
         smaxPin: settings?.smaxPin ? '••••••••' : '',
+        dmpPassword: settings?.dmpPassword ? '••••••••' : '',
       };
 
       const maskedSettings = { ...combinedSettings } as typeof combinedSettings;
@@ -10339,6 +10340,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         customSenderEmail,
         smaxApiKey,
         smaxPin,
+        dmpPassword,
         merchantApiKey,
         merchantApiPin,
         authnetApiLoginId,
@@ -10352,6 +10354,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const currentSettings = await storage.getTenantSettings(tenantId);
       const finalSmaxApiKey = (smaxApiKey && smaxApiKey !== '••••••••') ? smaxApiKey?.trim() : currentSettings?.smaxApiKey;
       const finalSmaxPin = (smaxPin && smaxPin !== '••••••••') ? smaxPin?.trim() : currentSettings?.smaxPin;
+      const finalDmpPassword = (
+        typeof dmpPassword === 'string'
+        && dmpPassword.trim()
+        && dmpPassword !== '••••••••'
+      ) ? dmpPassword.trim() : currentSettings?.dmpPassword;
 
       // Preserve USAePay credentials if they're submitted as masked values
       let finalMerchantApiKey = merchantApiKey?.trim();
@@ -10444,6 +10451,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         smaxPin: finalSmaxPin,
         tenantId: tenantId,
       };
+      if (dmpPassword !== undefined) {
+        tenantSettingsPayload.dmpPassword = finalDmpPassword || null;
+      }
 
       // Add USAePay credentials to payload if provided
       if (merchantApiKey !== undefined) {
@@ -11153,10 +11163,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ message: "No tenant access" });
       }
 
-      const { dmpService } = await import('./dmpService');
-      // Test the same saved configuration used by imports. Unsaved form
-      // credentials must not make the test pass while the import later fails.
-      const result = await dmpService.testConnection(tenantId);
+      const { dmpService, sanitizeDmpTestOverrides } = await import('./dmpService');
+      // Test the values currently shown in the form. A redacted or blank
+      // password intentionally falls back to the saved tenant credential.
+      const result = await dmpService.testConnection(
+        tenantId,
+        sanitizeDmpTestOverrides(req.body),
+      );
 
       res.json(result);
     } catch (error: any) {

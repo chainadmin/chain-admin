@@ -7,6 +7,28 @@ interface DmpConfig {
   password: string;
 }
 
+export const REDACTED_DMP_PASSWORD = '••••••••';
+
+export function sanitizeDmpTestOverrides(input: unknown): Partial<DmpConfig> {
+  const value = input && typeof input === 'object'
+    ? input as Record<string, unknown>
+    : {};
+  const overrides: Partial<DmpConfig> = {};
+
+  if (typeof value.dmpEnabled === 'boolean') overrides.enabled = value.dmpEnabled;
+  if (typeof value.dmpApiUrl === 'string') overrides.apiUrl = value.dmpApiUrl.trim();
+  if (typeof value.dmpUsername === 'string') overrides.username = value.dmpUsername.trim();
+  if (
+    typeof value.dmpPassword === 'string'
+    && value.dmpPassword.trim()
+    && value.dmpPassword !== REDACTED_DMP_PASSWORD
+  ) {
+    overrides.password = value.dmpPassword.trim();
+  }
+
+  return overrides;
+}
+
 interface DmpAuthResponse {
   token?: string;
   access_token?: string;

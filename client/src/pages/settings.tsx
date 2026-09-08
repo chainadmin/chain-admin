@@ -2683,7 +2683,12 @@ export default function Settings() {
                           type="button"
                           onClick={async () => {
                             try {
-                              const response = await apiRequest("POST", "/api/settings/test-dmp", {});
+                              const response = await apiRequest("POST", "/api/settings/test-dmp", {
+                                dmpEnabled: Boolean((localSettings as any)?.dmpEnabled),
+                                dmpApiUrl: (localSettings as any)?.dmpApiUrl || "",
+                                dmpUsername: (localSettings as any)?.dmpUsername || "",
+                                dmpPassword: (localSettings as any)?.dmpPassword || "",
+                              });
                               const result = await response.json();
 
                               if (result.success) {
