@@ -478,6 +478,15 @@ export const requireOwner: RequestHandler = async (req: any, res, next) => {
   }
 };
 
+/** Voice configuration is tenant-scoped and may be managed by an owner or manager.
+ * This is intentionally separate from requireOwner, which protects billing and
+ * other owner-only administrative operations. */
+export const requireVoiceManagement: RequestHandler = (req: any, res, next) => {
+  if (!req.user?.tenantId) return res.status(401).json({ message: "Unauthorized" });
+  if (['owner', 'manager', 'platform_admin'].includes(String(req.user.role || ''))) return next();
+  return res.status(403).json({ message: "Only company owners and managers can manage Voice settings." });
+};
+
 // Middleware to check if user has access to a specific service (not in restrictedServices)
 export const requireServiceAccess = (serviceName: string): RequestHandler => {
   return async (req: any, res, next) => {

@@ -126,7 +126,7 @@ export function ConnectPhoneWorkspace(props: Props) {
                     return waiting ? <div key={waiting.id} className="flex min-w-0 items-center gap-2 rounded-lg border border-[#75cdbc]/40 bg-[#0a514a] p-2">
                       <PhoneIncoming size={14} className="shrink-0 animate-pulse text-[#75cdbc]" />
                       <div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold">{waiting.callerName || waiting.callerNumber || "Unknown caller"}</p><p className="truncate font-mono text-[10px] text-[#a9d8cc]">Ringing · {waiting.callerNumber}</p></div>
-                      <button type="button" disabled={!!props.handoffCall} aria-label={`End active call and answer ${waiting.callerName || waiting.callerNumber || "unknown caller"}`} onClick={() => props.onEndAndAnswer(waiting)} className="min-h-11 shrink-0 rounded-md bg-[#75cdbc] px-2.5 py-2 text-xs font-bold text-[#073f3a] disabled:opacity-50">{handingOff ? "Answering…" : "End & answer"}</button>
+                      <button type="button" disabled={!!props.handoffCall || props.isRetentionPending} aria-label={`End active call and answer ${waiting.callerName || waiting.callerNumber || "unknown caller"}`} onClick={() => props.onEndAndAnswer(waiting)} className="min-h-11 shrink-0 rounded-md bg-[#75cdbc] px-2.5 py-2 text-xs font-bold text-[#073f3a] disabled:opacity-50">{handingOff ? "Answering…" : props.isRetentionPending ? "Securing call…" : "End & answer"}</button>
                     </div> : <div key={index} className="flex min-h-12 items-center rounded-lg border border-dashed border-white/10 px-2 text-[10px] text-[#77a69a]">Line {index + 1} available</div>;
                   })}
                 </div>

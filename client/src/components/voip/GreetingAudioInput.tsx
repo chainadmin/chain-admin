@@ -20,7 +20,12 @@ export function GreetingAudioInput({ audioUrl, previewUrl, dark = false, onUploa
   const samplesRef = useRef<Float32Array[]>([]);
   const sampleCountRef = useRef(0);
   const mountedRef = useRef(true);
+  // This is deliberately a ref rather than state: state is not updated until
+  // after the click handler returns, leaving a double-click race otherwise.
+  const acquisitionPendingRef = useRef(false);
+  const captureGenerationRef = useRef(0);
   const [recording, setRecording] = useState(false);
+  const [acquiring, setAcquiring] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [localUrl, setLocalUrl] = useState("");
@@ -29,18 +34,23 @@ export function GreetingAudioInput({ audioUrl, previewUrl, dark = false, onUploa
   const playerRef = useRef<HTMLAudioElement | null>(null);
 
   const cleanupCapture = () => {
-    processorRef.current?.disconnect();
-    sourceRef.current?.disconnect();
-    streamRef.current?.getTracks().forEach((track) => track.stop());
+    try { processorRef.current?.disconnect(); } catch {}
+    try { sourceRef.current?.disconnect(); } catch {}
+    try {
+      streamRef.current?.getTracks().forEach((track) => {
+        try { track.stop(); } catch {}
+      });
+    } catch {}
     processorRef.current = null;
     sourceRef.current = null;
     streamRef.current = null;
-    if (audioContextRef.current) void audioContextRef.current.close();
+    try { if (audioContextRef.current) void audioContextRef.current.close().catch(() => {}); } catch {}
     audioContextRef.current = null;
   };
 
   useEffect(() => () => {
     mountedRef.current = false;
+    captureGenerationRef.current += 1;
     cleanupCapture();
     playerRef.current?.pause();
     if (localUrlRef.current) URL.revokeObjectURL(localUrlRef.current);
@@ -49,6 +59,7 @@ export function GreetingAudioInput({ audioUrl, previewUrl, dark = false, onUploa
   }, []);
 
   const upload = async (file: File) => {
+    if (!mountedRef.current) return;
     if (file.size > MAX_GREETING_AUDIO_BYTES) {
       setError("Audio must be smaller than 10 MB.");
       return;
@@ -70,29 +81,45 @@ export function GreetingAudioInput({ audioUrl, previewUrl, dark = false, onUploa
   };
 
   const stopRecording = async () => {
+    captureGenerationRef.current += 1;
     const sampleRate = audioContextRef.current?.sampleRate || 44100;
     cleanupCapture();
-    setRecording(false);
+    if (mountedRef.current) setRecording(false);
     if (!samplesRef.current.length) return;
     const blob = pcmToWav(samplesRef.current, sampleRate);
     if (localUrlRef.current) URL.revokeObjectURL(localUrlRef.current);
     const nextLocalUrl = URL.createObjectURL(blob);
     localUrlRef.current = nextLocalUrl;
+    if (!mountedRef.current) {
+      URL.revokeObjectURL(nextLocalUrl);
+      localUrlRef.current = "";
+      return;
+    }
     setLocalUrl(nextLocalUrl);
     await upload(new File([blob], "greeting-recording.wav", { type: "audio/wav" }));
   };
 
   const startRecording = async () => {
+    if (acquisitionPendingRef.current || recording || streamRef.current || audioContextRef.current) return;
+    acquisitionPendingRef.current = true;
+    const generation = ++captureGenerationRef.current;
     setError("");
+    setAcquiring(true);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      if (!mountedRef.current) {
-        stream.getTracks().forEach((track) => track.stop());
+      // Register each resource before any operation that can throw, so every
+      // partial setup is owned by cleanupCapture.
+      streamRef.current = stream;
+      if (!mountedRef.current || captureGenerationRef.current !== generation) {
+        cleanupCapture();
         return;
       }
       const context = new AudioContext();
+      audioContextRef.current = context;
       const source = context.createMediaStreamSource(stream);
+      sourceRef.current = source;
       const processor = context.createScriptProcessor(4096, 1, 1);
+      processorRef.current = processor;
       samplesRef.current = [];
       sampleCountRef.current = 0;
       processor.onaudioprocess = (event) => {
@@ -107,14 +134,17 @@ export function GreetingAudioInput({ audioUrl, previewUrl, dark = false, onUploa
       };
       source.connect(processor);
       processor.connect(context.destination);
-      streamRef.current = stream;
-      audioContextRef.current = context;
-      sourceRef.current = source;
-      processorRef.current = processor;
+      if (!mountedRef.current || captureGenerationRef.current !== generation) {
+        cleanupCapture();
+        return;
+      }
       setRecording(true);
     } catch (caught) {
       cleanupCapture();
-      setError(caught instanceof Error ? "Microphone access was not available." : "Microphone access was not available.");
+      if (mountedRef.current) setError(caught instanceof Error ? "Microphone access was not available." : "Microphone access was not available.");
+    } finally {
+      acquisitionPendingRef.current = false;
+      if (mountedRef.current) setAcquiring(false);
     }
   };
 
@@ -136,6 +166,9 @@ export function GreetingAudioInput({ audioUrl, previewUrl, dark = false, onUploa
       if (!["audio/mpeg", "audio/wav", "audio/x-wav"].includes(file.type) && !/\.(mp3|wav)$/i.test(file.name)) {
         setError("Choose an MP3 or WAV file.");
       } else {
+        // A file replacement supersedes an unresolved microphone request.
+        // Its late stream is stopped before it can create an AudioContext.
+        captureGenerationRef.current += 1;
         if (localUrlRef.current) URL.revokeObjectURL(localUrlRef.current);
         const nextLocalUrl = URL.createObjectURL(file);
         localUrlRef.current = nextLocalUrl;
@@ -155,10 +188,10 @@ export function GreetingAudioInput({ audioUrl, previewUrl, dark = false, onUploa
       {hasAudio && <span className={`inline-flex items-center gap-1 text-xs font-semibold ${dark ? "text-sky-200" : "text-emerald-700"}`}><Check className="h-3.5 w-3.5" />Ready to save</span>}
     </div>
     <div className="mt-3 flex flex-wrap gap-2">
-      <Button type="button" size="sm" variant={recording ? "destructive" : "outline"} disabled={uploading} onClick={() => { if (recording) void stopRecording(); else void startRecording(); }}>
-        {recording ? <Square className="mr-2 h-3.5 w-3.5" /> : <Mic className="mr-2 h-3.5 w-3.5" />}{recording ? "Stop recording" : "Record greeting"}
+      <Button type="button" size="sm" variant={recording ? "destructive" : "outline"} disabled={uploading || acquiring} onClick={() => { if (recording) void stopRecording(); else void startRecording(); }}>
+        {recording ? <Square className="mr-2 h-3.5 w-3.5" /> : <Mic className="mr-2 h-3.5 w-3.5" />}{recording ? "Stop recording" : acquiring ? "Opening microphone…" : "Record greeting"}
       </Button>
-      <Button type="button" size="sm" variant="outline" disabled={recording || uploading} onClick={() => inputRef.current?.click()}><Upload className="mr-2 h-3.5 w-3.5" />Replace with file</Button>
+      <Button type="button" size="sm" variant="outline" disabled={recording || acquiring || uploading} onClick={() => inputRef.current?.click()}><Upload className="mr-2 h-3.5 w-3.5" />Replace with file</Button>
       {hasAudio && <Button type="button" size="sm" variant="outline" disabled={uploading} onClick={playing ? () => { playerRef.current?.pause(); setPlaying(false); } : play}>{playing ? <Pause className="mr-2 h-3.5 w-3.5" /> : <Play className="mr-2 h-3.5 w-3.5" />}{playing ? "Stop preview" : "Preview audio"}</Button>}
       {uploading && <span className={`flex items-center text-xs ${muted}`}><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />Uploading</span>}
     </div>

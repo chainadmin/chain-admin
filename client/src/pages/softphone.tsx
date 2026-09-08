@@ -575,6 +575,12 @@ export default function SoftphonePage() {
   };
 
   const handleEndAndAnswer = (waiting: WaitingCall) => {
+    // The provider must acknowledge hold/park before the old leg is released.
+    // Do not let a waiting-call handoff bypass that retention boundary.
+    if (retentionLockRef.current || isRetentionPending) {
+      setStableStatus("Please wait for the hold or park request to finish before answering another caller.");
+      return;
+    }
     setHandoffCall(waiting.call);
     if (!lifecycleRef.current.endActiveAndAcceptIncoming(waiting.call)) {
       setHandoffCall((current) => current === waiting.call ? null : current);

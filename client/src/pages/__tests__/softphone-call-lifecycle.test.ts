@@ -124,6 +124,38 @@ test("unrelated and stale retained incoming calls are never auto-accepted", () =
   assert.equal(staleSession.rejected, 1);
 });
 
+test("an exact retained recovery is accepted with queued callers, while wrong and late recovery legs stay fenced", async () => {
+  const { controller, events } = controllerHarness();
+  const cancellations: PendingReconnect[] = [];
+  controller.beginReconnect("held", "held-queued", "expected-nonce", "Caller", "+1555", {
+    timeoutMs: 60_000,
+    cancel: async (pending) => { cancellations.push(pending); },
+  });
+  const waiting = new FakeCall({ sid: "ordinary-waiting" });
+  assert.equal(controller.receiveIncoming(waiting), "incoming");
+
+  const wrong = new FakeCall({ retainedId: "held-queued", token: "wrong-nonce" });
+  assert.equal(controller.receiveIncoming(wrong), "rejected");
+  assert.equal(wrong.rejected, 1);
+
+  const recovery = new FakeCall({ retainedId: "held-queued", token: "expected-nonce" });
+  assert.equal(controller.receiveIncoming(recovery), "recovered");
+  assert.equal(recovery.accepted, 1);
+  assert.equal(waiting.accepted, 0);
+  recovery.emit("accept");
+  assert.equal(controller.getActiveCall(), recovery);
+  assert.deepEqual(events.active, [recovery]);
+  assert.equal(controller.getIncomingCalls()[0], waiting);
+
+  recovery.emit("disconnect");
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(cancellations.length, 0);
+  const late = new FakeCall({ retainedId: "held-queued", token: "expected-nonce" });
+  assert.equal(controller.receiveIncoming(late), "rejected");
+  assert.equal(late.rejected, 1);
+});
+
 test("manual incoming call is not active until its SDK accept event", () => {
   const { controller, events } = controllerHarness();
   const incoming = new FakeCall();

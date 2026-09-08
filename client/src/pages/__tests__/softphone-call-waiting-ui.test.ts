@@ -90,6 +90,13 @@ test("four occupied slots identify ringing callers and expose exact end-and-answ
   assert.doesNotMatch(html, /Line \d available/);
 });
 
+test("pending hold or park visibly blocks end-and-answer until retention is acknowledged", () => {
+  const html = renderWaiting(1, { isRetentionPending: true });
+  assert.match(html, /disabled=""/);
+  assert.match(html, /Securing call…/);
+  assert.doesNotMatch(html, /End &amp; answer/);
+});
+
 test("a delayed waiting-call handoff cannot be falsely canceled or race outbound dialing", () => {
   const selected = call("CA-selected");
   const html = renderWaiting(0, {

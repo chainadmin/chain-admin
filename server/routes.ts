@@ -5,7 +5,7 @@ import { SignedDocumentRetentionError, storage, type IStorage } from "./storage"
 import { ACCOUNT_STATUSES, isAccountStatus } from "../shared/constants";
 import { ANDROID_APP_URL, IOS_APP_URL } from "../shared/constants/appStoreLinks";
 import { voipStorage } from "./voipStorage";
-import { authenticateUser, authenticateConsumer, getCurrentUser, requireEmailService, requireSmsService, requirePortalAccess, requirePaymentProcessing, requireOwner, requireServiceAccess, requireVoiceProduct } from "./authMiddleware";
+import { authenticateUser, authenticateConsumer, getCurrentUser, requireEmailService, requireSmsService, requirePortalAccess, requirePaymentProcessing, requireOwner, requireServiceAccess, requireVoiceManagement, requireVoiceProduct } from "./authMiddleware";
 import { postmarkServerService } from "./postmarkServerService";
 import {
   insertConsumerSchema,
@@ -26419,6 +26419,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
           const { voiceWebhookBaseUrl } = await import('./companyTwilioService');
           return res.send(buildWaitingMusicTwiML(restored.musicKey, voiceWebhookBaseUrl()));
         }
+        // Twilio can retry the same signed Dial action callback after the first
+        // update succeeded. The token remains on ACTIVE during the grace period,
+        // so return the identical treatment only for that exact current claim.
+        if (
+          record.status === 'ACTIVE'
+          && !record.reconnectAnsweredAt
+          && record.reconnectExpiresAt
+          && record.reconnectExpiresAt.getTime() > Date.now()
+        ) {
+          const { buildWaitingMusicTwiML } = await import('./voiceCallTreatment');
+          const { voiceWebhookBaseUrl } = await import('./companyTwilioService');
+          return res.send(buildWaitingMusicTwiML(record.musicKey, voiceWebhookBaseUrl()));
+        }
       }
       return res.send('<Response/>');
     } catch (error) {
@@ -26576,7 +26589,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/voip/settings/greeting-audio', requireOwner, voiceGreetingUpload.single('audio'), async (req, res) => {
+  app.post('/api/voip/settings/greeting-audio', requireVoiceManagement, voiceGreetingUpload.single('audio'), async (req, res) => {
     const user = await getCurrentUser(req);
     if (!user) return res.status(401).json({ message: 'Unauthorized' });
     if (!req.file) return res.status(400).json({ message: 'An MP3 or WAV audio file up to 10 MB is required' });

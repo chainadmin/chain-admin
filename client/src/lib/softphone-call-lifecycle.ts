@@ -182,8 +182,7 @@ export class SoftphoneCallController {
         pending.expiresAt > now &&
         !pending.cancelRequested &&
         !this.activeCall &&
-        !this.acceptingCall &&
-        this.incomingCalls.length === 0;
+        !this.acceptingCall;
       if (!matched) {
         this.safeReject(call);
         return "rejected";
