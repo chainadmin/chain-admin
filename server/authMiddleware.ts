@@ -6,9 +6,12 @@ import {
   isServiceRestrictedForMember,
 } from "@shared/utils/messagingAccess";
 import { canAgencyProductAccessPath, type AgencyProduct } from "@shared/productRouteAccess";
+import { db } from "./db";
+import { chiamoServiceConfigurations } from "@shared/chiamo-schema";
+import { eq } from "drizzle-orm";
 
 function enforceProductRoute(req: any, res: any, product: AgencyProduct): boolean {
-  if (canAgencyProductAccessPath(product, req.path)) return true;
+  if (canAgencyProductAccessPath(product, (req.originalUrl || req.url || req.path || "/").split("?")[0])) return true;
   res.status(403).json({
     code: "PRODUCT_ROUTE_FORBIDDEN",
     message: "This API is not available to the signed-in product.",
@@ -47,6 +50,15 @@ export const authenticateUser: RequestHandler = async (req: any, res, next) => {
       ) {
         return res.status(401).json({ message: `${product === 'chain' ? 'Chain' : 'Chiamo'} access is no longer active` });
       }
+      if (product === "chiamo") {
+        const [service] = await db.select({
+          accountActive: chiamoServiceConfigurations.accountActive,
+          explicitLoginDisabled: chiamoServiceConfigurations.explicitLoginDisabled,
+        }).from(chiamoServiceConfigurations).where(eq(chiamoServiceConfigurations.tenantId, decoded.tenantId)).limit(1);
+        if (service?.accountActive === false || service?.explicitLoginDisabled === true) {
+          return res.status(401).json({ message: "Chiamo login access is no longer active" });
+        }
+      }
       if (!enforceProductRoute(req, res, product)) return;
 
       // For impersonation sessions, use the role from the JWT token directly
@@ -65,8 +77,24 @@ export const authenticateUser: RequestHandler = async (req: any, res, next) => {
           !userCredentials ||
           userCredentials.isActive !== true ||
           userCredentials.tenantId !== decoded.tenantId
+          || !Number.isInteger(decoded.credentialVersion)
+          || decoded.credentialVersion !== userCredentials.credentialVersion
         ) {
           return res.status(401).json({ message: "Agency credentials are no longer active" });
+        }
+        if (userCredentials.mustChangePassword) {
+          if (!userCredentials.temporaryPasswordExpiresAt || userCredentials.temporaryPasswordExpiresAt.getTime() <= Date.now()) {
+            return res.status(401).json({ code: "TEMPORARY_PASSWORD_EXPIRED", message: "Temporary password has expired" });
+          }
+          const fullPath = (req.originalUrl || req.url || req.path || "/").split("?")[0];
+          if (decoded.passwordChangeOnly !== true) {
+            return res.status(401).json({ message: "Invalid password-change session" });
+          }
+          if (fullPath !== "/api/chiamo/change-password" && fullPath !== "/api/auth/user") {
+            return res.status(403).json({ code: "PASSWORD_CHANGE_REQUIRED", message: "Change your temporary password to continue" });
+          }
+        } else if (decoded.passwordChangeOnly === true) {
+          return res.status(401).json({ message: "Password-change session is no longer valid" });
         }
         userRole = userCredentials.role || 'owner';
         restrictedServices = userCredentials.restrictedServices || [];
@@ -85,6 +113,7 @@ export const authenticateUser: RequestHandler = async (req: any, res, next) => {
         restrictedServices: restrictedServices,
         product,
         voipAccess,
+        passwordChangeOnly: decoded.passwordChangeOnly === true,
         claims: {
           sub: decoded.userId
         }
@@ -297,6 +326,7 @@ export const getCurrentUser = async (req: any) => {
     role: req.user.role,
     voipAccess: req.user.voipAccess,
     credentialId: req.user.credentialId,
+    requiresPasswordChange: req.user.passwordChangeOnly === true,
   };
 };
 

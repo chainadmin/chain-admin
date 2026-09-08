@@ -5,6 +5,7 @@ import { generateToken } from '../_lib/auth';
 import bcrypt from 'bcryptjs';
 import { eq, or } from 'drizzle-orm';
 import { z } from 'zod';
+import { chiamoServiceConfigurations } from '../../shared/chiamo-schema';
 
 const loginSchema = z.object({
   username: z.string().min(1),
@@ -24,6 +25,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const { username, password, product } = parsed.data;
+    if (product === 'chiamo') res.setHeader('Cache-Control', 'no-store');
     const db = await getDb();
 
     // Get agency credentials (username can be either username or email)
@@ -120,9 +122,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     ) {
       return res.status(403).json({ error: `${product === 'chain' ? 'Chain' : 'Chiamo'} access is not active` });
     }
+    if (product === 'chiamo') {
+      const [service] = await db.select({
+        accountActive: chiamoServiceConfigurations.accountActive,
+        explicitLoginDisabled: chiamoServiceConfigurations.explicitLoginDisabled,
+      }).from(chiamoServiceConfigurations).where(eq(chiamoServiceConfigurations.tenantId, tenant.id)).limit(1);
+      if (service?.accountActive === false || service?.explicitLoginDisabled === true) {
+        return res.status(403).json({ error: 'Chiamo Connect login has been disabled' });
+      }
+    }
 
     // Generate JWT token with tenant info
-    const token = generateToken(user.id, tenant.id, tenant.slug, tenant.name, product);
+    const requiresPasswordChange = product === 'chiamo' && credentials.mustChangePassword === true;
+    if (requiresPasswordChange && (!credentials.temporaryPasswordExpiresAt || credentials.temporaryPasswordExpiresAt.getTime() <= Date.now())) {
+      return res.status(401).json({ code: 'TEMPORARY_PASSWORD_EXPIRED', error: 'Temporary password has expired' });
+    }
+    const token = generateToken(credentials.id, tenant.id, tenant.slug, tenant.name, product, credentials.credentialVersion, requiresPasswordChange);
 
     // Set cookie that works across subdomains (only in production with custom domain)
     // Check multiple headers for the domain (Vercel may use different headers)
@@ -133,13 +148,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     // Set cookies (authToken needs to be readable by JavaScript for authentication check)
     res.setHeader('Set-Cookie', [
-      `authToken=${token}; Path=/; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}${domain ? `; Domain=${domain}` : ''}`,
+      requiresPasswordChange ? `authToken=; Path=/; SameSite=Lax; Max-Age=0${domain ? `; Domain=${domain}` : ''}` : `authToken=${token}; Path=/; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}${domain ? `; Domain=${domain}` : ''}`,
       `tenantSlug=${tenant.slug}; Path=/; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}${domain ? `; Domain=${domain}` : ''}`,
       `tenantName=${encodeURIComponent(tenant.name)}; Path=/; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}${domain ? `; Domain=${domain}` : ''}`
     ].join(', '));
 
     res.status(200).json({
       success: true,
+      requiresPasswordChange,
       token, // Still return token for backwards compatibility
       user: {
         id: user.id,

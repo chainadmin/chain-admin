@@ -232,6 +232,9 @@ export const agencyCredentials = pgTable("agency_credentials", {
   isActive: boolean("is_active").default(true),
   restrictedServices: text("restricted_services").array().default(sql`ARRAY[]::TEXT[]`), // Services this user cannot access (e.g., 'billing', 'sms', 'payments', 'import', 'reports')
   voipAccess: boolean("voip_access").default(false), // Whether this user can access the VoIP softphone
+  mustChangePassword: boolean("must_change_password").default(false).notNull(),
+  temporaryPasswordExpiresAt: timestamp("temporary_password_expires_at"),
+  credentialVersion: integer("credential_version").default(1).notNull(),
   lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -264,6 +267,24 @@ export const globalAdminLoginAttempts = pgTable("global_admin_login_attempts", {
   failures: integer("failures").default(1).notNull(),
   resetAt: timestamp("reset_at").notNull(),
   updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const chiamoAdminReauthAttempts = pgTable("chiamo_admin_reauth_attempts", {
+  clientKeyHash: text("client_key_hash").primaryKey(),
+  failures: integer("failures").default(1).notNull(),
+  resetAt: timestamp("reset_at").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const chiamoCredentialAudits = pgTable("chiamo_credential_audits", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "set null" }),
+  credentialId: uuid("credential_id").references(() => agencyCredentials.id, { onDelete: "set null" }),
+  actorId: text("actor_id").notNull(),
+  action: text("action").notNull(),
+  outcome: text("outcome").notNull(),
+  metadata: jsonb("metadata").default(sql`'{}'::jsonb`).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 // These records intentionally do not reference tenants. A removal audit must

@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken';
 import { getKnownDomainOrigins } from '@shared/utils/baseUrl';
 import { isOriginOnKnownDomain } from '@shared/utils/domains';
 import { canAgencyProductAccessPath } from '../../shared/productRouteAccess';
+import { chiamoServiceConfigurations } from '../../shared/chiamo-schema';
 
 export const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
@@ -61,6 +62,13 @@ export async function verifyAuth(req: AuthenticatedRequest): Promise<boolean> {
     ) {
       return false;
     }
+    if (product === 'chiamo') {
+      const [service] = await db.select({
+        accountActive: chiamoServiceConfigurations.accountActive,
+        explicitLoginDisabled: chiamoServiceConfigurations.explicitLoginDisabled,
+      }).from(chiamoServiceConfigurations).where(eq(chiamoServiceConfigurations.tenantId, decoded.tenantId)).limit(1);
+      if (service?.accountActive === false || service?.explicitLoginDisabled === true) return false;
+    }
 
     if (decoded.isImpersonation) {
       req.user = {
@@ -85,6 +93,11 @@ export async function verifyAuth(req: AuthenticatedRequest): Promise<boolean> {
       .where(and(eq(agencyCredentials.id, decoded.userId), eq(agencyCredentials.tenantId, decoded.tenantId)))
       .limit(1);
     if (agencyCredential && agencyCredential.isActive === true) {
+      if (!Number.isInteger(decoded.credentialVersion) || decoded.credentialVersion !== agencyCredential.credentialVersion) return false;
+      if (agencyCredential.mustChangePassword) {
+        const pathname = (req.url || '').split('?')[0];
+        if (!agencyCredential.temporaryPasswordExpiresAt || agencyCredential.temporaryPasswordExpiresAt.getTime() <= Date.now() || decoded.passwordChangeOnly !== true || (pathname !== '/api/chiamo/change-password' && pathname !== '/api/auth/user')) return false;
+      } else if (decoded.passwordChangeOnly === true) return false;
       req.user = agencyCredential;
       req.platformUser = {
         tenantId: agencyCredential.tenantId,
@@ -96,6 +109,7 @@ export async function verifyAuth(req: AuthenticatedRequest): Promise<boolean> {
     if (agencyCredential) {
       return false;
     }
+    if (product === 'chiamo') return false;
     // Older API tokens identify the users row instead of the agency credential.
     // Resolve that identity through an active platform membership and matching
     // active agency credential; never fall back to a user without tenant access.
@@ -231,6 +245,8 @@ export function generateToken(
   tenantSlug?: string,
   tenantName?: string,
   product: 'chain' | 'chiamo' = 'chain',
+  credentialVersion?: number,
+  passwordChangeOnly?: boolean,
 ): string {
   return jwt.sign(
     { 
@@ -239,8 +255,10 @@ export function generateToken(
       tenantSlug,
       tenantName,
       product,
+      credentialVersion,
+      ...(passwordChangeOnly ? { passwordChangeOnly: true } : {}),
     },
     JWT_SECRET,
-    { expiresIn: '7d' }
+    { expiresIn: passwordChangeOnly ? '15m' : '7d' }
   );
 }

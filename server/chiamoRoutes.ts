@@ -1,35 +1,33 @@
-import type { Express, RequestHandler, Response } from "express";
+import type { Express, NextFunction, Request, RequestHandler, Response } from "express";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
 import { db } from "./db";
-import { emailService } from "./emailService";
-import { sendChiamoLeadEmails } from "./chiamoLeadEmails";
-import { storage } from "./storage";
 import { authenticateUser, requireOwner } from "./authMiddleware";
 import { agencyCredentials, invoices, phoneProductEntitlements, tenantSettings, tenants, voipCallLogs, voipPhoneNumbers, voipRoutingBuckets, voipTenantSettings, voipVoicemails } from "@shared/schema";
 import { chiamoLeads, chiamoServiceConfigurations, chiamoSubscriptions, chiamoUsageSettings } from "@shared/chiamo-schema";
-import { calculateChiamoMonthlyService, CHIAMO_SUPPORT_EMAIL, chiamoBillingStatuses, chiamoLeadStatuses, chiamoPlans, chiamoSmsStatuses, chiamoTestStatuses } from "@shared/chiamo";
-import { findCanonicalTenant, getPhoneBillingReconciliationInventory, lockCompanyIdentity, normalizeCompanyEmail, upsertChiamoPhoneEntitlement } from "./phoneProductEntitlement";
+import { calculateChiamoVoipMonthlyService, CHIAMO_SUPPORT_EMAIL, chiamoBillingStatuses, chiamoLeadStatuses, chiamoPlans, chiamoTestStatuses } from "@shared/chiamo";
+import { findCanonicalTenant, getPhoneBillingReconciliationInventory, lockCompanyIdentity, lockChiamoOnlyTenant, normalizeCompanyEmail, upsertChiamoPhoneEntitlement } from "./phoneProductEntitlement";
 import { generateInvoicePdf } from "./invoicePdf";
 import { INVOICE_BRANDS } from "./invoiceBranding";
-import { ensureChiamoVoiceProvider, retryChiamoOnboarding, sendChiamoInvitation, voiceProviderStatusForConversion } from "./chiamoOnboarding";
+import { ensureChiamoVoiceProvider, retryChiamoOnboarding, voiceProviderStatusForConversion } from "./chiamoOnboarding";
+import { chiamoVoipOnlyBillingFields, chiamoVoipOnlyConversionFields, chiamoVoipOnlyServiceFields } from "./chiamoVoipPolicy";
 
-const leadInput = z.object({
+export const chiamoLeadInput = z.object({
   firstName: z.string().trim().min(1).max(100), lastName: z.string().trim().min(1).max(100), businessName: z.string().trim().min(1).max(200),
   businessEmail: z.string().email().max(254), businessPhone: z.string().trim().min(7).max(40), employeeCount: z.string().max(50).optional(),
   phoneUsersNeeded: z.coerce.number().int().positive().max(100000), currentPhoneProvider: z.string().max(200).optional(), newNumbersNeeded: z.coerce.number().int().min(0).max(10000).optional(),
   existingNumbersToPort: z.string().max(2000).optional(), featuresNeeded: z.string().max(3000).optional(), planInterest: z.enum(["starter", "business", "professional", "enterprise", "unsure"]),
-  textingInterest: z.boolean().default(false), contactPreference: z.string().max(100).optional(), bestContactTime: z.string().max(200).optional(), additionalInformation: z.string().max(5000).optional(),
+  textingInterest: z.literal(false).default(false), contactPreference: z.string().max(100).optional(), bestContactTime: z.string().max(200).optional(), additionalInformation: z.string().max(5000).optional(),
   consent: z.literal(true), website: z.string().max(0).optional(),
 });
 
-async function sendLeadEmails(lead: typeof chiamoLeads.$inferSelect) {
-  return sendChiamoLeadEmails(lead, email => emailService.sendEmail(email));
-}
+export function chiamoAsyncRoute(handler:(req:Request,res:Response,next:NextFunction)=>unknown):RequestHandler { return (req,res,next)=>{ Promise.resolve(handler(req,res,next)).catch(next); }; }
 
 export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandler) {
+  const target=app;
+  app=new Proxy(target,{get(target,property,receiver){ if(!["get","post","put","patch","delete"].includes(String(property))) return Reflect.get(target,property,receiver); return (path:string,...handlers:RequestHandler[])=>(target[property as keyof Express] as Function).call(target,path,...handlers.map(chiamoAsyncRoute)); }}) as Express;
   const sendAdminLoadError = (res: Response, area: string, error: unknown) => {
     console.error(`Failed to load Chiamo ${area}:`, error);
     return res.status(500).json({
@@ -39,20 +37,10 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
   };
   app.get("/api/chiamo/plans", (_req, res) => res.json(chiamoPlans));
   app.post("/api/chiamo/leads", async (req, res) => {
-    const parsed = leadInput.safeParse(req.body);
+    const parsed = chiamoLeadInput.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message: "Please check the highlighted business information.", issues: parsed.error.flatten().fieldErrors });
     const { consent: _consent, website: _website, ...lead } = parsed.data;
     const [saved] = await db.insert(chiamoLeads).values(lead).returning();
-    // Saving is the transaction boundary. Email delivery failure is deliberately non-fatal,
-    // but wait for both Postmark requests so short-lived server processes do not drop them.
-    try {
-      const { admin, customer } = await sendLeadEmails(saved);
-      const success = admin.success && customer.success;
-      const errors = [admin.error, customer.error].filter(Boolean).join("; ");
-      await db.update(chiamoLeads).set(success ? { notificationStatus: "SENT", notificationSentAt: new Date(), notificationError: null } : { notificationStatus: "FAILED", notificationError: errors || "Postmark delivery failed" }).where(eq(chiamoLeads.id, saved.id));
-    } catch (error) {
-      console.error("Chiamo lead email status update failed", error);
-    }
     return res.status(201).json({ id: saved.id, message: "Thank you. Our team will contact you to review your business phone needs." });
   });
 
@@ -60,12 +48,12 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
     const [tenant] = await db.select().from(tenants).where(eq(tenants.id, req.user.tenantId)).limit(1);
     if (!tenant?.chiamoConnectEnabled) return res.status(403).json({ message: "Chiamo Connect is not enabled." });
     const [service] = await db.select().from(chiamoServiceConfigurations).where(eq(chiamoServiceConfigurations.tenantId, tenant.id)).limit(1);
-    if (service && (!service.accountActive || !service.customerLoginEnabled)) return res.status(403).json({ message: "Chiamo customer access is disabled." });
+    if (service && (!service.accountActive || service.explicitLoginDisabled)) return res.status(403).json({ message: "Chiamo customer access is disabled." });
     const [subscription] = await db.select().from(chiamoSubscriptions).where(eq(chiamoSubscriptions.tenantId, tenant.id)).limit(1);
     const [{ count: userCount }] = await db.select({ count: sql<number>`count(*)::int` }).from(agencyCredentials).where(and(eq(agencyCredentials.tenantId, tenant.id), eq(agencyCredentials.isActive, true)));
     const [{ count: numberCount }] = await db.select({ count: sql<number>`count(*)::int` }).from(voipPhoneNumbers).where(and(eq(voipPhoneNumbers.tenantId, tenant.id), eq(voipPhoneNumbers.isActive, true)));
-    const calculation = subscription ? calculateChiamoMonthlyService(subscription.planId, userCount, subscription.smsAddonEnabled, subscription) : null;
-    res.json({ tenant: { name: tenant.name, chiamoSmsEnabled: service?.smsEnabled === true }, service, subscription, userCount, numberCount, calculation, supportEmail: CHIAMO_SUPPORT_EMAIL });
+    const calculation = subscription ? calculateChiamoVoipMonthlyService(subscription.planId, userCount, subscription) : null;
+    res.json({ tenant: { name: tenant.name }, service, subscription, userCount, numberCount, calculation, supportEmail: CHIAMO_SUPPORT_EMAIL });
   });
   app.get("/api/chiamo/invoices", authenticateUser, requireOwner, async (req: any, res) => {
     const [tenant] = await db.select().from(tenants).where(eq(tenants.id, req.user.tenantId)).limit(1);
@@ -85,26 +73,14 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
   });
 
   app.get("/api/chiamo/messages", authenticateUser, async (req: any, res) => {
-    const [service] = await db.select().from(chiamoServiceConfigurations).where(eq(chiamoServiceConfigurations.tenantId, req.user.tenantId)).limit(1);
-    if (!service?.accountActive || !service.customerLoginEnabled || !service.smsEnabled || service.smsStatus !== "ACTIVE") return res.status(403).json({ message: "Business Texting is not active." });
-    res.json(await storage.getSmsRepliesByTenant(req.user.tenantId));
+    return res.status(410).json({message:"Chiamo Connect is Voice-only. Text messaging is not available.",code:"CHIAMO_SMS_REMOVED"});
   });
   app.post("/api/chiamo/messages/:id/respond", authenticateUser, async (req: any, res) => {
-    const body = z.object({ message:z.string().trim().min(1).max(1600) }).parse(req.body);
-    const [service] = await db.select().from(chiamoServiceConfigurations).where(eq(chiamoServiceConfigurations.tenantId, req.user.tenantId)).limit(1);
-    if (!service?.accountActive || !service.customerLoginEnabled || !service.smsEnabled || service.smsStatus !== "ACTIVE") return res.status(403).json({ message: "Business Texting is not active." });
-    const original = await storage.getSmsReplyById(req.params.id, req.user.tenantId);
-    if (!original) return res.status(404).json({ message:"Conversation not found" });
-    const { smsService } = await import("./smsService");
-    await smsService.sendSms(original.fromPhone, body.message, req.user.tenantId, undefined, original.consumerId || undefined);
-    res.status(201).json({ message:"Message sent" });
+    return res.status(410).json({message:"Chiamo Connect is Voice-only. Text messaging is not available.",code:"CHIAMO_SMS_REMOVED"});
   });
 
   app.post("/api/chiamo/texting-request", authenticateUser, async (req: any, res) => {
-    const [tenant] = await db.select().from(tenants).where(eq(tenants.id, req.user.tenantId)).limit(1);
-    if (!tenant?.chiamoConnectEnabled) return res.status(403).json({ message: "Chiamo Connect is not enabled." });
-    await emailService.sendEmail({ to: CHIAMO_SUPPORT_EMAIL, subject: `Chiamo Business Texting Request — ${tenant.name}`, html: `<p>${tenant.name} requested the managed Business Texting add-on. Compliance and messaging setup must be reviewed before activation.</p>` });
-    res.status(202).json({ message: "Request received. Texting will not be activated until setup and compliance review are complete." });
+    return res.status(410).json({message:"Chiamo Connect is Voice-only. Text messaging is not available.",code:"CHIAMO_SMS_REMOVED"});
   });
 
   app.get("/api/admin/chiamo/leads", isPlatformAdmin, async (_req, res) => {
@@ -124,16 +100,15 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
     const parsedInput = z.object({
       company: z.object({ businessName:z.string().trim().min(1).max(200), firstName:z.string().trim().min(1).max(100), lastName:z.string().trim().min(1).max(100), email:z.string().email(), phone:z.string().trim().min(7).max(40) }),
       planId: z.enum(["starter","business","professional","enterprise"]), customBasePriceCents:z.number().int().min(0).nullable().optional(), includedUsers:z.number().int().positive(), initialActiveUsers:z.number().int().positive(), additionalUserPriceCents:z.number().int().min(0),
-      requiredNumberCount:z.number().int().min(0), numbersToPort:z.string().max(2000).optional(), voiceEnabled:z.boolean(), smsEnabled:z.boolean(), smsStatus:z.enum(chiamoSmsStatuses), smsAllowance:z.number().int().min(0).default(3500), smsOverageMicros:z.number().int().min(0).default(0),
+      requiredNumberCount:z.number().int().min(0), numbersToPort:z.string().max(2000).optional(), voiceEnabled:z.boolean(),
       billingStatus:z.enum(chiamoBillingStatuses), startDate:z.string().nullable().optional(), nextBillingDate:z.string().nullable().optional(), billingNotes:z.string().max(10000).nullable().optional(),
-    }).safeParse(req.body);
+    }).merge(chiamoVoipOnlyConversionFields).safeParse(req.body);
     if (!parsedInput.success) return res.status(400).json({
       message: "The conversion settings are invalid. Correct the indicated fields and try again.",
       code: "VALIDATION_ERROR",
       issues: parsedInput.error.flatten().fieldErrors,
     });
     const input = parsedInput.data;
-    if (input.smsEnabled && input.smsStatus !== "ACTIVE") return res.status(409).json({ message:"SMS cannot be enabled before registration and compliance are ACTIVE.", code:"SMS_COMPLIANCE_INACTIVE" });
     if (input.voiceEnabled && input.billingStatus !== "ACTIVE") return res.status(409).json({ message:"Billing must be ACTIVE before Voice can be enabled.", code:"BILLING_INACTIVE" });
     let result: any;
     try {
@@ -147,7 +122,7 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
         throw Object.assign(new Error("The conversion identity does not match the original Chiamo lead and requires manual review."), { status: 409, code: "MANUAL_REVIEW_REQUIRED" });
       }
        if (lead.convertedTenantId) {
-         const [tenant] = await tx.select().from(tenants).where(eq(tenants.id, lead.convertedTenantId)).limit(1);
+         const tenant = await lockChiamoOnlyTenant(tx, lead.convertedTenantId);
           const credentials = await tx.select().from(agencyCredentials)
            .where(and(eq(agencyCredentials.tenantId, lead.convertedTenantId), eq(agencyCredentials.role, "owner"), sql`lower(trim(${agencyCredentials.email})) = ${email}`)).limit(2);
          const credential = credentials[0];
@@ -160,16 +135,9 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
             smsAddonEnabled:input.smsEnabled, smsAllowance:input.smsAllowance,
             smsOverageMicros:input.smsOverageMicros, billingStatus:input.billingStatus,
             startDate:input.startDate, nextBillingDate:input.nextBillingDate, notes:input.billingNotes,
-          }).onConflictDoUpdate({ target:chiamoSubscriptions.tenantId, set:{
-            planId:input.planId, customBasePriceCents:input.customBasePriceCents,
-            includedUsers:input.includedUsers, additionalUserPriceCents:input.additionalUserPriceCents,
-            smsAddonEnabled:input.smsEnabled, smsAllowance:input.smsAllowance,
-            smsOverageMicros:input.smsOverageMicros, billingStatus:input.billingStatus,
-            startDate:input.startDate, nextBillingDate:input.nextBillingDate,
-            notes:input.billingNotes, updatedAt:new Date(),
-          } });
+           }).onConflictDoNothing();
           const retryServiceValues = {
-           tenantId:tenant.id, accountActive:true, customerLoginEnabled:false, voiceEnabled:input.voiceEnabled,
+           tenantId:tenant.id, accountActive:existingService?.accountActive ?? true, customerLoginEnabled:existingService?.explicitLoginDisabled ? false : true, explicitLoginDisabled:existingService?.explicitLoginDisabled ?? false, voiceEnabled:input.voiceEnabled,
            inboundEnabled:input.voiceEnabled, outboundEnabled:input.voiceEnabled, voicemailEnabled:input.voiceEnabled,
            recordingEnabled:input.voiceEnabled, routingEnabled:input.voiceEnabled, ivrEnabled:input.voiceEnabled,
            smsEnabled:input.smsEnabled, smsStatus:input.smsStatus, setupStatus:"IN_PROGRESS",
@@ -179,22 +147,7 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
             updatedAt:new Date(),
           };
           await tx.insert(chiamoServiceConfigurations).values(retryServiceValues)
-            .onConflictDoUpdate({ target:chiamoServiceConfigurations.tenantId, set:{
-              accountActive:true, voiceEnabled:input.voiceEnabled,
-              inboundEnabled:input.voiceEnabled, outboundEnabled:input.voiceEnabled,
-              voicemailEnabled:input.voiceEnabled, recordingEnabled:input.voiceEnabled,
-              routingEnabled:input.voiceEnabled, ivrEnabled:input.voiceEnabled,
-              smsEnabled:input.smsEnabled, smsStatus:input.smsStatus,
-               setupStatus:existingService?.setupStatus === "COMPLETE" ? "COMPLETE" : "IN_PROGRESS", coreConversionStatus:"COMPLETE",
-              coreConversionError:null, coreConversionAttemptedAt:new Date(),
-               voiceProviderStatus:voiceProviderStatusForConversion(input.voiceEnabled, existingService?.voiceProviderStatus),
-              updatedAt:new Date(),
-            } });
-         await upsertChiamoPhoneEntitlement(tx, tenant.id, input.billingStatus === "ACTIVE" ? "ACTIVE" : input.billingStatus === "CANCELLED" ? "CANCELLED" : "SUSPENDED", input.voiceEnabled);
-         if (input.voiceEnabled) {
-           await tx.update(tenants).set({ voipEnabled:false }).where(eq(tenants.id,tenant.id));
-           await tx.update(phoneProductEntitlements).set({ enabled:false, disabledAt:new Date(), updatedAt:new Date() }).where(eq(phoneProductEntitlements.tenantId,tenant.id));
-         }
+             .onConflictDoNothing();
          return { alreadyConverted: true, tenant, credential };
        }
       await lockCompanyIdentity(tx, email, businessName);
@@ -203,11 +156,11 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
       const slugBase = businessName.toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,40) || "chiamo";
       let tenant = canonical.tenant;
        const tenantWasExisting = Boolean(tenant);
+        if (tenant) tenant = await lockChiamoOnlyTenant(tx, tenant.id);
        if (tenant && (!tenant.chiamoConnectEnabled || tenant.chainCoreEnabled)) {
          throw Object.assign(new Error("A matching company exists in another product and requires verified-owner review before Chiamo conversion."), { status: 409, code: "MANUAL_REVIEW_REQUIRED" });
        }
-       if (!tenant) [tenant] = await tx.insert(tenants).values({ name:businessName, slug:`${slugBase}-${crypto.randomBytes(5).toString("hex")}`, businessName, email, phoneNumber:input.company.phone, ownerFirstName:input.company.firstName, ownerLastName:input.company.lastName, businessType:"call_center", chainCoreEnabled:false, chiamoConnectEnabled:true, voipEnabled:false, smsServiceEnabled:input.smsEnabled, maxActiveUsers:input.includedUsers, isTrialAccount:false, isPaidAccount:input.billingStatus==="ACTIVE" }).returning();
-      else [tenant] = await tx.update(tenants).set({ chiamoConnectEnabled:true, maxActiveUsers:input.includedUsers }).where(eq(tenants.id,tenant.id)).returning();
+       if (!tenant) [tenant] = await tx.insert(tenants).values({ name:businessName, slug:`${slugBase}-${crypto.randomBytes(5).toString("hex")}`, businessName, email, phoneNumber:input.company.phone, ownerFirstName:input.company.firstName, ownerLastName:input.company.lastName, businessType:"call_center", chainCoreEnabled:false, chiamoConnectEnabled:true, voipEnabled:false, smsServiceEnabled:false, maxActiveUsers:input.includedUsers, isTrialAccount:false, isPaidAccount:input.billingStatus==="ACTIVE" }).returning();
       await tx.insert(tenantSettings).values({
         tenantId: tenant.id,
         showPaymentPlans: true,
@@ -227,7 +180,7 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
       if (!credential) {
         const passwordHash = await bcrypt.hash(crypto.randomBytes(48).toString("base64url"), 10);
         [credential] = await tx.insert(agencyCredentials).values({ tenantId:tenant.id, username:input.company.email.toLowerCase(), email:input.company.email.toLowerCase(), firstName:input.company.firstName, lastName:input.company.lastName, role:"owner", passwordHash, voipAccess:input.voiceEnabled }).returning();
-      } else {
+       } else if (!tenantWasExisting) {
         [credential] = await tx.update(agencyCredentials).set({
           firstName: input.company.firstName,
           lastName: input.company.lastName,
@@ -235,15 +188,11 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
           updatedAt: new Date(),
         }).where(eq(agencyCredentials.id, credential.id)).returning();
       }
-      await tx.insert(chiamoSubscriptions).values({ tenantId:tenant.id, planId:input.planId, customBasePriceCents:input.customBasePriceCents, includedUsers:input.includedUsers, additionalUserPriceCents:input.additionalUserPriceCents, smsAddonEnabled:input.smsEnabled, smsAllowance:input.smsAllowance, smsOverageMicros:input.smsOverageMicros, billingStatus:input.billingStatus, startDate:input.startDate, nextBillingDate:input.nextBillingDate, notes:input.billingNotes }).onConflictDoUpdate({ target:chiamoSubscriptions.tenantId, set:{ planId:input.planId, customBasePriceCents:input.customBasePriceCents, includedUsers:input.includedUsers, additionalUserPriceCents:input.additionalUserPriceCents, smsAddonEnabled:input.smsEnabled, smsAllowance:input.smsAllowance, smsOverageMicros:input.smsOverageMicros, billingStatus:input.billingStatus, startDate:input.startDate, nextBillingDate:input.nextBillingDate, notes:input.billingNotes, updatedAt:new Date() } });
-       const setupChecklist = { businessVerified:true, planSelected:true, billingConfigured:true, primaryUserCreated:true, additionalUsersCreated:input.initialActiveUsers<=1, phoneNumberAssigned:input.requiredNumberCount===0, portCompleted:!input.numbersToPort, voiceProviderConfigured:false, outboundCallingTested:false, inboundCallingTested:false, voicemailTested:false, recordingTested:false, smsRequested:input.smsStatus!=="NOT_REQUESTED", smsRegistrationComplete:input.smsStatus==="ACTIVE", smsSendingTested:false, smsReceivingTested:false, customerInvitationSent:false, customerLoginConfirmed:false, setupComplete:false };
-       const serviceValues = { accountActive:true, customerLoginEnabled:false, voiceEnabled:input.voiceEnabled, inboundEnabled:input.voiceEnabled, outboundEnabled:input.voiceEnabled, voicemailEnabled:input.voiceEnabled, recordingEnabled:input.voiceEnabled, routingEnabled:input.voiceEnabled, ivrEnabled:input.voiceEnabled, smsEnabled:input.smsEnabled, smsStatus:input.smsStatus, setupStatus:"IN_PROGRESS", setupChecklist, coreConversionStatus:"COMPLETE", coreConversionError:null, coreConversionAttemptedAt:new Date(), voiceProviderStatus:voiceProviderStatusForConversion(input.voiceEnabled), readinessStatus:"NOT_READY", updatedAt:new Date() };
-       await tx.insert(chiamoServiceConfigurations).values({ tenantId:tenant.id, ...serviceValues }).onConflictDoUpdate({ target:chiamoServiceConfigurations.tenantId, set:serviceValues });
-       await upsertChiamoPhoneEntitlement(tx, tenant.id, input.billingStatus === "ACTIVE" ? "ACTIVE" : input.billingStatus === "CANCELLED" ? "CANCELLED" : "SUSPENDED", input.voiceEnabled);
-       if (input.voiceEnabled) {
-         await tx.update(tenants).set({ voipEnabled:false }).where(eq(tenants.id,tenant.id));
-         await tx.update(phoneProductEntitlements).set({ enabled:false, disabledAt:new Date(), updatedAt:new Date() }).where(eq(phoneProductEntitlements.tenantId,tenant.id));
-       }
+       await tx.insert(chiamoSubscriptions).values({ tenantId:tenant.id, planId:input.planId, customBasePriceCents:input.customBasePriceCents, includedUsers:input.includedUsers, additionalUserPriceCents:input.additionalUserPriceCents, smsAddonEnabled:false, smsAllowance:0, smsOverageMicros:0, billingStatus:input.billingStatus, startDate:input.startDate, nextBillingDate:input.nextBillingDate, notes:input.billingNotes }).onConflictDoNothing();
+        const setupChecklist = { businessVerified:true, planSelected:true, billingConfigured:true, primaryUserCreated:true, additionalUsersCreated:input.initialActiveUsers<=1, phoneNumberAssigned:input.requiredNumberCount===0, portCompleted:!input.numbersToPort, voiceProviderConfigured:false, outboundCallingTested:false, inboundCallingTested:false, voicemailTested:false, recordingTested:false, smsRequested:false, smsRegistrationComplete:false, smsSendingTested:false, smsReceivingTested:false, customerInvitationSent:false, customerLoginConfirmed:false, setupComplete:false };
+        const serviceValues = { accountActive:true, customerLoginEnabled:true, explicitLoginDisabled:false, voiceEnabled:input.voiceEnabled, inboundEnabled:input.voiceEnabled, outboundEnabled:input.voiceEnabled, voicemailEnabled:input.voiceEnabled, recordingEnabled:input.voiceEnabled, routingEnabled:input.voiceEnabled, ivrEnabled:input.voiceEnabled, smsEnabled:false, smsStatus:"NOT_REQUESTED", setupStatus:"IN_PROGRESS", setupChecklist, coreConversionStatus:"COMPLETE", coreConversionError:null, coreConversionAttemptedAt:new Date(), voiceProviderStatus:voiceProviderStatusForConversion(input.voiceEnabled), readinessStatus:"NOT_READY", updatedAt:new Date() };
+        await tx.insert(chiamoServiceConfigurations).values({ tenantId:tenant.id, ...serviceValues }).onConflictDoNothing();
+        if (!tenantWasExisting) await upsertChiamoPhoneEntitlement(tx, tenant.id, input.billingStatus === "ACTIVE" ? "ACTIVE" : input.billingStatus === "CANCELLED" ? "CANCELLED" : "SUSPENDED", input.voiceEnabled, true);
       await tx.update(chiamoLeads).set({ status:"CONVERTED", convertedTenantId:tenant.id }).where(eq(chiamoLeads.id,lead.id));
       return { tenant, credential };
     });
@@ -266,18 +215,19 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
     }
      const onboarding = await retryChiamoOnboarding(result.tenant.id);
      const [service] = await db.select().from(chiamoServiceConfigurations).where(eq(chiamoServiceConfigurations.tenantId, result.tenant.id)).limit(1);
-     res.status("alreadyConverted" in result ? 200 : 201).json({
+     res.status(onboarding.readinessStatus === "IN_PROGRESS" ? 202 : "alreadyConverted" in result ? 200 : 201).json({
        tenantId:result.tenant.id,
        alreadyConverted:"alreadyConverted" in result,
        onboarding,
        service,
-       message:onboarding.invitationStatus === "SENT" ? "Core conversion and onboarding completed." : "Core conversion completed. One or more onboarding stages require retry.",
-       code:onboarding.invitationStatus === "SENT" ? "CHIAMO_ONBOARDING_READY" : "CHIAMO_ONBOARDING_INCOMPLETE",
+        message:onboarding.readinessStatus === "READY" ? "Core conversion and Voice onboarding completed." : "Core conversion completed; Voice onboarding needs retry.",
+        code:onboarding.readinessStatus === "READY" ? "CHIAMO_ONBOARDING_READY" : "CHIAMO_ONBOARDING_INCOMPLETE",
      });
   });
   app.put("/api/admin/chiamo/tenants/:tenantId/billing", isPlatformAdmin, async (req, res) => {
-    const value = z.object({ planId: z.enum(["starter", "business", "professional", "enterprise"]), customBasePriceCents: z.number().int().min(0).nullable().optional(), includedUsers: z.number().int().positive().nullable().optional(), additionalUserPriceCents: z.number().int().min(0).nullable().optional(), additionalNumberPriceCents: z.number().int().min(0).optional(), smsAddonEnabled: z.boolean(), smsAllowance: z.number().int().min(0).optional(), smsOverageMicros: z.number().int().min(0).optional(), customCharges: z.array(z.object({ name: z.string(), cents: z.number().int().min(0) })).optional(), discounts: z.array(z.object({ name: z.string(), cents: z.number().int().min(0) })).optional(), billingStatus: z.enum(chiamoBillingStatuses), startDate: z.string().nullable().optional(), nextBillingDate: z.string().nullable().optional(), notes: z.string().nullable().optional() }).parse(req.body);
+    const value = z.object({ planId: z.enum(["starter", "business", "professional", "enterprise"]), customBasePriceCents: z.number().int().min(0).nullable().optional(), includedUsers: z.number().int().positive().nullable().optional(), additionalUserPriceCents: z.number().int().min(0).nullable().optional(), additionalNumberPriceCents: z.number().int().min(0).optional(), customCharges: z.array(z.object({ name: z.string(), cents: z.number().int().min(0) })).optional(), discounts: z.array(z.object({ name: z.string(), cents: z.number().int().min(0) })).optional(), billingStatus: z.enum(chiamoBillingStatuses), startDate: z.string().nullable().optional(), nextBillingDate: z.string().nullable().optional(), notes: z.string().nullable().optional() }).merge(chiamoVoipOnlyBillingFields).parse(req.body);
     const [subscription] = await db.transaction(async tx => {
+       await lockChiamoOnlyTenant(tx, req.params.tenantId);
       const [saved] = await tx.insert(chiamoSubscriptions).values({ tenantId: req.params.tenantId, ...value }).onConflictDoUpdate({ target: chiamoSubscriptions.tenantId, set: { ...value, updatedAt: new Date() } }).returning();
       const [current] = await tx.select({
         voiceEnabled: chiamoServiceConfigurations.voiceEnabled,
@@ -310,13 +260,7 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
     res.json(subscription);
   });
   app.post("/api/admin/chiamo/leads/:id/resend-notification", isPlatformAdmin, async (req, res) => {
-    const [lead] = await db.select().from(chiamoLeads).where(eq(chiamoLeads.id, req.params.id)).limit(1);
-    if (!lead) return res.status(404).json({ message: "Lead not found" });
-    const { admin, customer } = await sendLeadEmails(lead);
-    const success = admin.success && customer.success;
-    const errors = [admin.error, customer.error].filter(Boolean).join("; ");
-    const [updated] = await db.update(chiamoLeads).set(success ? { notificationStatus: "SENT", notificationSentAt: new Date(), notificationError: null } : { notificationStatus: "FAILED", notificationError: errors || "Postmark delivery failed" }).where(eq(chiamoLeads.id, lead.id)).returning();
-    res.status(success ? 200 : 502).json(updated);
+    return res.status(410).json({message:"Chiamo lead email notifications have been removed.",code:"CHIAMO_EMAIL_REMOVED"});
   });
   app.get("/api/admin/chiamo/customers", isPlatformAdmin, async (_req, res) => {
     try {
@@ -332,8 +276,17 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
           voicemailUnread: sql<number>`count(*) filter (where ${voipVoicemails.isRead} = false)::int`,
         }).from(voipVoicemails).where(eq(voipVoicemails.tenantId,row.tenant.id)),
       ]);
-      const calc = row.subscription ? calculateChiamoMonthlyService(row.subscription.planId, users, row.subscription.smsAddonEnabled, row.subscription) : null;
-       const { postmarkServerToken: _postmarkToken, twilioAuthToken: _twilioAuthToken, twilioApiKeySecret: _twilioApiKeySecret, ownerSSN: _ownerSSN, ...safeTenant } = row.tenant;
+      const calc = row.subscription ? calculateChiamoVoipMonthlyService(row.subscription.planId, users, row.subscription) : null;
+       const safeTenant = {
+         id: row.tenant.id, name: row.tenant.name, slug: row.tenant.slug,
+         businessName: row.tenant.businessName, businessType: row.tenant.businessType,
+         email: row.tenant.email, phoneNumber: row.tenant.phoneNumber,
+         ownerFirstName: row.tenant.ownerFirstName, ownerLastName: row.tenant.ownerLastName,
+         chainCoreEnabled: row.tenant.chainCoreEnabled, chiamoConnectEnabled: row.tenant.chiamoConnectEnabled,
+         isActive: row.tenant.isActive, suspendedAt: row.tenant.suspendedAt, suspensionReason: row.tenant.suspensionReason,
+         maxActiveUsers: row.tenant.maxActiveUsers, isTrialAccount: row.tenant.isTrialAccount,
+         isPaidAccount: row.tenant.isPaidAccount, voipEnabled: row.tenant.voipEnabled, createdAt: row.tenant.createdAt,
+       };
        return {
          ...row,
          tenant: safeTenant,
@@ -362,24 +315,15 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
     if (!tenant?.chiamoConnectEnabled) return res.status(404).json({ message:"Chiamo customer not found.", code:"CHIAMO_CUSTOMER_NOT_FOUND" });
     const stages = await retryChiamoOnboarding(tenant.id);
     const [service] = await db.select().from(chiamoServiceConfigurations).where(eq(chiamoServiceConfigurations.tenantId, tenant.id)).limit(1);
-    const complete = stages.postmarkStatus === "READY" && stages.voiceProviderStatus !== "FAILED" && stages.invitationStatus === "SENT";
-    return res.status(complete ? 200 : 502).json({
-      message: complete ? "Chiamo onboarding is ready." : "Onboarding remains incomplete. Review the stage errors and retry after correcting provider configuration.",
-      code: complete ? "CHIAMO_ONBOARDING_READY" : "CHIAMO_ONBOARDING_INCOMPLETE",
+    const complete=stages.readinessStatus==="READY";
+    return res.status(complete?200:stages.readinessStatus==="IN_PROGRESS"?202:502).json({
+      message:complete?"Chiamo Voice onboarding is ready.":stages.readinessStatus==="IN_PROGRESS"?"Chiamo Voice setup is in progress.":"Voice onboarding remains incomplete.",
+      code:complete?"CHIAMO_ONBOARDING_READY":stages.readinessStatus==="IN_PROGRESS"?"CHIAMO_ONBOARDING_IN_PROGRESS":"CHIAMO_ONBOARDING_INCOMPLETE",
       stages, service,
     });
   });
   app.post("/api/admin/chiamo/customers/:tenantId/resend-invitation", isPlatformAdmin, async (req, res) => {
-    const [tenant] = await db.select({ id:tenants.id, chiamoConnectEnabled:tenants.chiamoConnectEnabled })
-      .from(tenants).where(eq(tenants.id, req.params.tenantId)).limit(1);
-    if (!tenant?.chiamoConnectEnabled) return res.status(404).json({ message:"Chiamo customer not found.", code:"CHIAMO_CUSTOMER_NOT_FOUND" });
-    const invitationStatus = await sendChiamoInvitation(tenant.id);
-    const [service] = await db.select().from(chiamoServiceConfigurations).where(eq(chiamoServiceConfigurations.tenantId, tenant.id)).limit(1);
-    return res.status(invitationStatus === "SENT" ? 200 : 502).json({
-      message: invitationStatus === "SENT" ? "A new secure Chiamo invitation was sent." : service?.invitationError || "The invitation could not be sent.",
-      code: invitationStatus === "SENT" ? "CHIAMO_INVITATION_SENT" : "CHIAMO_INVITATION_FAILED",
-      invitationStatus, service,
-    });
+    return res.status(410).json({message:"Chiamo email invitations have been removed.",code:"CHIAMO_EMAIL_INVITATION_REMOVED"});
   });
   app.get("/api/admin/chiamo/dashboard", isPlatformAdmin, async (_req, res) => {
     try {
@@ -391,25 +335,24 @@ export function registerChiamoRoutes(app: Express, isPlatformAdmin: RequestHandl
     }
   });
   app.put("/api/admin/chiamo/customers/:tenantId/services", isPlatformAdmin, async (req, res) => {
-    const parsed = z.object({ accountActive:z.boolean().optional(), customerLoginEnabled:z.boolean().optional(), voiceEnabled:z.boolean().optional(), smsEnabled:z.boolean().optional(), smsStatus:z.enum(chiamoSmsStatuses).optional(), setupStatus:z.enum(['NOT_STARTED','IN_PROGRESS','COMPLETE']).optional(), setupChecklist:z.record(z.boolean()).optional(), testStatuses:z.record(z.enum(chiamoTestStatuses)).optional(), providerNotes:z.string().max(10000).nullable().optional(), internalNotes:z.string().max(10000).nullable().optional() }).safeParse(req.body);
+    const parsed = z.object({ accountActive:z.boolean().optional(), customerLoginEnabled:z.boolean().optional(), voiceEnabled:z.boolean().optional(), setupStatus:z.enum(['NOT_STARTED','IN_PROGRESS','COMPLETE']).optional(), setupChecklist:z.record(z.boolean()).optional(), testStatuses:z.record(z.enum(chiamoTestStatuses)).optional(), providerNotes:z.string().max(10000).nullable().optional(), internalNotes:z.string().max(10000).nullable().optional() }).merge(chiamoVoipOnlyServiceFields).safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ message:"The service settings are invalid.", code:"VALIDATION_ERROR", issues:parsed.error.flatten().fieldErrors });
     const value = parsed.data;
-    const [currentService] = await db.select({ smsEnabled:chiamoServiceConfigurations.smsEnabled, smsStatus:chiamoServiceConfigurations.smsStatus })
-      .from(chiamoServiceConfigurations).where(eq(chiamoServiceConfigurations.tenantId,req.params.tenantId)).limit(1);
-    const effectiveSmsEnabled = value.smsEnabled ?? currentService?.smsEnabled ?? false;
-    const effectiveSmsStatus = value.smsStatus ?? currentService?.smsStatus ?? "NOT_REQUESTED";
-    if (effectiveSmsEnabled && effectiveSmsStatus !== "ACTIVE") {
-      return res.status(409).json({ message:"SMS cannot be enabled before registration and compliance are ACTIVE.", code:"SMS_COMPLIANCE_INACTIVE" });
-    }
     if (value.voiceEnabled === true) {
       const [subscription] = await db.select({ billingStatus:chiamoSubscriptions.billingStatus }).from(chiamoSubscriptions).where(eq(chiamoSubscriptions.tenantId,req.params.tenantId)).limit(1);
       if (subscription?.billingStatus !== "ACTIVE") return res.status(409).json({ message:"Billing must be ACTIVE before the Chiamo phone system can be enabled.", code:"BILLING_INACTIVE" });
     }
     const bundledVoice = value.voiceEnabled === undefined ? {} : { voiceEnabled:value.voiceEnabled, inboundEnabled:value.voiceEnabled, outboundEnabled:value.voiceEnabled, recordingEnabled:value.voiceEnabled, voicemailEnabled:value.voiceEnabled, routingEnabled:value.voiceEnabled, ivrEnabled:value.voiceEnabled };
-    const normalized = { ...value, ...bundledVoice };
+    const normalized = {
+      ...value, ...bundledVoice,
+      ...(value.customerLoginEnabled === undefined ? {} : { explicitLoginDisabled: !value.customerLoginEnabled }),
+    };
     const [config] = await db.transaction(async tx => {
-      const [saved] = await tx.insert(chiamoServiceConfigurations).values({ tenantId:req.params.tenantId,...normalized }).onConflictDoUpdate({target:chiamoServiceConfigurations.tenantId,set:{...normalized,updatedAt:new Date()}}).returning();
+      await lockChiamoOnlyTenant(tx, req.params.tenantId);
       const [subscription] = await tx.select({ billingStatus: chiamoSubscriptions.billingStatus }).from(chiamoSubscriptions).where(eq(chiamoSubscriptions.tenantId, req.params.tenantId)).limit(1);
+      if (!subscription) throw Object.assign(new Error("Chiamo subscription is missing."), { status:409, code:"CHIAMO_SERVICE_NOT_CONFIGURED" });
+      if (value.voiceEnabled === true && subscription.billingStatus !== "ACTIVE") throw Object.assign(new Error("Billing must be ACTIVE before Voice can be enabled."), { status:409, code:"BILLING_INACTIVE" });
+      const [saved] = await tx.insert(chiamoServiceConfigurations).values({ tenantId:req.params.tenantId,...normalized }).onConflictDoUpdate({target:chiamoServiceConfigurations.tenantId,set:{...normalized,updatedAt:new Date()}}).returning();
       if (value.voiceEnabled !== undefined || value.accountActive !== undefined) {
         await upsertChiamoPhoneEntitlement(
           tx,

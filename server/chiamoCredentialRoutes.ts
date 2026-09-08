@@ -97,6 +97,8 @@ export function registerChiamoCredentialRoutes(
       status: {
         tenantActive: tenant.isActive === true,
         chiamoEnabled: true,
+        accountActive: service?.accountActive !== false,
+        explicitLoginDisabled: service?.explicitLoginDisabled === true,
         loginExplicitlyDisabled: service?.accountActive === false
           || service?.explicitLoginDisabled === true,
       },

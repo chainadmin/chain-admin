@@ -1,8 +1,44 @@
 import twilio from 'twilio';
 import { eq, sql } from 'drizzle-orm';
 import { tenants } from '@shared/schema';
+import { chiamoServiceConfigurations } from '@shared/chiamo-schema';
 import { db } from './db';
 import { decryptEncryptedCredentialOrNull, encryptCredential } from './credentialCrypto';
+export const TWILIO_PROVIDER_TIMEOUT_MS = 20_000;
+export const VOICE_ONBOARDING_CLAIM_MS = 10 * 60 * 1000;
+
+/** A superseded worker must never persist or replace a newer worker's secrets. */
+async function withVoiceClaim<T>(
+  tenantId: string,
+  claimAttemptedAt: Date | undefined,
+  operation: (tx: any) => Promise<T>,
+): Promise<T> {
+  return db.transaction(async tx => {
+    const [tenant] = await tx.select().from(tenants).where(eq(tenants.id, tenantId)).for("update").limit(1);
+    if (!tenant) throw new Error("Organization not found");
+    if (claimAttemptedAt) {
+      const [service] = await tx.select().from(chiamoServiceConfigurations)
+        .where(eq(chiamoServiceConfigurations.tenantId, tenantId)).for("update").limit(1);
+      if (!tenant.chiamoConnectEnabled || tenant.chainCoreEnabled
+        || service?.voiceProviderStatus !== "IN_PROGRESS"
+        || service.voiceProviderAttemptedAt?.getTime() !== claimAttemptedAt.getTime()
+        || Date.now() + TWILIO_PROVIDER_TIMEOUT_MS >= claimAttemptedAt.getTime() + VOICE_ONBOARDING_CLAIM_MS) {
+        throw Object.assign(new Error("Voice onboarding was superseded. Refresh its status."), { code: "VOICE_CLAIM_LOST" });
+      }
+    }
+    return operation(tx);
+  });
+}
+
+export function guardVoiceProvisioner<T extends object>(provider: T, check: () => Promise<void>): T {
+  return new Proxy(provider, {
+    get(target, key, receiver) {
+      const value = Reflect.get(target, key, receiver);
+      if (typeof value !== "function") return value;
+      return async (...args: unknown[]) => { await check(); return value.apply(target, args); };
+    },
+  });
+}
 
 export type CompanyTwilioAccount = {
   tenantId: string;
@@ -72,7 +108,7 @@ export const COMPANY_TWILIO_VOICE_FIELDS = {
  */
 export async function resolveCompanyTwilioAccount(
   tenantId: string,
-  options: { createIfMissing?: boolean; provisioner?: AccountProvisioner } = {},
+  options: { createIfMissing?: boolean; provisioner?: AccountProvisioner; claimAttemptedAt?: Date } = {},
 ): Promise<CompanyTwilioAccount> {
   const [tenant] = await db.select({
       id: tenants.id,
@@ -86,10 +122,13 @@ export async function resolveCompanyTwilioAccount(
   if (!tenant) throw new Error('Organization not found');
   if (tenant.sid) return { tenantId, subaccountSid: tenant.sid, status: tenant.status || 'active', reused: true };
   if (!options.createIfMissing) throw new Error('Organization has no Twilio subaccount');
-  const provisioner = options.provisioner || masterAccountProvisioner();
+  const rawProvisioner = options.provisioner || masterAccountProvisioner();
+  const provisioner = options.claimAttemptedAt
+    ? guardVoiceProvisioner(rawProvisioner, () => withVoiceClaim(tenantId, options.claimAttemptedAt, async () => undefined))
+    : rawProvisioner;
   const friendlyName = `Chiamo ${tenantId} ${(tenant.businessName || tenant.name).slice(0, 35)}`.slice(0, 64);
   const created = await provisioner.findCompanySubaccount?.(friendlyName) || await provisioner.createCompanySubaccount(friendlyName);
-  await db.transaction(async tx => {
+  await withVoiceClaim(tenantId, options.claimAttemptedAt, async tx => {
     const [current] = await tx.select({ sid:tenants.twilioAccountSid }).from(tenants).where(eq(tenants.id,tenantId)).limit(1);
     if (current?.sid) return;
     await tx.update(tenants).set({
@@ -108,7 +147,7 @@ function masterAccountProvisioner(): AccountProvisioner {
   const sid = process.env.TWILIO_ACCOUNT_SID;
   const token = process.env.TWILIO_AUTH_TOKEN;
   if (!sid || !token) throw new Error('Twilio master credentials are not configured');
-  const client = twilio(sid, token);
+  const client = twilio(sid, token, { timeout: TWILIO_PROVIDER_TIMEOUT_MS });
   return {
     async createCompanySubaccount(name) {
       const account = await client.api.v2010.accounts.create({ friendlyName: name });
@@ -128,7 +167,7 @@ export async function getCompanyTwilioClient(tenantId: string, createIfMissing =
   const masterToken = process.env.TWILIO_AUTH_TOKEN;
   if (!masterSid || !masterToken) throw new Error('Twilio master credentials are not configured');
   const account = await resolveCompanyTwilioAccount(tenantId, { createIfMissing });
-  return twilio(masterSid, masterToken, { accountSid: account.subaccountSid });
+  return twilio(masterSid, masterToken, { accountSid: account.subaccountSid, timeout: TWILIO_PROVIDER_TIMEOUT_MS });
 }
 
 /** Conservative removal cleanup: suspend only; numbers, recordings and ports stay intact. */
@@ -137,7 +176,7 @@ export async function suspendCompanyTwilioSubaccount(subaccountSid: string): Pro
   const masterToken = process.env.TWILIO_AUTH_TOKEN;
   if (!masterSid || !masterToken) throw new Error("Twilio master credentials are not configured");
   try {
-    await twilio(masterSid, masterToken).api.v2010.accounts(subaccountSid).update({ status: "suspended" });
+    await twilio(masterSid, masterToken, { timeout: TWILIO_PROVIDER_TIMEOUT_MS }).api.v2010.accounts(subaccountSid).update({ status: "suspended" });
   } catch (error: any) {
     // Twilio's 20404 means the resource was previously removed; both that and
     // an already-suspended account are successful terminal cleanup states.
@@ -166,7 +205,7 @@ function masterVoiceProvisioner(): VoiceProvisioner {
   if (!masterSid || !masterToken) throw new Error('Twilio master credentials are not configured');
 
   const scopedClient = (subaccountSid: string) =>
-    twilio(masterSid, masterToken, { accountSid: subaccountSid });
+    twilio(masterSid, masterToken, { accountSid: subaccountSid, timeout: TWILIO_PROVIDER_TIMEOUT_MS });
 
   return {
     async createCompanyApiKey(subaccountSid, friendlyName) {
@@ -245,10 +284,14 @@ export async function resolveCompanyTwilioVoiceConfiguration(
     provisioner?: VoiceProvisioner;
     store?: VoiceConfigurationStore;
     webhookUrl?: string;
+    claimAttemptedAt?: Date;
   } = {},
 ): Promise<CompanyTwilioVoiceConfiguration> {
-  const account = await resolveCompanyTwilioAccount(tenantId, { createIfMissing: true });
-  const provisioner = options.provisioner || masterVoiceProvisioner();
+  const account = await resolveCompanyTwilioAccount(tenantId, { createIfMissing: true, claimAttemptedAt: options.claimAttemptedAt });
+  const rawProvisioner = options.provisioner || masterVoiceProvisioner();
+  const provisioner = options.claimAttemptedAt
+    ? guardVoiceProvisioner(rawProvisioner, () => withVoiceClaim(tenantId, options.claimAttemptedAt, async () => undefined))
+    : rawProvisioner;
   const webhookUrl = options.webhookUrl || voiceWebhookUrl();
 
   if (options.store) {
@@ -260,7 +303,11 @@ export async function resolveCompanyTwilioVoiceConfiguration(
       provisioner,
       webhookUrl,
     );
-    await options.store.save(tenantId, next);
+    if (options.claimAttemptedAt) {
+      await withVoiceClaim(tenantId, options.claimAttemptedAt, async () => options.store!.save(tenantId, next));
+    } else {
+      await options.store.save(tenantId, next);
+    }
     return { tenantId, subaccountSid: account.subaccountSid, ...next };
   }
 
@@ -286,13 +333,13 @@ export async function resolveCompanyTwilioVoiceConfiguration(
     if (!tenant) throw new Error('Organization not found');
 
   const saveProgress = async (configuration: CompanyVoiceConfigurationRecord) => {
-    await db.execute(sql`
+    await withVoiceClaim(tenantId, options.claimAttemptedAt, async tx => tx.execute(sql`
       update tenants set
         twilio_api_key_sid = ${configuration.apiKeySid},
         twilio_api_key_secret = ${configuration.apiKeySecret ? encryptCredential(configuration.apiKeySecret) : null},
         twilio_twiml_app_sid = ${configuration.twimlAppSid}
       where id = ${tenantId}
-    `);
+    `));
   };
   const next = await provisionMissingCompanyVoiceResources(
       account.subaccountSid,
@@ -308,12 +355,6 @@ export async function resolveCompanyTwilioVoiceConfiguration(
     webhookUrl,
     saveProgress,
   );
-  await db.execute(sql`
-      update tenants
-      set twilio_api_key_sid = ${next.apiKeySid},
-          twilio_api_key_secret = ${encryptCredential(next.apiKeySecret)},
-          twilio_twiml_app_sid = ${next.twimlAppSid}
-      where id = ${tenantId}
-  `);
+  await saveProgress(next);
   return { tenantId, subaccountSid: account.subaccountSid, ...next };
 }

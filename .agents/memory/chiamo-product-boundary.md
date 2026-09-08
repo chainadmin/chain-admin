@@ -16,3 +16,14 @@ preserve deliberate account and billing restrictions, and preserve historical
 messaging resources and invoices. Deliver customer access through a
 Global-Admin-generated, one-time temporary password, not a recoverable password
 or an emailed invitation.
+
+Legacy disabled-login flags are ambiguous: they represented both unfinished
+invitation delivery and deliberate administrator restrictions. Preserve them
+until a Global Admin explicitly reviews and enables login.
+
+**Why:** Treating every legacy false value as a provider-only block can silently
+reopen an account that an administrator intentionally restricted.
+
+**How to apply:** Preserve the restriction during migration, provide an explicit
+review/enable action, and make reconciliation one-time so later startups do not
+undo the administrator's decision.

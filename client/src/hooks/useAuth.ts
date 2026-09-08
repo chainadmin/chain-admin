@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { getAuthToken, getStoredTenantName, getStoredTenantSlug, persistTenantMetadata } from "@/lib/cookies";
+import { getAuthToken, getStoredTenantName, getStoredTenantSlug, persistTenantMetadata, setCookie } from "@/lib/cookies";
 import { isExpoApp } from '@/lib/expo-bridge';
 
 export function useAuth() {
@@ -44,9 +44,11 @@ export function useAuth() {
           
           const payload = JSON.parse(jsonPayload);
           
-          // Check if token is expired
-          if (payload.exp && payload.exp * 1000 < Date.now()) {
+          // Password-change-only tokens must never become application sessions.
+          if (payload.passwordChangeOnly === true || (payload.exp && payload.exp * 1000 < Date.now())) {
             localStorage.removeItem('authToken');
+            setCookie('authToken', '', -1);
+            document.cookie = "authToken=; Max-Age=0; path=/; SameSite=Lax";
             setJwtAuth(null);
           } else {
             // Get tenant info from storage
@@ -100,14 +102,16 @@ export function useAuth() {
 
   // Determine final auth state
   const isLoading = (isConsumerRoute || isMobileApp) ? false : (checkingJwt || (!jwtAuth && replitLoading));
-  const user = jwtAuth || replitUser;
-  const isAuthenticated = !!(jwtAuth || replitUser);
+  const unrestrictedUser = (replitUser as any)?.passwordChangeOnly || (replitUser as any)?.requiresPasswordChange
+    ? null : replitUser;
+  const user = jwtAuth || unrestrictedUser;
+  const isAuthenticated = !!(jwtAuth || unrestrictedUser);
 
   return {
     user,
     isLoading,
     isAuthenticated,
     isJwtAuth: !!jwtAuth,
-    isReplitAuth: !!replitUser,
+    isReplitAuth: !!unrestrictedUser,
   };
 }

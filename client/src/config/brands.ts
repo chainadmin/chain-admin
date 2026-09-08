@@ -38,8 +38,22 @@ export const brands: Record<ProductBrand, BrandConfiguration> = {
 
 export function detectBrand(location: Pick<Location, "hostname" | "search"> = window.location): ProductBrand {
   const queryOverride = new URLSearchParams(location.search).get("brand");
+  // Keep the selected product while navigating in the shared development
+  // preview. Production continues to use its actual product hostname.
+  let previewOverride: string | null = null;
+  if (location.hostname === "localhost" || location.hostname === "127.0.0.1" || location.hostname.endsWith(".replit.dev")) {
+    try {
+      if (queryOverride === "chiamo" || queryOverride === "chain") {
+        sessionStorage.setItem("previewProductBrand", queryOverride);
+      }
+      previewOverride = sessionStorage.getItem("previewProductBrand");
+    } catch {
+      // Storage can be unavailable in an embedded preview; the query still works.
+    }
+    if (queryOverride === "chain" || (queryOverride !== "chiamo" && previewOverride === "chain")) return "chain";
+  }
   const devOverride = env.VITE_APP_BRAND || env.APP_BRAND;
-  if (queryOverride === "chiamo" || devOverride === "chiamo") return "chiamo";
+  if (queryOverride === "chiamo" || previewOverride === "chiamo" || devOverride === "chiamo") return "chiamo";
   return location.hostname === brands.chiamo.domain || location.hostname === brands.chiamo.appDomain ||
     location.hostname.endsWith(`.${brands.chiamo.domain}`) ? "chiamo" : "chain";
 }

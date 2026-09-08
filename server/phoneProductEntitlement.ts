@@ -28,6 +28,18 @@ export type PhoneEntitlementStatus = "ACTIVE" | "SUSPENDED" | "CANCELLED";
 // both database and transaction expose this query surface.
 type DbSession = any;
 
+/** Product ownership is checked under the same lock as every Chiamo mutation. */
+export async function lockChiamoOnlyTenant(tx: DbSession, tenantId: string) {
+  const [tenant] = await tx.select().from(tenants)
+    .where(eq(tenants.id, tenantId)).for("update").limit(1);
+  if (!tenant || tenant.chiamoConnectEnabled !== true || tenant.chainCoreEnabled !== false) {
+    throw Object.assign(new Error("This operation requires a Chiamo-only customer."), {
+      status: 409, code: "CHIAMO_CUSTOMER_REQUIRED",
+    });
+  }
+  return tenant as typeof tenants.$inferSelect;
+}
+
 /**
  * A tenant match is deliberately conservative.  An email-only or name-only
  * match is not safe to merge, and is returned to the caller for manual review.
@@ -314,9 +326,7 @@ export async function upsertChiamoPhoneEntitlement(
   requestedVoiceEnabled?: boolean,
   requestedAccountActive?: boolean,
 ) {
-  const [tenant] = await tx.select({ id: tenants.id }).from(tenants)
-    .where(eq(tenants.id, tenantId)).for("update");
-  if (!tenant) throw new Error("Tenant not found");
+  const tenant = await lockChiamoOnlyTenant(tx, tenantId);
   const [currentEntitlement] = await tx.select().from(phoneProductEntitlements)
     .where(eq(phoneProductEntitlements.tenantId, tenantId)).limit(1);
   const [currentService] = await tx.select().from(chiamoServiceConfigurations)
@@ -325,17 +335,21 @@ export async function upsertChiamoPhoneEntitlement(
   // ACTIVE retry/reactivation restores service without manual re-provisioning.
   const {
     voiceConfigured,
-    entitlementEnabled: enabled,
-    operationalAccountActive,
-    allowed,
+    entitlementEnabled: desiredEnabled,
+    allowed: desiredAllowed,
   } = resolveChiamoPhoneState({
     lifecycleStatus: status,
     currentEntitlementEnabled: currentEntitlement?.enabled,
     currentServiceVoiceEnabled: currentService?.voiceEnabled,
     currentServiceAccountActive: currentService?.accountActive,
     requestedVoiceEnabled,
-    requestedAccountActive,
+    requestedAccountActive: requestedAccountActive ?? currentService?.accountActive,
   });
+  const providerReady = currentService?.voiceProviderStatus === "READY"
+    && !!tenant.twilioAccountSid && !!tenant.twilioApiKeySid
+    && !!tenant.twilioApiKeySecret && !!tenant.twilioTwimlAppSid;
+  const enabled = desiredEnabled && providerReady;
+  const allowed = desiredAllowed && providerReady && tenant.isActive === true;
   const now = new Date();
   const entitlementChanged = !currentEntitlement
     || currentEntitlement.billingOwner !== "CHIAMO"
@@ -368,14 +382,14 @@ export async function upsertChiamoPhoneEntitlement(
 
   await tx.update(tenants).set({
     chiamoConnectEnabled: true,
-    voipEnabled: voiceConfigured,
+    voipEnabled: allowed,
   }).where(eq(tenants.id, tenantId));
   await tx.insert(chiamoServiceConfigurations).values({
-    tenantId, accountActive: operationalAccountActive, voiceEnabled: voiceConfigured,
+    tenantId, accountActive: requestedAccountActive ?? false, voiceEnabled: voiceConfigured,
     inboundEnabled: voiceConfigured, outboundEnabled: voiceConfigured, recordingEnabled: voiceConfigured,
     voicemailEnabled: voiceConfigured, routingEnabled: voiceConfigured, ivrEnabled: voiceConfigured,
   }).onConflictDoUpdate({ target: chiamoServiceConfigurations.tenantId, set: {
-    accountActive: operationalAccountActive, voiceEnabled: voiceConfigured, inboundEnabled: voiceConfigured,
+    voiceEnabled: voiceConfigured, inboundEnabled: voiceConfigured,
     outboundEnabled: voiceConfigured, recordingEnabled: voiceConfigured, voicemailEnabled: voiceConfigured,
     routingEnabled: voiceConfigured, ivrEnabled: voiceConfigured, updatedAt: now,
   } });

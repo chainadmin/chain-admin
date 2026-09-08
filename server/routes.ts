@@ -91,6 +91,7 @@ import { downloadVoiceGreeting, uploadVoiceGreeting } from "./voiceObjectStorage
 import externalApiRouter from "./external-api";
 import { registerWalletRoutes } from "./walletRoutes";
 import { registerChiamoRoutes } from "./chiamoRoutes";
+import { registerChiamoCredentialRoutes } from "./chiamoCredentialRoutes";
 import { resolveChiamoBaseUrl } from "./chiamoOnboarding";
 import { CHIAMO_SUPPORT_EMAIL } from "@shared/chiamo";
 import { chiamoLeads, chiamoServiceConfigurations, chiamoSubscriptions } from "@shared/chiamo-schema";
@@ -110,6 +111,7 @@ import {
   validateGlobalAdminPassword,
   verifyGlobalAdminToken,
 } from "./globalAdminAuth";
+import { isTemporaryPasswordUsable } from "./chiamoCredentialAuth";
 import { walletService, InsufficientFundsError } from "./walletService";
 import { AuthnetService } from "./authnetService";
 import bcrypt from "bcryptjs";
@@ -1818,10 +1820,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     res.send = function(data) {
       const duration = Date.now() - startTime;
+      const sensitiveResponse = [
+        '/temporary-password',
+        '/api/agency/login',
+        '/api/chiamo/change-password',
+        '/api/auth/user',
+      ].some((path) => req.path.includes(path));
       console.log(`📤 [RESPONSE] ${req.method} ${req.path} → ${res.statusCode} (${duration}ms)`, {
         contentType: res.getHeader('content-type') || 'unknown',
         bodyType: typeof data,
-        bodyPreview: typeof data === 'string' ? data.substring(0, 100) : 'not-string'
+        bodyPreview: sensitiveResponse ? '[REDACTED]' : (typeof data === 'string' ? data.substring(0, 100) : 'not-string')
       });
       return originalSend.call(this, data);
     };
@@ -8279,6 +8287,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/agency/login', async (req, res) => {
     try {
       const { username, password } = req.body;
+      if (req.body?.product === "chiamo") res.setHeader("Cache-Control", "no-store");
       
       if (!username || !password) {
         return res.status(400).json({ message: "Username and password are required" });
@@ -8329,33 +8338,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
          const [service] = await db.select({
            accountActive:chiamoServiceConfigurations.accountActive,
            customerLoginEnabled:chiamoServiceConfigurations.customerLoginEnabled,
+            explicitLoginDisabled:chiamoServiceConfigurations.explicitLoginDisabled,
            postmarkStatus:chiamoServiceConfigurations.postmarkStatus,
            voiceEnabled:chiamoServiceConfigurations.voiceEnabled,
            voiceProviderStatus:chiamoServiceConfigurations.voiceProviderStatus,
          }).from(chiamoServiceConfigurations)
            .where(eq(chiamoServiceConfigurations.tenantId, credentials.tenantId)).limit(1);
-         const ready = service?.accountActive === true
-           && service.customerLoginEnabled === true
-           && service.postmarkStatus === "READY"
-           && Boolean(tenant.postmarkServerId && tenant.postmarkServerToken)
-           && (!service.voiceEnabled || (
-             service.voiceProviderStatus === "READY"
-             && tenant.twilioAccountSid
-             && tenant.twilioApiKeySid
-             && tenant.twilioApiKeySecret
-             && tenant.twilioTwimlAppSid
-           ));
-         if (!ready) {
-           return res.status(403).json({ message:"Chiamo Connect setup is not ready. Contact your administrator." });
+          if (service?.accountActive === false || service?.explicitLoginDisabled === true) {
+            return res.status(403).json({ message:"Chiamo Connect login has been disabled. Contact your administrator." });
          }
        }
+      const requiresPasswordChange = req.body.product === "chiamo" && credentials.mustChangePassword === true;
+      if (requiresPasswordChange && !isTemporaryPasswordUsable(credentials)) {
+        return res.status(401).json({ code: "TEMPORARY_PASSWORD_EXPIRED", message: "Temporary password has expired. Contact your administrator." });
+      }
       
       // Update last login time
       await storage.updateAgencyLoginTime(credentials.id);
       if (req.body.product === 'chiamo') {
         await db.update(chiamoServiceConfigurations).set({
-           loginConfirmedAt:new Date(), readinessStatus:"READY",
-           setupStatus:"COMPLETE",
+            loginConfirmedAt:new Date(),
           setupChecklist:sql`setup_checklist || '{"customerLoginConfirmed":true}'::jsonb`,
           updatedAt:new Date(),
         }).where(eq(chiamoServiceConfigurations.tenantId, credentials.tenantId));
@@ -8387,15 +8389,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           role: credentials.role,
           restrictedServices: credentials.restrictedServices || [],
           product: req.body.product === 'chiamo' ? 'chiamo' : 'chain',
+           credentialVersion: credentials.credentialVersion,
+           ...(requiresPasswordChange ? { passwordChangeOnly: true } : {}),
         },
         jwtSecretOrFail(),
-        { expiresIn: '7d' }
+        { expiresIn: requiresPasswordChange ? '15m' : '7d' }
       );
       
       // Return success with agency data and token
       res.json({
         message: "Login successful",
         token,
+         requiresPasswordChange,
         user: {
           id: credentials.id,
           username: credentials.username,
@@ -10210,6 +10215,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       if (!tenantId) {
         return res.status(403).json({ message: "No tenant access" });
+      }
+
+      if (req.user.product === "chiamo") {
+        const chainProviderFields = ["customSenderEmail", "twilioAccountSid", "twilioAuthToken", "twilioPhoneNumber", "twilioBusinessName", "twilioCampaignId"];
+        if (chainProviderFields.some((field) => Object.prototype.hasOwnProperty.call(req.body || {}, field))) {
+          return res.status(400).json({
+            code: "CHIAMO_VOIP_ONLY",
+            message: "Chiamo provider settings are managed through Chiamo onboarding and Voice settings.",
+          });
+        }
       }
 
       // Validate and filter the settings data
@@ -20954,6 +20969,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     return res.status(401).json({ message: "Unauthorized" });
   };
+
+  registerChiamoCredentialRoutes(app, isPlatformAdmin);
 
   app.post('/api/admin/change-password', isPlatformAdmin, async (req: any, res) => {
     try {

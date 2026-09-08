@@ -31,7 +31,7 @@ export function ChiamoLoginAccess({ tenantId, tenantName }: { tenantId: string; 
 function ChiamoAccessDialog({ tenantId, tenantName }: { tenantId: string; tenantName: string }) {
   const access = useQuery<{
     users: LoginUser[];
-    status: { tenantActive: boolean; loginExplicitlyDisabled: boolean };
+    status: { tenantActive: boolean; loginExplicitlyDisabled: boolean; accountActive?: boolean; explicitLoginDisabled?: boolean };
   }>({
     queryKey: [`/api/admin/chiamo/customers/${tenantId}/login-access`],
     staleTime: 0,
@@ -44,6 +44,7 @@ function ChiamoAccessDialog({ tenantId, tenantName }: { tenantId: string; tenant
   // Passwords deliberately stay outside React Query and browser persistence.
   const [temporary, setTemporary] = useState<TemporaryAccess | null>(null);
   const [copied, setCopied] = useState(false);
+  const [enableLoginConfirmed, setEnableLoginConfirmed] = useState(false);
   const users = access.data?.users ?? [];
   const activeUsers = users.filter(user => user.isActive);
   const selected = users.find(user => user.id === credentialId);
@@ -91,6 +92,21 @@ function ChiamoAccessDialog({ tenantId, tenantName }: { tenantId: string; tenant
     }
   }
 
+  async function enableLogin() {
+    if (busy || !enableLoginConfirmed) return;
+    setBusy(true);
+    setError("");
+    try {
+      await apiRequest("PUT", `/api/admin/chiamo/customers/${tenantId}/services`, { customerLoginEnabled: true });
+      setEnableLoginConfirmed(false);
+      await access.refetch();
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : "Login access could not be enabled.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
     <DialogHeader>
       <DialogTitle>Chiamo login access</DialogTitle>
@@ -98,6 +114,18 @@ function ChiamoAccessDialog({ tenantId, tenantName }: { tenantId: string; tenant
     </DialogHeader>
     {access.data?.status && (!access.data.status.tenantActive || access.data.status.loginExplicitlyDisabled) &&
       <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">This company’s login access is disabled. Generating a password does not remove that restriction.</p>}
+    {access.data?.status.tenantActive && access.data.status.accountActive && access.data.status.explicitLoginDisabled &&
+      <div className="space-y-3 rounded-lg border border-amber-200 p-3">
+        <p className="text-sm text-slate-600">This may be an earlier administrator restriction or an unfinished legacy setup. Review the account before enabling login. Calling still requires active billing and configured Voice service.</p>
+        <label className="flex items-start gap-2 text-sm">
+          <input type="checkbox" className="mt-1" checked={enableLoginConfirmed} disabled={busy}
+            onChange={event => setEnableLoginConfirmed(event.target.checked)} />
+          <span>I confirm this customer should be allowed to sign in.</span>
+        </label>
+        <Button variant="outline" disabled={busy || !enableLoginConfirmed} onClick={() => void enableLogin()}>
+          {busy ? "Please wait…" : "Enable login access"}
+        </Button>
+      </div>}
     {access.isLoading ? <p role="status">Loading usernames…</p> : access.isError ?
       <div role="alert"><p className="text-sm text-red-700">{(access.error as Error).message}</p>
         <Button className="mt-3" variant="outline" onClick={() => void access.refetch()}>Retry</Button></div> :

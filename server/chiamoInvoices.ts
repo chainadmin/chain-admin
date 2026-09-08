@@ -1,7 +1,7 @@
 import { and, asc, eq, lte, or, sql } from "drizzle-orm";
 import { agencyCredentials, invoices, tenants } from "@shared/schema";
 import { chiamoSubscriptions } from "@shared/chiamo-schema";
-import { calculateChiamoMonthlyService } from "@shared/chiamo";
+import { calculateChiamoVoipMonthlyService } from "@shared/chiamo";
 import { db } from "./db";
 import { emailService } from "./emailService";
 import { generateInvoicePdf } from "./invoicePdf";
@@ -39,10 +39,9 @@ export function oneCalendarMonthLater(value: string): string {
 export function buildChiamoInvoiceSnapshot(subscription: ChiamoSubscription, activeUsers: number) {
   const customCharges = (subscription.customCharges || []).map(charge => ({ ...charge, cents: Math.max(0, charge.cents) }));
   const discounts = (subscription.discounts || []).map(discount => ({ ...discount, cents: Math.max(0, discount.cents) }));
-  const calculation = calculateChiamoMonthlyService(
+  const calculation = calculateChiamoVoipMonthlyService(
     subscription.planId,
     activeUsers,
-    subscription.smsAddonEnabled,
     {
       customBasePriceCents: subscription.customBasePriceCents,
       includedUsers: subscription.includedUsers,
@@ -60,7 +59,6 @@ export function buildChiamoInvoiceSnapshot(subscription: ChiamoSubscription, act
       quantity: calculation.additionalUsers,
       unitLabel: "users",
     }] : []),
-    ...(calculation.textingChargeCents ? [{ description: "Business Texting add-on", amountCents: calculation.textingChargeCents }] : []),
     ...customCharges.filter(charge => charge.cents > 0).map(charge => ({ description: charge.name, amountCents: charge.cents })),
   ];
   let remainingChargeCents = chargeItems.reduce((sum, item) => sum + item.amountCents, 0);

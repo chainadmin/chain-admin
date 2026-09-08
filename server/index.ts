@@ -26,7 +26,6 @@ async function createServer(internalCronToken: string) {
 async function main() {
   // Validate required environment variables at startup
   const requiredEnvVars = [
-    'POSTMARK_SERVER_TOKEN',
     'DATABASE_URL',
     'JWT_SECRET'
   ];
@@ -41,8 +40,11 @@ async function main() {
   }
   
   // Optional but recommended
-  if (!process.env.POSTMARK_ACCOUNT_TOKEN) {
-    console.warn('⚠️  POSTMARK_ACCOUNT_TOKEN not set - Admin features for creating Postmark servers will be disabled');
+  if (process.env.APP_BRAND !== "chiamo" && !process.env.POSTMARK_ACCOUNT_TOKEN) {
+    console.warn('POSTMARK_ACCOUNT_TOKEN is not configured. Chain email provisioning is unavailable; Chiamo VoIP does not require it.');
+  }
+  if (process.env.APP_BRAND !== "chiamo" && !process.env.POSTMARK_SERVER_TOKEN) {
+    console.warn('POSTMARK_SERVER_TOKEN is not configured. Chain email delivery must be configured separately; Chiamo VoIP does not require it.');
   }
   
   console.log('✅ All required environment variables are present');

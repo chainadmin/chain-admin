@@ -28,7 +28,7 @@ export type ChiamoBillingOverrides = {
   discounts?: Array<{ name: string; cents: number }>;
 };
 
-/** The single source of truth for both customer and Global Admin estimates. */
+/** Legacy calculator retained for historical pricing; not for new invoices/offers. */
 export function calculateChiamoMonthlyService(planId: string, users: number, texting: boolean, overrides: ChiamoBillingOverrides | number | null = {}) {
   const plan = chiamoPlans.find(item => item.id === planId) || (planId === "enterprise" ? { id:"enterprise", name:"Enterprise", monthlyPriceCents:0, includedUsers:1, additionalUserPriceCents:2500, includedNumbers:0, features:["Negotiated service configuration"] } : undefined);
   if (!plan) return null;
@@ -45,4 +45,14 @@ export function calculateChiamoMonthlyService(planId: string, users: number, tex
   const additionalNumberChargeCents = nonNegative(options.additionalNumberChargeCents || 0);
   const totalCents = Math.max(0, basePriceCents + additionalUserChargeCents + textingChargeCents + smsOverageCents + additionalNumberChargeCents + customChargesCents - creditsCents);
   return { plan, basePriceCents, includedUsers, additionalUsers, additionalUserChargeCents, textingChargeCents, smsOverageCents, additionalNumberChargeCents, customChargesCents, creditsCents, totalCents };
+}
+
+/** Current VoIP-only billing. Retained SMS metadata never creates a new charge. */
+export function calculateChiamoVoipMonthlyService(
+  planId: string,
+  users: number,
+  overrides: ChiamoBillingOverrides | number | null = {},
+) {
+  const options = typeof overrides === "number" ? { customBasePriceCents: overrides } : (overrides || {});
+  return calculateChiamoMonthlyService(planId, users, false, { ...options, smsOverageCents: 0 });
 }

@@ -28,7 +28,7 @@ test("CHIAMO phone ownership removes Chain phone charges and adds one informatio
   assert.match(pdf, /Chiamo Connect phone service billed separately; not in Chain invoice/);
 });
 
-test("Chiamo calculation snapshots only configured monthly charges", () => {
+test("new Chiamo invoices omit retired texting charges without rewriting retained subscription fields", () => {
   const snapshot = buildChiamoInvoiceSnapshot({
     tenantId: "tenant", planId: "starter", customBasePriceCents: null, includedUsers: 3,
     additionalUserPriceCents: 2500, additionalNumberPriceCents: 9999, smsAddonEnabled: true,
@@ -36,9 +36,9 @@ test("Chiamo calculation snapshots only configured monthly charges", () => {
     discounts: [{ name: "Partner", cents: 1000 }], billingStatus: "ACTIVE", startDate: "2025-01-01",
     nextBillingDate: "2025-02-01", notes: null, updatedAt: new Date(),
   }, 5);
-  assert.equal(snapshot.calculation.totalCents, 41400);
-  assert.equal(snapshot.lineItems.some(item => /number|overage.*sms/i.test(item.description)), false);
-  assert.deepEqual(snapshot.lineItems.map(item => item.amountCents), [19900, 5000, 12500, 5000, -1000]);
+  assert.equal(snapshot.calculation.totalCents, 28900);
+  assert.equal(snapshot.lineItems.some(item => /number|sms|texting/i.test(item.description)), false);
+  assert.deepEqual(snapshot.lineItems.map(item => item.amountCents), [19900, 5000, 5000, -1000]);
 });
 
 test("Chiamo invoice snapshots normalize malformed money and always balance", () => {

@@ -1,4 +1,5 @@
 import { pool } from './db';
+import { migrateChiamoLoginAccess } from "./chiamoLoginAccessMigration";
 import { encryptCredential } from './credentialCrypto';
 import { createHash } from 'node:crypto';
 import bcrypt from 'bcryptjs';
@@ -39,6 +40,11 @@ export async function runMigrations() {
         updated_at TIMESTAMP DEFAULT NOW()
       )
     `);
+    await client.query(`ALTER TABLE agency_credentials ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE`);
+    await client.query(`ALTER TABLE agency_credentials ADD COLUMN IF NOT EXISTS temporary_password_expires_at TIMESTAMP`);
+    await client.query(`ALTER TABLE agency_credentials ADD COLUMN IF NOT EXISTS credential_version INTEGER NOT NULL DEFAULT 1`);
+    await client.query(`CREATE TABLE IF NOT EXISTS chiamo_admin_reauth_attempts (client_key_hash TEXT PRIMARY KEY, failures INTEGER NOT NULL DEFAULT 1, reset_at TIMESTAMP NOT NULL, updated_at TIMESTAMP DEFAULT NOW())`);
+    await client.query(`CREATE TABLE IF NOT EXISTS chiamo_credential_audits (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), tenant_id UUID REFERENCES tenants(id) ON DELETE SET NULL, credential_id UUID REFERENCES agency_credentials(id) ON DELETE SET NULL, actor_id TEXT NOT NULL, action TEXT NOT NULL, outcome TEXT NOT NULL, metadata JSONB NOT NULL DEFAULT '{}'::jsonb, created_at TIMESTAMP NOT NULL DEFAULT NOW())`);
     // Removal evidence is deliberately tenant-independent: deleting a tenant
     // must never erase the platform-admin decision trail or pending cleanup.
     await client.query(`
@@ -2714,6 +2720,7 @@ export async function runMigrations() {
         updated_at TIMESTAMP NOT NULL DEFAULT NOW()
       )
     `);
+    await migrateChiamoLoginAccess(client);
     await client.query(`
       ALTER TABLE chiamo_service_configurations
         ADD COLUMN IF NOT EXISTS core_conversion_status TEXT NOT NULL DEFAULT 'PENDING',

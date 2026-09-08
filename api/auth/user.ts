@@ -18,6 +18,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   }
 
   try {
+    if (req.authClaims?.passwordChangeOnly === true) res.setHeader('Cache-Control', 'no-store');
     const tenantId = req.platformUser?.tenantId;
     if (!tenantId) {
       res.status(401).json({ error: 'Unauthorized' });
@@ -47,6 +48,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       tenantId,
       tenantName: tenant.name,
       tenantSlug: tenant.slug,
+      requiresPasswordChange: req.authClaims?.passwordChangeOnly === true,
     });
   } catch (error: any) {
     console.error('Auth user API error:', error);

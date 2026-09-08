@@ -53,8 +53,9 @@ export function ChiamoLogin() {
         });
         if (!response.ok) {
           const data = await parseErrorResponse(response);
-          throw new ApiError(response.status, data && typeof data === "object" && "message" in data
-            ? String(data.message) : "Your password could not be changed.", data);
+          const detail = data && typeof data === "object"
+            ? ("message" in data ? data.message : "error" in data ? data.error : undefined) : undefined;
+          throw new ApiError(response.status, detail ? String(detail) : "Your password could not be changed.", data);
         }
         const updatedPassword = newPassword;
         setChangeToken(null);

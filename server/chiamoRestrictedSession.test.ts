@@ -7,7 +7,7 @@ import { db } from "./db";
 
 type Result = { status?: number; body?: any; next: boolean };
 
-async function authenticate(path: string, claims: Record<string, unknown>, credential: Record<string, unknown>, mountedPath = path): Promise<Result> {
+async function authenticate(path: string, claims: Record<string, unknown>, credential: Record<string, unknown>, mountedPath = path, serviceState: Record<string, unknown> = {}): Promise<Result> {
   const secret = "restricted-session-test-secret";
   const previousSecret = process.env.JWT_SECRET;
   process.env.JWT_SECRET = secret;
@@ -26,7 +26,7 @@ async function authenticate(path: string, claims: Record<string, unknown>, crede
       from: () => query,
       where: () => query,
       limit: () => query,
-      then: (resolve: any) => resolve([{ accountActive: true, explicitLoginDisabled: false }]),
+      then: (resolve: any) => resolve([{ accountActive: true, explicitLoginDisabled: false, ...serviceState }]),
     };
     return query;
   };
@@ -123,4 +123,19 @@ test("originalUrl preserves Chiamo product classification through mounted router
     "/token",
   );
   assert.equal(restricted.status, 403);
+});
+
+test("migrated deliberate and ambiguous login disables block existing sessions while provider-only failure does not", async () => {
+  const credential = { ...baseCredential, mustChangePassword: false, temporaryPasswordExpiresAt: null };
+  for (const postmarkStatus of ["READY", "FAILED"]) {
+    const blocked = await authenticate("/api/voip/token", baseClaims, credential, "/token", {
+      customerLoginEnabled: false, explicitLoginDisabled: true, postmarkStatus,
+    });
+    assert.equal(blocked.next, false);
+    assert.equal(blocked.status, 401);
+  }
+  const providerOnly = await authenticate("/api/voip/token", baseClaims, credential, "/token", {
+    customerLoginEnabled: true, explicitLoginDisabled: false, postmarkStatus: "FAILED",
+  });
+  assert.equal(providerOnly.next, true);
 });
