@@ -4964,6 +4964,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         tenantId: tenantId, // Track email usage by tenant
       });
 
+      // EmailService returns provider errors as a result so callers can decide
+      // how to handle them. Do not turn a rejected test message into a false
+      // HTTP 200 "success" response in the UI.
+      if (!result.success) {
+        return res.status(502).json({
+          message: result.error || "Email provider rejected the test message",
+        });
+      }
+
       res.json(result);
     } catch (error) {
       console.error("Error sending test email:", error);
