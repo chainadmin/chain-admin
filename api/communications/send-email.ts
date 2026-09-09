@@ -14,6 +14,12 @@ import {
   getCompanyMessagingBlockMessage,
   isServiceRestrictedForMember,
 } from '@shared/utils/messagingAccess';
+import { decryptCredential } from '../../server/credentialCrypto';
+import {
+  resolveTenantFromAddress,
+  resolveTenantPostmarkToken,
+  resolveTenantTransactionalStream,
+} from '../_lib/postmarkTenantRouting';
 
 const DEFAULT_FROM_EMAIL = 'support@chainsoftwaregroup.com';
 
@@ -363,8 +369,12 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       customBranding: tenantBranding,
     };
 
-    const activePostmarkClient = tenantRecord?.postmarkServerToken
-      ? new Client(tenantRecord.postmarkServerToken)
+    // Tenant credentials are encrypted by the production migration. Passing
+    // the stored `enc:v1:` value to Postmark makes every dedicated-server send
+    // fail authentication even though the global fallback server still works.
+    const tenantPostmarkToken = resolveTenantPostmarkToken(tenantRecord, decryptCredential);
+    const activePostmarkClient = tenantPostmarkToken
+      ? new Client(tenantPostmarkToken)
       : postmarkClient;
 
     if (!activePostmarkClient) {
@@ -436,21 +446,27 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
 
     const textBody = htmlToText(finalizedHtml);
 
+    // The tenant contact/login email is not necessarily a verified sender.
+    // Match the main email service by using the configured custom sender or
+    // the account's verified Chain-domain sender.
+    const fromEmail = resolveTenantFromAddress(tenantRecord, DEFAULT_FROM_EMAIL);
     const result = await activePostmarkClient.sendEmail({
-      From: tenantRecord?.email || DEFAULT_FROM_EMAIL,
+      From: fromEmail,
       To: consumerRecord.email,
+      ReplyTo: tenantRecord.postmarkInboundAddress || process.env.POSTMARK_INBOUND_EMAIL,
       Subject: processedSubject,
       HtmlBody: finalizedHtml,
       TextBody: textBody,
       Tag: 'direct-email',
       Metadata: metadata,
+      MessageStream: resolveTenantTransactionalStream(tenantRecord),
     });
 
     try {
       await db.insert(emailLogs).values({
         tenantId,
         messageId: result.MessageID,
-        fromEmail: tenantRecord?.email || DEFAULT_FROM_EMAIL,
+        fromEmail,
         toEmail: consumerRecord.email,
         subject: processedSubject,
         htmlBody: finalizedHtml,
