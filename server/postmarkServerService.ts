@@ -28,7 +28,12 @@ export interface PostmarkServerResult {
   error?: string;
 }
 
-class PostmarkServerService {
+export interface PostmarkMessageStreamResult {
+  success: boolean;
+  error?: string;
+}
+
+export class PostmarkServerService {
   private readonly accountToken: string;
   private readonly baseUrl = 'https://api.postmarkapp.com';
 
@@ -77,6 +82,44 @@ class PostmarkServerService {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred'
       };
+    }
+  }
+
+  /**
+   * Postmark only creates the transactional `outbound` stream with a new
+   * server. Campaign delivery uses a Broadcast stream, so make sure it exists
+   * before the tenant is allowed to use that server.
+   */
+  async ensureBroadcastStream(serverToken: string, streamId = 'broadcast'): Promise<PostmarkMessageStreamResult> {
+    try {
+      const headers = {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'X-Postmark-Server-Token': serverToken,
+      };
+      const existing = await fetch(`${this.baseUrl}/message-streams/${encodeURIComponent(streamId)}`, { headers });
+      if (existing.ok) return { success: true };
+      if (existing.status !== 404) {
+        return { success: false, error: `Failed to inspect Postmark message stream: HTTP ${existing.status}` };
+      }
+
+      const created = await fetch(`${this.baseUrl}/message-streams`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          ID: streamId,
+          Name: 'Broadcast',
+          MessageStreamType: 'Broadcast',
+        }),
+      });
+      if (created.ok) return { success: true };
+      // Another process may have created the stream after our initial lookup.
+      // Verify it rather than treating every validation response as success.
+      const afterCreate = await fetch(`${this.baseUrl}/message-streams/${encodeURIComponent(streamId)}`, { headers });
+      if (afterCreate.ok) return { success: true };
+      return { success: false, error: `Failed to create Postmark broadcast stream: HTTP ${created.status}` };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error occurred' };
     }
   }
 

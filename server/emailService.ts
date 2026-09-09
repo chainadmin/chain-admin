@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm';
 import { smaxService } from './smaxService';
 import { storage } from './storage';
 import { decryptCredential } from './credentialCrypto';
+import { postmarkServerService } from './postmarkServerService';
 
 // Postmark client will be validated at server startup, not module load
 // This allows Docker build to succeed without runtime env vars
@@ -214,6 +215,13 @@ export class EmailService {
         const batchTenantToken = batchTenant?.postmarkServerToken
           ? (batchTenant.postmarkServerToken.startsWith('enc:v1:') ? decryptCredential(batchTenant.postmarkServerToken) : batchTenant.postmarkServerToken)
           : null;
+        if (batchTenantToken) {
+          const streamId = batchTenant?.postmarkBroadcastStream || getBroadcastStreamId();
+          const stream = await postmarkServerService.ensureBroadcastStream(batchTenantToken, streamId);
+          if (!stream.success) {
+            throw new Error(stream.error || `Postmark broadcast stream "${streamId}" is unavailable`);
+          }
+        }
         const activeClient = batchTenantToken ? new Client(batchTenantToken) : postmarkClient;
         const batchResult = await activeClient.sendEmailBatch(batchMessages);
         
