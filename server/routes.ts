@@ -4660,7 +4660,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
 
           await storage.updateEmailCampaign(campaign.id, {
-            status: 'completed',
+            status: successful === 0 && failed > 0 ? 'failed' : 'completed',
             totalSent: successful,
             totalErrors: failed,
             totalRecipients: recipientCount,
@@ -23501,13 +23501,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const server = postmarkResult.server;
       console.log(`✅ Postmark server created - ID: ${server.ID}, Token: ${server.ApiTokens[0]?.substring(0, 10)}...`);
 
+      const serverToken = server.ApiTokens[0];
+      if (!serverToken) {
+        await postmarkServerService.deleteServer(server.ID);
+        return res.status(502).json({ message: 'Email server was created without a delivery token' });
+      }
+      const broadcastStream = await postmarkServerService.ensureBroadcastStream(serverToken);
+      if (!broadcastStream.success) {
+        await postmarkServerService.deleteServer(server.ID);
+        return res.status(502).json({
+          message: `Failed to configure email campaign delivery: ${broadcastStream.error}`,
+        });
+      }
+
       // Create tenant with Postmark integration
       const tenant = await storage.createTenantWithPostmark({
         name,
         email,
         businessType,
         postmarkServerId: server.ID.toString(),
-        postmarkServerToken: server.ApiTokens[0],
+        postmarkServerToken: serverToken,
         postmarkServerName: server.Name,
       });
 
