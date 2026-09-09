@@ -1140,6 +1140,7 @@ async function processSmartArrangementSave(
     const blocked = (settings?.blockedAccountStatuses || []).map(status => status.toLowerCase());
     const conditions: any[] = [
       eq(consumers.tenantId, tenantId),
+      sql`${consumers.email} IS NOT NULL AND BTRIM(${consumers.email}) <> ''`,
       sql`EXISTS (
         SELECT 1 FROM accounts audience_account
         WHERE audience_account.tenant_id = ${tenantId}
@@ -4566,6 +4567,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const folderIds = campaign.folderId ? [campaign.folderId] : [];
       const recipientCount = await countEmailCampaignAudience(tenantId, campaign.targetGroup, folderIds);
+
+      if (recipientCount === 0) {
+        return res.status(400).json({ message: 'This campaign has no recipients with a usable email address and an active account' });
+      }
+
+      // Validate the exact tenant server and Broadcast stream before returning
+      // 202. Previously all provider/configuration errors occurred after the
+      // response in an unobserved background task, making a failed campaign
+      // look as if it had queued successfully.
+      try {
+        const delivery = await emailService.validateTenantDelivery(tenantId, true);
+        console.log(`📧 Campaign ${campaign.id} validated on ${delivery.server} Postmark server, stream ${delivery.messageStream}`);
+      } catch (deliveryError) {
+        const message = deliveryError instanceof Error ? deliveryError.message : 'Unknown Postmark configuration error';
+        console.error(`❌ Campaign ${campaign.id} Postmark preflight failed:`, deliveryError);
+        return res.status(502).json({ message: `Email campaign cannot start: ${message}` });
+      }
 
       // Reserve the maximum campaign charge before queueing. Processing below is
       // cursor-based and never retains more than one 500-recipient page.
@@ -19055,7 +19073,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         <p>Best regards,<br>Chain Platform</p>
       `;
 
-      await emailService.sendEmail({
+      const result = await emailService.sendEmail({
         to: recipientEmail,
         subject: emailSubject,
         html: emailBody,
@@ -22828,7 +22846,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Tenant not found" });
       }
 
-      await emailService.sendEmail({
+      const result = await emailService.sendEmail({
         to: toEmail,
         subject: "Test Email - Chain Platform",
         html: `
@@ -22844,7 +22862,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         tenantId: tenant.id,
       });
 
-      res.json({ message: "Test email sent successfully" });
+      if (!result.success) {
+        return res.status(502).json({
+          message: result.error || `Postmark rejected the test email for ${tenant.name}`,
+        });
+      }
+
+      res.json({ message: "Test email sent successfully", messageId: result.messageId });
     } catch (error) {
       console.error("Error sending test email:", error);
       res.status(500).json({ message: "Failed to send test email" });
@@ -23420,6 +23444,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         postmarkInboundAddress: z.string().email().nullable().optional(),
         customSenderEmail: z.string().email().nullable().optional(),
       }).parse(req.body);
+      if (data.postmarkServerToken) {
+        const { encryptCredential } = await import('./credentialCrypto');
+        data.postmarkServerToken = encryptCredential(data.postmarkServerToken);
+      }
       const tenant = await storage.updateTenant(req.params.tenantId, data as Partial<Tenant>);
       res.json({
         id: tenant.id,
