@@ -170,8 +170,11 @@ export class EmailService {
     // Campaign callers pass bounded chunks. Cache configuration so a batch does
     // not execute one tenant query per recipient.
     const tenantConfigs = new Map<string, any>();
+    const tenantDmpEnabled = new Map<string, boolean>();
     for (const tenantId of Array.from(new Set(emails.map(email => email.tenantId).filter((id): id is string => Boolean(id))))) {
       tenantConfigs.set(tenantId, await this.getTenantDeliveryConfig(tenantId));
+      const settings = await storage.getTenantSettings(tenantId).catch(() => null);
+      tenantDmpEnabled.set(tenantId, Boolean((settings as any)?.dmpEnabled));
     }
 
     for (let i = 0; i < emails.length; i += batchSize) {
@@ -232,6 +235,14 @@ export class EmailService {
         const activeClient = batchTenantToken ? new Client(batchTenantToken) : postmarkClient;
         const batchResult = await activeClient.sendEmailBatch(batchMessages);
         
+        // Persist provider results in one insert and run optional integrations in
+        // parallel. The old per-recipient awaits made a 500-recipient campaign
+        // wait on as many as 1,500 sequential database/API round trips before
+        // its progress could advance, which left campaigns apparently stuck in
+        // `sending` even after Postmark had accepted the batch.
+        const sentLogRows: Array<typeof emailLogs.$inferInsert> = [];
+        const integrationTasks: Array<() => Promise<void>> = [];
+
         // Process batch results
         for (let j = 0; j < batchResult.length; j++) {
           const result = batchResult[j];
@@ -240,9 +251,9 @@ export class EmailService {
           if (result.ErrorCode === 0) {
             successful++;
             
-            // Log email to database if tenantId is provided
+            // Collect logs and insert the entire provider batch below.
             if (originalEmail.tenantId) {
-              await db.insert(emailLogs).values({
+              sentLogRows.push({
                 tenantId: originalEmail.tenantId,
                 messageId: result.MessageID,
                 fromEmail: batchMessages[j].From,
@@ -259,36 +270,39 @@ export class EmailService {
             // Create SMAX note if filenumber and tenantId are available
             const isInternalNotification = typeof originalEmail.metadata?.type === 'string' && originalEmail.metadata.type.includes('notification');
             if (originalEmail.metadata?.filenumber && originalEmail.tenantId && !isInternalNotification) {
-              try {
-                await smaxService.insertNote(originalEmail.tenantId, {
-                  filenumber: String(originalEmail.metadata.filenumber),
-                  collectorname: 'System',
-                  logmessage: `Email sent: ${originalEmail.subject}`
-                });
-                console.log(`📝 SMAX note created for email to account ${originalEmail.metadata.filenumber}`);
-              } catch (noteError) {
-                console.error('Error creating SMAX note for email:', noteError);
-              }
+              integrationTasks.push(async () => {
+                try {
+                  await smaxService.insertNote(originalEmail.tenantId, {
+                    filenumber: String(originalEmail.metadata.filenumber),
+                    collectorname: 'System',
+                    logmessage: `Email sent: ${originalEmail.subject}`,
+                  });
+                  console.log(`📝 SMAX note created for email to account ${originalEmail.metadata.filenumber}`);
+                } catch (noteError) {
+                  console.error('Error creating SMAX note for email:', noteError);
+                }
+              });
             }
             
             // Log email to DMP via sendEmail API if enabled (filenumber required)
             if (originalEmail.metadata?.filenumber && originalEmail.tenantId && !isInternalNotification) {
-              try {
-                const tenantSettings = await storage.getTenantSettings(originalEmail.tenantId);
-                if ((tenantSettings as any)?.dmpEnabled) {
-                  const { dmpService } = await import('./dmpService');
-                  await dmpService.sendEmail(originalEmail.tenantId, {
-                    filenumber: String(originalEmail.metadata.filenumber),
-                    email_address: originalEmail.to,
-                    subject: originalEmail.subject,
-                    body: originalEmail.html || originalEmail.text || '',
-                    direction: 'outbound',
-                    status: 'sent',
-                  });
-                  console.log(`📝 DMP sendEmail logged for email to account ${originalEmail.metadata.filenumber}`);
-                }
-              } catch (dmpError) {
-                console.error('Error logging email to DMP (non-blocking):', dmpError);
+              if (tenantDmpEnabled.get(originalEmail.tenantId)) {
+                integrationTasks.push(async () => {
+                  try {
+                    const { dmpService } = await import('./dmpService');
+                    await dmpService.sendEmail(originalEmail.tenantId, {
+                      filenumber: String(originalEmail.metadata.filenumber),
+                      email_address: originalEmail.to,
+                      subject: originalEmail.subject,
+                      body: originalEmail.html || originalEmail.text || '',
+                      direction: 'outbound',
+                      status: 'sent',
+                    });
+                    console.log(`📝 DMP sendEmail logged for email to account ${originalEmail.metadata.filenumber}`);
+                  } catch (dmpError) {
+                    console.error('Error logging email to DMP (non-blocking):', dmpError);
+                  }
+                });
               }
             }
             
@@ -313,6 +327,29 @@ export class EmailService {
             });
           }
         }
+
+        if (sentLogRows.length > 0) {
+          await db.insert(emailLogs).values(sentLogRows);
+        }
+
+        // Keep secondary systems from overwhelming their APIs while avoiding
+        // the previous strictly serial campaign bottleneck.
+        const integrationConcurrency = 10;
+        const workers = Array.from(
+          { length: Math.min(integrationConcurrency, integrationTasks.length) },
+          async () => {
+            while (integrationTasks.length > 0) {
+              const task = integrationTasks.shift();
+              if (task) await task();
+            }
+          },
+        );
+        // Provider acceptance and the durable email log define campaign
+        // progress. SMAX/DMP notes are best-effort integrations and must not
+        // hold that progress open.
+        void Promise.all(workers).catch(error => {
+          console.error('Error running post-send email integrations:', error);
+        });
         
         console.log(`✅ Batch sent: ${successful} successful, ${failed} failed`);
         
