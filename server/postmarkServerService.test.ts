@@ -45,6 +45,28 @@ test('ensureBroadcastStream creates a missing stream as Broadcast', async () => 
   }
 });
 
+test('ensureBroadcastStream provisions a stream when Postmark reports missing as HTTP 422', async () => {
+  const originalFetch = global.fetch;
+  const requests: string[] = [];
+  global.fetch = async (input) => {
+    requests.push(String(input));
+    return requests.length === 1
+      ? new Response(JSON.stringify({ ErrorCode: 1226, Message: 'The message stream could not be found.' }), { status: 422 })
+      : new Response('{}', { status: 200 });
+  };
+
+  try {
+    const result = await new PostmarkServerService().ensureBroadcastStream('tenant-token');
+    assert.deepEqual(result, { success: true });
+    assert.deepEqual(requests, [
+      'https://api.postmarkapp.com/message-streams/broadcast',
+      'https://api.postmarkapp.com/message-streams',
+    ]);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test('ensureBroadcastStream reports a provider configuration failure', async () => {
   const originalFetch = global.fetch;
   global.fetch = async () => new Response('{}', { status: 403 });
