@@ -11205,17 +11205,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { portfolioId, folderId } = req.body || {};
 
       // Fetch accounts from DMP
-      const dmpAccounts = await dmpService.getAccounts(tenantId, { portfolioId });
+      const dmpFetch = await dmpService.getAccountsWithStats(tenantId, { portfolioId });
+      const dmpAccounts = dmpFetch.accounts;
       
       if (!dmpAccounts || dmpAccounts.length === 0) {
         return res.json({
           success: true,
           message: "No accounts found in DMP to import",
-          fetched: 0,
+          fetched: dmpFetch.fetched,
           imported: 0,
           updated: 0,
           skipped: 0,
-          failed: 0,
+          failed: dmpFetch.rejected,
+          rejected: dmpFetch.rejected,
         });
       }
 
@@ -11224,9 +11226,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({
         success: true,
-        message: `Imported ${results.imported} new accounts, updated ${results.updated} existing`,
-        fetched: dmpAccounts.length,
-        failed: results.errors.length,
+        message: `Imported ${results.imported} new accounts, updated ${results.updated} existing`
+          + (dmpFetch.rejected > 0
+            ? `. Rejected ${dmpFetch.rejected} DMP ${dmpFetch.rejected === 1 ? 'row' : 'rows'} without a valid file number.`
+            : ''),
+        fetched: dmpFetch.fetched,
+        failed: dmpFetch.rejected + results.errors.length,
+        rejected: dmpFetch.rejected,
         ...results
       });
     } catch (error: any) {
@@ -17155,7 +17161,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const tenantSettings = await storage.getTenantSettings(tenant.id);
             if ((tenantSettings as any)?.dmpEnabled) {
               const { dmpService } = await import('./dmpService');
-              const dmpAccounts = await dmpService.getAccounts(tenant.id);
+              const dmpFetch = await dmpService.getAccountsWithStats(tenant.id);
+              const dmpAccounts = dmpFetch.accounts;
               if (dmpAccounts && dmpAccounts.length > 0) {
                 const { importDmpAccounts } = await import('./dmpAccountImport');
                 const results = await importDmpAccounts(
@@ -17171,7 +17178,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 console.log(
                   `[DMP Sync] Tenant ${tenant.name}: ${results.updated} updated, `
                   + `${results.imported} created, ${results.skipped} skipped `
-                  + `from ${dmpAccounts.length} DMP accounts`,
+                  + `${dmpFetch.rejected} rejected from ${dmpFetch.fetched} DMP rows`,
                 );
               }
             }

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { storage } from './storage';
 
 interface DmpConfig {
@@ -64,9 +65,14 @@ interface DmpAccount {
   email?: string;
 }
 
+export interface DmpAccountFetchResult<T = any> {
+  accounts: T[];
+  fetched: number;
+  rejected: number;
+}
+
 interface DmpImportRequestContext {
   operation: 'portfolio-list' | 'portfolio-accounts';
-  portfolioId?: string;
   offset?: number;
 }
 
@@ -247,17 +253,7 @@ function sanitizeDmpProviderMessage(rawText: string): string | undefined {
  * named/data envelope. Do not treat an arbitrary truthy response as a list.
  */
 export function normalizeDmpList<T>(payload: unknown, kind: DmpListKind): T[] {
-  let candidate: unknown = payload;
-
-  if (isRecord(candidate)) {
-    candidate = candidate[kind] ?? candidate.data;
-  }
-  if (isRecord(candidate)) {
-    candidate = candidate[kind];
-  }
-  if (!Array.isArray(candidate)) {
-    throw new DmpImportError(`DMP returned an unsupported ${kind} response format`);
-  }
+  const candidate = extractDmpList(payload, kind);
 
   for (const item of candidate) {
     if (!isRecord(item)) {
@@ -277,6 +273,63 @@ export function normalizeDmpList<T>(payload: unknown, kind: DmpListKind): T[] {
   }
 
   return candidate as T[];
+}
+
+function extractDmpList(payload: unknown, kind: DmpListKind): unknown[] {
+  let candidate: unknown = payload;
+
+  if (isRecord(candidate)) {
+    candidate = candidate[kind] ?? candidate.data;
+  }
+  if (isRecord(candidate)) {
+    candidate = candidate[kind];
+  }
+  if (!Array.isArray(candidate)) {
+    throw new DmpImportError(`DMP returned an unsupported ${kind} response format`);
+  }
+
+  return candidate;
+}
+
+function normalizeDmpFileNumber(account: Record<string, unknown>): string | undefined {
+  for (const [key, value] of Object.entries(account)) {
+    if (key.replace(/[^a-z0-9]/gi, '').toLowerCase() !== 'filenumber') continue;
+    if (typeof value !== 'string' && typeof value !== 'number') continue;
+    const normalized = String(value).trim();
+    if (normalized) return normalized;
+  }
+  return undefined;
+}
+
+function normalizeDmpAccountPage(payload: unknown): {
+  accounts: DmpAccount[];
+  fetched: number;
+  rejected: number;
+  fingerprint: string;
+} {
+  const rows = extractDmpList(payload, 'accounts');
+  const accounts: DmpAccount[] = [];
+  let rejected = 0;
+
+  for (const row of rows) {
+    if (!isRecord(row)) {
+      rejected++;
+      continue;
+    }
+    const filenumber = normalizeDmpFileNumber(row);
+    if (!filenumber) {
+      rejected++;
+      continue;
+    }
+    accounts.push({ ...row, filenumber } as DmpAccount);
+  }
+
+  return {
+    accounts,
+    fetched: rows.length,
+    rejected,
+    fingerprint: createHash('sha256').update(JSON.stringify(rows)).digest('hex'),
+  };
 }
 
 export class DebtManagerProService {
@@ -469,7 +522,6 @@ export class DebtManagerProService {
         operation: context?.operation || 'unknown',
         endpoint,
         method,
-        portfolioId: context?.portfolioId,
         offset: context?.offset,
       });
       throw new DmpImportError('Unable to reach DMP. Check the saved API URL and network connection.');
@@ -488,7 +540,6 @@ export class DebtManagerProService {
         operation: context?.operation || 'unknown',
         endpoint,
         method,
-        portfolioId: context?.portfolioId,
         offset: context?.offset,
         status: response.status,
         statusText: response.statusText,
@@ -511,8 +562,11 @@ export class DebtManagerProService {
   private async fetchPortfolioAccountPages(
     config: DmpConfig,
     portfolioId: string,
-  ): Promise<DmpAccount[]> {
+  ): Promise<DmpAccountFetchResult<DmpAccount>> {
     const accountsByFileNumber = new Map<string, DmpAccount>();
+    const seenPageFingerprints = new Set<string>();
+    let fetched = 0;
+    let rejected = 0;
     let offset = 0;
 
     while (true) {
@@ -527,15 +581,23 @@ export class DebtManagerProService {
         },
         {
           operation: 'portfolio-accounts',
-          portfolioId,
           offset,
         },
       );
-      const page = normalizeDmpList<DmpAccount>(payload, 'accounts');
+      const page = normalizeDmpAccountPage(payload);
       const total = getDmpListTotal(payload);
       let newAccountCount = 0;
 
-      for (const account of page) {
+      if (page.fetched > 0 && seenPageFingerprints.has(page.fingerprint)) {
+        throw new DmpImportError(
+          `DMP repeated an account page at offset ${offset}; import stopped to prevent an infinite loop`,
+        );
+      }
+      seenPageFingerprints.add(page.fingerprint);
+      fetched += page.fetched;
+      rejected += page.rejected;
+
+      for (const account of page.accounts) {
         const key = String(account.filenumber).trim();
         if (!accountsByFileNumber.has(key)) {
           accountsByFileNumber.set(key, account);
@@ -543,20 +605,20 @@ export class DebtManagerProService {
         }
       }
 
-      if (page.length > 0 && newAccountCount === 0) {
+      if (page.accounts.length > 0 && newAccountCount === 0) {
         throw new DmpImportError(
-          `DMP repeated an account page for portfolio ${portfolioId} at offset ${offset}; import stopped to prevent an infinite loop`,
+          `DMP repeated an account page at offset ${offset}; import stopped to prevent an infinite loop`,
         );
       }
 
-      const consumed = offset + page.length;
+      const consumed = offset + page.fetched;
       if (total !== undefined && consumed >= total) {
         break;
       }
-      if (page.length < DMP_ACCOUNT_PAGE_SIZE) {
+      if (page.fetched < DMP_ACCOUNT_PAGE_SIZE) {
         if (total !== undefined && consumed < total) {
           throw new DmpImportError(
-            `DMP ended pagination early for portfolio ${portfolioId}: received ${consumed} of ${total} accounts`,
+            `DMP ended pagination early: received ${consumed} of ${total} accounts`,
           );
         }
         break;
@@ -565,7 +627,19 @@ export class DebtManagerProService {
       offset = consumed;
     }
 
-    return Array.from(accountsByFileNumber.values());
+    if (rejected > 0) {
+      console.warn('[DMP Import] Rejected provider account rows', {
+        operation: 'portfolio-accounts',
+        fetched,
+        rejected,
+      });
+    }
+
+    return {
+      accounts: Array.from(accountsByFileNumber.values()),
+      fetched,
+      rejected,
+    };
   }
 
   async testConnection(
@@ -609,7 +683,11 @@ export class DebtManagerProService {
     const config = await this.getDmpConfig(tenantId);
     if (!config) return null;
 
-    return await this.fetchPortfolioAccountPages(config, portfolioId);
+    const result = await this.fetchPortfolioAccountPages(config, portfolioId);
+    if (result.fetched > 0 && result.accounts.length === 0) {
+      throw new DmpImportError('DMP returned accounts, but none had a valid file number');
+    }
+    return result.accounts;
   }
 
   async getAccount(tenantId: string, filenumber: string): Promise<DmpAccount | null> {
@@ -970,7 +1048,10 @@ export class DebtManagerProService {
   }
 
   // Fetch accounts from DMP (for import)
-  async getAccounts(tenantId: string, options?: { portfolioId?: string }): Promise<any[]> {
+  async getAccountsWithStats(
+    tenantId: string,
+    options?: { portfolioId?: string },
+  ): Promise<DmpAccountFetchResult> {
     const config = await this.getDmpConfig(tenantId);
     if (!config) {
       throw new DmpImportError('DMP is not enabled or the saved configuration is incomplete', 400);
@@ -1001,8 +1082,12 @@ export class DebtManagerProService {
     });
 
     if (requestedPortfolioId) {
-      const accounts = await this.fetchPortfolioAccountPages(config, requestedPortfolioId.trim());
-      return accounts.map(mapAccount);
+      const result = await this.fetchPortfolioAccountPages(config, requestedPortfolioId.trim());
+      const accounts = result.accounts.map(mapAccount);
+      if (result.fetched > 0 && accounts.length === 0) {
+        throw new DmpImportError('DMP returned accounts, but none had a valid file number');
+      }
+      return { ...result, accounts };
     }
 
     // If no portfolio specified, get all portfolios and then get accounts from each
@@ -1015,13 +1100,17 @@ export class DebtManagerProService {
     );
     const portfolios = normalizeDmpList<DmpPortfolio>(portfolioPayload, 'portfolios');
     if (portfolios.length === 0) {
-      return [];
+      return { accounts: [], fetched: 0, rejected: 0 };
     }
 
     const accountsByFileNumber = new Map<string, ReturnType<typeof mapAccount>>();
+    let fetched = 0;
+    let rejected = 0;
     for (const portfolio of portfolios) {
-      const accounts = await this.fetchPortfolioAccountPages(config, String(portfolio.id));
-      for (const account of accounts) {
+      const result = await this.fetchPortfolioAccountPages(config, String(portfolio.id));
+      fetched += result.fetched;
+      rejected += result.rejected;
+      for (const account of result.accounts) {
         const mapped = mapAccount(account);
         const key = String(mapped.filenumber).trim();
         if (!accountsByFileNumber.has(key)) {
@@ -1029,7 +1118,15 @@ export class DebtManagerProService {
         }
       }
     }
-    return Array.from(accountsByFileNumber.values());
+    const accounts = Array.from(accountsByFileNumber.values());
+    if (fetched > 0 && accounts.length === 0) {
+      throw new DmpImportError('DMP returned accounts, but none had a valid file number');
+    }
+    return { accounts, fetched, rejected };
+  }
+
+  async getAccounts(tenantId: string, options?: { portfolioId?: string }): Promise<any[]> {
+    return (await this.getAccountsWithStats(tenantId, options)).accounts;
   }
 }
 

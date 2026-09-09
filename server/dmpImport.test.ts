@@ -221,7 +221,7 @@ test('import surfaces a structured DMP validation reason without exposing other 
 
   try {
     await assert.rejects(
-      new DebtManagerProService().getAccounts('tenant-1', { portfolioId: 'portfolio-1' }),
+      new DebtManagerProService().getAccounts('tenant-1', { portfolioId: 'private-portfolio-id' }),
       (error: unknown) =>
         error instanceof DmpImportError
         && error.statusCode === 502
@@ -234,6 +234,7 @@ test('import surfaces a structured DMP validation reason without exposing other 
     assert.match(logs, /DMP requires a top-level portfolioId/);
     assert.doesNotMatch(logs, /provider-secret/);
     assert.doesNotMatch(logs, /private-account/);
+    assert.doesNotMatch(logs, /private-portfolio-id/);
     assert.doesNotMatch(logs, /123-45-6789/);
   } finally {
     storage.getTenantSettings = originalSettings;
@@ -304,6 +305,188 @@ for (const accountCount of [0, 100, 101, 500, 537]) {
   });
 }
 
+test('normalizes DMP file-number key variants and reports unusable rows without exposing values', async () => {
+  const originalSettings = storage.getTenantSettings;
+  const originalFetch = globalThis.fetch;
+  const originalConsoleWarn = console.warn;
+  const warnings: unknown[] = [];
+  storage.getTenantSettings = (async () => ({
+    dmpEnabled: true,
+    dmpApiUrl: 'https://dmp.example',
+    dmpUsername: 'user',
+    dmpPassword: 'password',
+  })) as typeof storage.getTenantSettings;
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = String(input);
+    return url.endsWith('/api/v2/login')
+      ? new Response(JSON.stringify({ token: 'test-token' }), { status: 200 })
+      : new Response(JSON.stringify({
+        accounts: [
+          { FileNumber: ' file-1 ' },
+          { file_number: 2 },
+          { 'file-number': 'file-3' },
+          { accountnumber: 'must-not-be-used-as-identity' },
+          null,
+        ],
+      }), { status: 200 });
+  }) as typeof fetch;
+  console.warn = (...values: unknown[]) => {
+    warnings.push(...values);
+  };
+
+  try {
+    const result = await new DebtManagerProService().getAccountsWithStats(
+      'tenant-1',
+      { portfolioId: 'private-portfolio-id' },
+    );
+    assert.deepEqual(result.accounts.map(account => account.filenumber), [
+      'file-1',
+      '2',
+      'file-3',
+    ]);
+    assert.equal(result.fetched, 5);
+    assert.equal(result.rejected, 2);
+    const warningText = JSON.stringify(warnings);
+    assert.match(warningText, /"fetched":5/);
+    assert.match(warningText, /"rejected":2/);
+    assert.doesNotMatch(warningText, /must-not-be-used-as-identity/);
+    assert.doesNotMatch(warningText, /private-portfolio-id/);
+  } finally {
+    storage.getTenantSettings = originalSettings;
+    globalThis.fetch = originalFetch;
+    console.warn = originalConsoleWarn;
+  }
+});
+
+test('mixed-quality DMP pages continue beyond 500 rows using provider row offsets', async () => {
+  const originalSettings = storage.getTenantSettings;
+  const originalFetch = globalThis.fetch;
+  const originalConsoleWarn = console.warn;
+  const offsets: number[] = [];
+  const sourceRows = Array.from({ length: 537 }, (_, index) => {
+    if (index === 99) return { accountnumber: 'not-a-file-number' };
+    if (index === 500) return { FileNumber: 'variant-501' };
+    return { filenumber: `file-${index + 1}` };
+  });
+  storage.getTenantSettings = (async () => ({
+    dmpEnabled: true,
+    dmpApiUrl: 'https://dmp.example',
+    dmpUsername: 'user',
+    dmpPassword: 'password',
+  })) as typeof storage.getTenantSettings;
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    if (url.endsWith('/api/v2/login')) {
+      return new Response(JSON.stringify({ token: 'test-token' }), { status: 200 });
+    }
+    const body = JSON.parse(String(init?.body));
+    offsets.push(body.offset);
+    return new Response(JSON.stringify({
+      accounts: sourceRows.slice(body.offset, body.offset + body.limit),
+      total: sourceRows.length,
+    }), { status: 200 });
+  }) as typeof fetch;
+  console.warn = () => undefined;
+
+  try {
+    const result = await new DebtManagerProService().getAccountsWithStats(
+      'tenant-1',
+      { portfolioId: 'portfolio-1' },
+    );
+    assert.equal(result.fetched, 537);
+    assert.equal(result.rejected, 1);
+    assert.equal(result.accounts.length, 536);
+    assert.ok(result.accounts.some(account => account.filenumber === 'variant-501'));
+    assert.deepEqual(offsets, [0, 100, 200, 300, 400, 500]);
+  } finally {
+    storage.getTenantSettings = originalSettings;
+    globalThis.fetch = originalFetch;
+    console.warn = originalConsoleWarn;
+  }
+});
+
+test('fails clearly when every returned DMP account row lacks a valid file number', async () => {
+  const originalSettings = storage.getTenantSettings;
+  const originalFetch = globalThis.fetch;
+  const originalConsoleWarn = console.warn;
+  storage.getTenantSettings = (async () => ({
+    dmpEnabled: true,
+    dmpApiUrl: 'https://dmp.example',
+    dmpUsername: 'user',
+    dmpPassword: 'password',
+  })) as typeof storage.getTenantSettings;
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = String(input);
+    return url.endsWith('/api/v2/login')
+      ? new Response(JSON.stringify({ token: 'test-token' }), { status: 200 })
+      : new Response(JSON.stringify({
+        accounts: [
+          { accountnumber: 'account-1' },
+          { filenumber: '   ' },
+        ],
+      }), { status: 200 });
+  }) as typeof fetch;
+  console.warn = () => undefined;
+
+  try {
+    await assert.rejects(
+      new DebtManagerProService().getAccountsWithStats(
+        'tenant-1',
+        { portfolioId: 'portfolio-1' },
+      ),
+      /none had a valid file number/,
+    );
+  } finally {
+    storage.getTenantSettings = originalSettings;
+    globalThis.fetch = originalFetch;
+    console.warn = originalConsoleWarn;
+  }
+});
+
+test('stops safely when DMP repeats a full page made only of unusable rows', async () => {
+  const originalSettings = storage.getTenantSettings;
+  const originalFetch = globalThis.fetch;
+  const originalConsoleWarn = console.warn;
+  let accountRequestCount = 0;
+  storage.getTenantSettings = (async () => ({
+    dmpEnabled: true,
+    dmpApiUrl: 'https://dmp.example',
+    dmpUsername: 'user',
+    dmpPassword: 'password',
+  })) as typeof storage.getTenantSettings;
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = String(input);
+    if (url.endsWith('/api/v2/login')) {
+      return new Response(JSON.stringify({ token: 'test-token' }), { status: 200 });
+    }
+    accountRequestCount++;
+    return new Response(JSON.stringify({
+      accounts: Array.from({ length: 100 }, (_, index) => ({
+        accountnumber: `account-${index + 1}`,
+      })),
+    }), { status: 200 });
+  }) as typeof fetch;
+  console.warn = () => undefined;
+
+  try {
+    await assert.rejects(
+      new DebtManagerProService().getAccountsWithStats(
+        'tenant-1',
+        { portfolioId: 'private-portfolio-id' },
+      ),
+      (error: unknown) =>
+        error instanceof DmpImportError
+        && /repeated an account page/.test(error.message)
+        && !error.message.includes('private-portfolio-id'),
+    );
+    assert.equal(accountRequestCount, 2);
+  } finally {
+    storage.getTenantSettings = originalSettings;
+    globalThis.fetch = originalFetch;
+    console.warn = originalConsoleWarn;
+  }
+});
+
 test('imports every DMP portfolio and removes duplicate accounts across portfolios', async () => {
   const originalSettings = storage.getTenantSettings;
   const originalFetch = globalThis.fetch;
@@ -373,8 +556,11 @@ test('stops safely when DMP repeats a full account page', async () => {
 
   try {
     await assert.rejects(
-      new DebtManagerProService().getAccounts('tenant-1', { portfolioId: 'portfolio-1' }),
-      /repeated an account page/,
+      new DebtManagerProService().getAccounts('tenant-1', { portfolioId: 'private-portfolio-id' }),
+      (error: unknown) =>
+        error instanceof DmpImportError
+        && /repeated an account page/.test(error.message)
+        && !error.message.includes('private-portfolio-id'),
     );
   } finally {
     storage.getTenantSettings = originalSettings;
