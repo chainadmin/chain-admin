@@ -21,6 +21,12 @@ export interface DmpAccountImportOptions {
   syncExistingConsumerContact?: boolean;
 }
 
+export const DMP_DELETE_CONFIRMATION = 'DELETE ALL ACCOUNTS';
+
+export function canDeleteAllDmpAccounts(role: unknown): boolean {
+  return role === 'owner' || role === 'platform_admin';
+}
+
 export async function importDmpAccounts(
   storage: ImportStorage,
   tenantId: string,
@@ -54,9 +60,19 @@ export async function importDmpAccounts(
 
       if (existing) {
         await storage.updateAccount(existing.id, {
+          accountNumber: dmpAccount.accountNumber || existing.accountNumber,
           balanceCents: dmpAccount.balance || 0,
+          originalBalanceCents: dmpAccount.originalBalance ?? existing.originalBalanceCents ?? dmpAccount.balance ?? 0,
           status: dmpAccount.status || existing.status,
           creditor: dmpAccount.creditorName || existing.creditor,
+          additionalData: {
+            ...(existing.additionalData || {}),
+            dmpClientName: dmpAccount.clientName || null,
+            dmpLastContactDate: dmpAccount.lastContactDate || null,
+            dmpNextFollowUpDate: dmpAccount.nextFollowUpDate || null,
+            dmpPortfolioId: dmpAccount.portfolioId || null,
+            dmpAssignedCollectorId: dmpAccount.assignedCollectorId || null,
+          },
         });
         if (
           options.syncExistingConsumerContact
@@ -70,6 +86,8 @@ export async function importDmpAccounts(
           if (dmpAccount.city) consumerUpdates.city = dmpAccount.city;
           if (dmpAccount.state) consumerUpdates.state = dmpAccount.state;
           if (dmpAccount.zipCode) consumerUpdates.zipCode = dmpAccount.zipCode;
+          if (dmpAccount.dateOfBirth) consumerUpdates.dateOfBirth = dmpAccount.dateOfBirth;
+          if (dmpAccount.ssnLast4) consumerUpdates.ssnLast4 = dmpAccount.ssnLast4;
           if (Object.keys(consumerUpdates).length > 0) {
             try {
               await storage.updateConsumer(existing.consumerId, consumerUpdates);
@@ -105,7 +123,30 @@ export async function importDmpAccounts(
         consumer = nameMatches[0] || null;
       }
 
-      if (!consumer) {
+      if (consumer && storage.updateConsumer) {
+        const consumerUpdates: Record<string, any> = {};
+        const placeholderFirstName = !consumer.firstName || consumer.firstName === 'Unknown';
+        const placeholderLastName = !consumer.lastName || consumer.lastName === 'Consumer';
+        if (dmpAccount.firstName && placeholderFirstName) consumerUpdates.firstName = dmpAccount.firstName;
+        if (dmpAccount.lastName && placeholderLastName) consumerUpdates.lastName = dmpAccount.lastName;
+        for (const [key, value] of Object.entries({
+          email: dmpAccount.consumerEmail,
+          phone: dmpAccount.consumerPhone,
+          address: dmpAccount.address,
+          city: dmpAccount.city,
+          state: dmpAccount.state,
+          zipCode: dmpAccount.zipCode,
+          dateOfBirth: dmpAccount.dateOfBirth,
+          ssnLast4: dmpAccount.ssnLast4,
+        })) {
+          if (value && (!consumer[key] || options.syncExistingConsumerContact)) {
+            consumerUpdates[key] = value;
+          }
+        }
+        if (Object.keys(consumerUpdates).length > 0) {
+          await storage.updateConsumer(consumer.id, consumerUpdates);
+        }
+      } else if (!consumer) {
         consumer = await storage.createConsumer({
           tenantId,
           firstName: dmpAccount.firstName || 'Unknown',
@@ -116,6 +157,9 @@ export async function importDmpAccounts(
           city: dmpAccount.city || null,
           state: dmpAccount.state || null,
           zipCode: dmpAccount.zipCode || null,
+          dateOfBirth: dmpAccount.dateOfBirth || null,
+          ssnLast4: dmpAccount.ssnLast4 || null,
+          additionalData: dmpAccount.fullName ? { dmpFullName: dmpAccount.fullName } : {},
         });
       }
 
@@ -125,9 +169,17 @@ export async function importDmpAccounts(
         accountNumber: dmpAccount.accountNumber || filenumber,
         filenumber,
         balanceCents: dmpAccount.balance || 0,
+        originalBalanceCents: dmpAccount.originalBalance ?? dmpAccount.balance ?? 0,
         creditor: dmpAccount.creditorName || 'Unknown Creditor',
         status: dmpAccount.status || 'active',
         folderId: folderId || null,
+        additionalData: {
+          dmpClientName: dmpAccount.clientName || null,
+          dmpLastContactDate: dmpAccount.lastContactDate || null,
+          dmpNextFollowUpDate: dmpAccount.nextFollowUpDate || null,
+          dmpPortfolioId: dmpAccount.portfolioId || null,
+          dmpAssignedCollectorId: dmpAccount.assignedCollectorId || null,
+        },
       });
       results.imported++;
     } catch (error: any) {

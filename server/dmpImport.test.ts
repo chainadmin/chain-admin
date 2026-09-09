@@ -7,7 +7,11 @@ import {
   REDACTED_DMP_PASSWORD,
   sanitizeDmpTestOverrides,
 } from './dmpService';
-import { importDmpAccounts } from './dmpAccountImport';
+import {
+  canDeleteAllDmpAccounts,
+  DMP_DELETE_CONFIRMATION,
+  importDmpAccounts,
+} from './dmpAccountImport';
 import { storage } from './storage';
 
 test('normalizes flat and wrapped DMP lists', () => {
@@ -81,6 +85,15 @@ test('DMP connection-test overrides use entered values without replacing a saved
   assert.deepEqual(sanitizeDmpTestOverrides({
     dmpPassword: '   ',
   }), {});
+});
+
+test('delete-all DMP policy is limited to owners and platform administrators', () => {
+  assert.equal(DMP_DELETE_CONFIRMATION, 'DELETE ALL ACCOUNTS');
+  assert.equal(canDeleteAllDmpAccounts('owner'), true);
+  assert.equal(canDeleteAllDmpAccounts('platform_admin'), true);
+  assert.equal(canDeleteAllDmpAccounts('manager'), false);
+  assert.equal(canDeleteAllDmpAccounts('user'), false);
+  assert.equal(canDeleteAllDmpAccounts(undefined), false);
 });
 
 test('connection test authenticates with unsaved form overrides and leaves saved settings untouched', async () => {
@@ -635,9 +648,18 @@ test('updates an existing account while preserving import payment fields', async
   assert.deepEqual(updates, [{
     id: 'account-1',
     values: {
+        accountNumber: 'account-number-1',
       balanceCents: 12345,
+        originalBalanceCents: 12345,
       status: 'overdue',
       creditor: 'New creditor',
+        additionalData: {
+          dmpClientName: null,
+          dmpLastContactDate: null,
+          dmpNextFollowUpDate: null,
+          dmpPortfolioId: null,
+          dmpAssignedCollectorId: null,
+        },
     },
   }]);
 });
@@ -745,4 +767,168 @@ test('scheduled DMP import options reuse the shared importer without creating di
     },
   }]);
   assert.equal(createdAccounts.length, 0);
+});
+
+test('maps the confirmed camelCase DMP response into complete consumer and account records', async () => {
+  const originalSettings = storage.getTenantSettings;
+  const originalFetch = globalThis.fetch;
+  const createdConsumers: any[] = [];
+  const createdAccounts: any[] = [];
+  storage.getTenantSettings = (async () => ({
+    dmpEnabled: true,
+    dmpApiUrl: 'https://dmp.example',
+    dmpUsername: 'user',
+    dmpPassword: 'password',
+  })) as typeof storage.getTenantSettings;
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    if (String(input).endsWith('/api/v2/login')) {
+      return new Response(JSON.stringify({ token: 'test-token' }), { status: 200 });
+    }
+    return new Response(JSON.stringify({
+      success: true,
+      total: 1,
+      data: [{
+        fileNumber: 'file-1',
+        accountNumber: 'account-1',
+        firstName: 'Test',
+        lastName: 'Person',
+        fullName: 'Test Person',
+        dateOfBirth: '1990-01-01',
+        ssnLast4: '1234',
+        email: 'test@example.com',
+        address: '1 Main St',
+        city: 'Town',
+        state: 'NY',
+        zipCode: '10001',
+        originalCreditor: 'Original Creditor',
+        clientName: 'Client',
+        originalBalance: 10000,
+        currentBalance: 7500,
+        status: 'open',
+        lastContactDate: '2026-09-01',
+        nextFollowUpDate: '2026-09-15',
+        portfolioId: 'portfolio-1',
+        assignedCollectorId: 'collector-1',
+      }],
+    }), { status: 200 });
+  }) as typeof fetch;
+  const fakeStorage = {
+    getAccountsByTenant: async () => [],
+    updateAccount: async () => undefined,
+    getConsumerByEmailAndTenant: async () => null,
+    getConsumerByPhoneAndTenant: async () => null,
+    findConsumersByNameAndTenant: async () => [],
+    createConsumer: async (values: any) => {
+      createdConsumers.push(values);
+      return { id: 'consumer-1' };
+    },
+    createAccount: async (values: any) => createdAccounts.push(values),
+  };
+
+  try {
+    const fetched = await new DebtManagerProService().getAccounts('tenant-1', {
+      portfolioId: 'portfolio-1',
+    });
+    const result = await importDmpAccounts(fakeStorage, 'tenant-1', fetched);
+    assert.equal(result.imported, 1);
+    assert.deepEqual(createdConsumers[0], {
+      tenantId: 'tenant-1',
+      firstName: 'Test',
+      lastName: 'Person',
+      email: 'test@example.com',
+      phone: null,
+      address: '1 Main St',
+      city: 'Town',
+      state: 'NY',
+      zipCode: '10001',
+      dateOfBirth: '1990-01-01',
+      ssnLast4: '1234',
+      additionalData: { dmpFullName: 'Test Person' },
+    });
+    assert.deepEqual(createdAccounts[0], {
+      tenantId: 'tenant-1',
+      consumerId: 'consumer-1',
+      accountNumber: 'account-1',
+      filenumber: 'file-1',
+      balanceCents: 750000,
+      originalBalanceCents: 1000000,
+      creditor: 'Original Creditor',
+      status: 'open',
+      folderId: null,
+      additionalData: {
+        dmpClientName: 'Client',
+        dmpLastContactDate: '2026-09-01',
+        dmpNextFollowUpDate: '2026-09-15',
+        dmpPortfolioId: 'portfolio-1',
+        dmpAssignedCollectorId: 'collector-1',
+      },
+    });
+  } finally {
+    storage.getTenantSettings = originalSettings;
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('reimport repairs a retained placeholder consumer instead of creating another consumer', async () => {
+  const updates: any[] = [];
+  let consumerCreates = 0;
+  const createdAccounts: any[] = [];
+  const retainedConsumer = {
+    id: 'consumer-retained',
+    firstName: 'Unknown',
+    lastName: 'Consumer',
+    email: 'person@example.com',
+    address: null,
+    city: null,
+    state: null,
+    zipCode: null,
+    dateOfBirth: null,
+    ssnLast4: null,
+  };
+  const fakeStorage = {
+    getAccountsByTenant: async () => [],
+    updateAccount: async () => undefined,
+    updateConsumer: async (id: string, values: any) => updates.push({ id, values }),
+    getConsumerByEmailAndTenant: async () => retainedConsumer,
+    getConsumerByPhoneAndTenant: async () => null,
+    findConsumersByNameAndTenant: async () => [],
+    createConsumer: async () => {
+      consumerCreates++;
+      return { id: 'unexpected' };
+    },
+    createAccount: async (values: any) => createdAccounts.push(values),
+  };
+
+  const result = await importDmpAccounts(fakeStorage, 'tenant-1', [{
+    filenumber: 'file-1',
+    firstName: 'Correct',
+    lastName: 'Name',
+    consumerEmail: 'person@example.com',
+    address: '1 Main St',
+    city: 'Town',
+    state: 'NY',
+    zipCode: '10001',
+    dateOfBirth: '1990-01-01',
+    ssnLast4: '1234',
+    balance: 750000,
+    originalBalance: 1000000,
+    creditorName: 'Creditor',
+  }]);
+
+  assert.equal(result.imported, 1);
+  assert.equal(consumerCreates, 0);
+  assert.deepEqual(updates, [{
+    id: 'consumer-retained',
+    values: {
+      firstName: 'Correct',
+      lastName: 'Name',
+      address: '1 Main St',
+      city: 'Town',
+      state: 'NY',
+      zipCode: '10001',
+      dateOfBirth: '1990-01-01',
+      ssnLast4: '1234',
+    },
+  }]);
+  assert.equal(createdAccounts[0].consumerId, 'consumer-retained');
 });

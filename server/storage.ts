@@ -412,6 +412,7 @@ export interface IStorage {
   // Account management operations
   deleteAccount(id: string, tenantId: string): Promise<void>;
   bulkDeleteAccounts(ids: string[], tenantId: string): Promise<number>;
+  deleteAllAccountsByTenant(tenantId: string): Promise<number>;
   
   // Notification operations
   createNotification(notification: InsertConsumerNotification): Promise<ConsumerNotification>;
@@ -2585,6 +2586,25 @@ export class DatabaseStorage implements IStorage {
       .where(and(inArray(accounts.id, ids), eq(accounts.tenantId, tenantId)));
 
     return accountsToDelete.length;
+  }
+
+  async deleteAllAccountsByTenant(tenantId: string): Promise<number> {
+    return db.transaction(async (tx) => {
+      const [signedRecord] = await tx
+        .select({ id: signedDocuments.id })
+        .from(signedDocuments)
+        .where(eq(signedDocuments.tenantId, tenantId))
+        .limit(1);
+      if (signedRecord) {
+        throw new SignedDocumentRetentionError('Accounts with completed signed documents cannot be deleted');
+      }
+
+      const deleted = await tx
+        .delete(accounts)
+        .where(eq(accounts.tenantId, tenantId))
+        .returning({ id: accounts.id });
+      return deleted.length;
+    });
   }
 
   // Get accounts in Returned folder that have been there for more than 7 days

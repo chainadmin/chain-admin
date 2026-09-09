@@ -11247,6 +11247,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete('/api/dmp/accounts', authenticateUser, async (req: any, res) => {
+    try {
+      const { canDeleteAllDmpAccounts, DMP_DELETE_CONFIRMATION } = await import('./dmpAccountImport');
+      const tenantId = req.user.tenantId;
+      if (!tenantId) return res.status(403).json({ message: "No tenant access" });
+      if (!canDeleteAllDmpAccounts(req.user.role)) {
+        return res.status(403).json({ message: "Only an account owner or platform administrator can delete all accounts" });
+      }
+      if (req.body?.confirmation !== DMP_DELETE_CONFIRMATION) {
+        return res.status(400).json({ message: "Deletion confirmation is required" });
+      }
+      const deletedCount = await storage.deleteAllAccountsByTenant(tenantId);
+      return res.json({ success: true, deletedCount, message: `${deletedCount} accounts deleted` });
+    } catch (error) {
+      if (error instanceof SignedDocumentRetentionError) {
+        return res.status(409).json({ message: error.message });
+      }
+      console.error('[DMP Cleanup] Tenant account deletion failed', {
+        errorType: error instanceof Error ? error.name : 'UnknownError',
+      });
+      return res.status(500).json({ message: "Failed to delete accounts" });
+    }
+  });
+
   // Post payment to DMP when payment is processed in Chain
   app.post('/api/dmp/post-payment', authenticateUser, async (req: any, res) => {
     try {

@@ -2783,6 +2783,29 @@ export default function Settings() {
                         <Download className="h-4 w-4 mr-2" />
                         Import Accounts
                       </Button>
+                      {(authUser?.role === 'owner' || authUser?.role === 'platform_admin') && <Button
+                        type="button"
+                        variant="destructive"
+                        onClick={async () => {
+                          if (!window.confirm("Delete every account for this company? This cannot be undone.")) return;
+                          try {
+                            const response = await apiRequest("DELETE", "/api/dmp/accounts", {
+                              confirmation: "DELETE ALL ACCOUNTS",
+                            });
+                            const result = await response.json();
+                            toast({ title: "Accounts Deleted", description: result.message });
+                          } catch (error: any) {
+                            toast({
+                              title: "Deletion Failed",
+                              description: error?.data?.message || error.message || "Failed to delete accounts",
+                              variant: "destructive",
+                            });
+                          }
+                        }}
+                        data-testid="button-delete-all-dmp-accounts"
+                      >
+                        Delete All Company Accounts
+                      </Button>}
                     </div>
                   )}
 

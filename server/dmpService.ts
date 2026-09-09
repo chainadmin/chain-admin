@@ -46,6 +46,25 @@ interface DmpPortfolio {
 
 interface DmpAccount {
   filenumber: string;
+  accountNumber?: string;
+  firstName?: string;
+  lastName?: string;
+  fullName?: string;
+  dateOfBirth?: string;
+  ssnLast4?: string;
+  consumerEmail?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  creditorName?: string;
+  clientName?: string;
+  balance?: number;
+  originalBalance?: number;
+  lastContactDate?: string;
+  nextFollowUpDate?: string;
+  portfolioId?: string;
+  assignedCollectorId?: string;
   accountnumber?: string;
   debtor_firstname?: string;
   debtor_lastname?: string;
@@ -55,7 +74,6 @@ interface DmpAccount {
   debtor_zip?: string;
   debtor_ssn?: string;
   debtor_dob?: string;
-  balance?: number;
   original_balance?: number;
   creditor?: string;
   status?: string;
@@ -301,6 +319,51 @@ function normalizeDmpFileNumber(account: Record<string, unknown>): string | unde
   return undefined;
 }
 
+function dmpString(account: Record<string, unknown>, ...keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = account[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  }
+  return undefined;
+}
+
+function dmpNumber(account: Record<string, unknown>, ...keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = account[key];
+    const parsed = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : NaN;
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
+}
+
+function normalizeDmpAccount(account: Record<string, unknown>, filenumber: string): DmpAccount {
+  return {
+    ...account,
+    filenumber,
+    accountNumber: dmpString(account, 'accountNumber', 'accountnumber'),
+    firstName: dmpString(account, 'firstName', 'debtor_firstname'),
+    lastName: dmpString(account, 'lastName', 'debtor_lastname'),
+    fullName: dmpString(account, 'fullName'),
+    dateOfBirth: dmpString(account, 'dateOfBirth', 'debtor_dob'),
+    ssnLast4: dmpString(account, 'ssnLast4'),
+    consumerEmail: dmpString(account, 'email', 'consumerEmail'),
+    address: dmpString(account, 'address', 'debtor_address'),
+    city: dmpString(account, 'city', 'debtor_city'),
+    state: dmpString(account, 'state', 'debtor_state'),
+    zipCode: dmpString(account, 'zipCode', 'debtor_zip'),
+    creditorName: dmpString(account, 'originalCreditor', 'creditorName', 'creditor'),
+    clientName: dmpString(account, 'clientName'),
+    balance: dmpNumber(account, 'currentBalance', 'balance'),
+    originalBalance: dmpNumber(account, 'originalBalance', 'original_balance'),
+    status: dmpString(account, 'status'),
+    lastContactDate: dmpString(account, 'lastContactDate'),
+    nextFollowUpDate: dmpString(account, 'nextFollowUpDate'),
+    portfolioId: dmpString(account, 'portfolioId'),
+    assignedCollectorId: dmpString(account, 'assignedCollectorId'),
+  };
+}
+
 function normalizeDmpAccountPage(payload: unknown): {
   accounts: DmpAccount[];
   fetched: number;
@@ -321,7 +384,7 @@ function normalizeDmpAccountPage(payload: unknown): {
       rejected++;
       continue;
     }
-    accounts.push({ ...row, filenumber } as DmpAccount);
+    accounts.push(normalizeDmpAccount(row, filenumber));
   }
 
   return {
@@ -1066,19 +1129,31 @@ export class DebtManagerProService {
 
     const mapAccount = (acc: DmpAccount) => ({
       filenumber: String(acc.filenumber).trim(),
-      accountNumber: acc.accountnumber ? String(acc.accountnumber).trim() : String(acc.filenumber).trim(),
-      firstName: acc.debtor_firstname,
-      lastName: acc.debtor_lastname,
-      dateOfBirth: acc.debtor_dob,
-      address: acc.debtor_address,
-      city: acc.debtor_city,
-      state: acc.debtor_state,
-      zipCode: acc.debtor_zip,
-      consumerEmail: acc.email,
+      accountNumber: acc.accountNumber || (acc.accountnumber ? String(acc.accountnumber).trim() : String(acc.filenumber).trim()),
+      firstName: acc.firstName || acc.debtor_firstname,
+      lastName: acc.lastName || acc.debtor_lastname,
+      fullName: acc.fullName,
+      dateOfBirth: acc.dateOfBirth || acc.debtor_dob,
+      ssnLast4: acc.ssnLast4,
+      address: acc.address || acc.debtor_address,
+      city: acc.city || acc.debtor_city,
+      state: acc.state || acc.debtor_state,
+      zipCode: acc.zipCode || acc.debtor_zip,
+      consumerEmail: acc.consumerEmail || acc.email,
       consumerPhone: acc.phone_cell || acc.phone_home || acc.phone_work,
-      balance: acc.balance ? Math.round(acc.balance * 100) : 0,
-      creditorName: acc.creditor,
+      balance: acc.balance !== undefined ? Math.round(acc.balance * 100) : 0,
+      originalBalance: acc.originalBalance !== undefined
+        ? Math.round(acc.originalBalance * 100)
+        : acc.original_balance !== undefined
+          ? Math.round(acc.original_balance * 100)
+          : undefined,
+      creditorName: acc.creditorName || acc.creditor,
+      clientName: acc.clientName,
       status: acc.status || 'active',
+      lastContactDate: acc.lastContactDate,
+      nextFollowUpDate: acc.nextFollowUpDate,
+      portfolioId: acc.portfolioId,
+      assignedCollectorId: acc.assignedCollectorId,
     });
 
     if (requestedPortfolioId) {
