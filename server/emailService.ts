@@ -4,7 +4,8 @@ import { emailLogs, tenants, tenantSettings } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 import { smaxService } from './smaxService';
 import { storage } from './storage';
-import { decryptCredential } from './credentialCrypto';
+import { postmarkServerService } from './postmarkServerService';
+import { resolvePostmarkServerToken } from './postmarkCredentialResolver';
 
 // Postmark client will be validated at server startup, not module load
 // This allows Docker build to succeed without runtime env vars
@@ -159,12 +160,14 @@ export class EmailService {
         ? tenant?.postmarkBroadcastStream || getBroadcastStreamId()
         : tenant?.postmarkTransactionalStream || process.env.POSTMARK_TRANSACTIONAL_STREAM || 'outbound';
       
-      const tenantToken = tenant?.postmarkServerToken
-        ? (tenant.postmarkServerToken.startsWith('enc:v1:') ? decryptCredential(tenant.postmarkServerToken) : tenant.postmarkServerToken)
-        : null;
-      // Keep the proven global-server send path unchanged; a tenant token only
-      // swaps the Postmark client. Streams are provisioned when the dedicated
-      // server is created, not during a live send.
+      const tenantToken = await this.getTenantServerToken(options.tenantId, tenant);
+      if (tenantToken && options.useBroadcastStream) {
+        const streamId = tenant?.postmarkBroadcastStream || getBroadcastStreamId();
+        const stream = await postmarkServerService.ensureBroadcastStream(tenantToken, streamId);
+        if (!stream.success) {
+          throw new Error(stream.error || `Postmark broadcast stream "${streamId}" is unavailable`);
+        }
+      }
       const activeClient = tenantToken ? new Client(tenantToken) : postmarkClient;
       const result = await activeClient.sendEmail(emailPayload);
 
@@ -266,11 +269,14 @@ export class EmailService {
         console.log(`📧 Sending batch of ${batchMessages.length} emails via broadcast stream...`);
         const batchTenantId = batch.find(email => email.tenantId)?.tenantId;
         const batchTenant = batchTenantId ? tenantConfigs.get(batchTenantId) : null;
-        const batchTenantToken = batchTenant?.postmarkServerToken
-          ? (batchTenant.postmarkServerToken.startsWith('enc:v1:') ? decryptCredential(batchTenant.postmarkServerToken) : batchTenant.postmarkServerToken)
-          : null;
-        // This is intentionally the same batch operation used by the main
-        // server. The sole difference is the client token selected here.
+        const batchTenantToken = await this.getTenantServerToken(batchTenantId, batchTenant);
+        if (batchTenantToken) {
+          const streamId = batchTenant?.postmarkBroadcastStream || getBroadcastStreamId();
+          const stream = await postmarkServerService.ensureBroadcastStream(batchTenantToken, streamId);
+          if (!stream.success) {
+            throw new Error(stream.error || `Postmark broadcast stream "${streamId}" is unavailable`);
+          }
+        }
         const activeClient = batchTenantToken ? new Client(batchTenantToken) : postmarkClient;
         const batchResult = await activeClient.sendEmailBatch(batchMessages);
         
