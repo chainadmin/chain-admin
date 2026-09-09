@@ -1,5 +1,4 @@
 import { hashPasswordResetToken } from "./passwordResetPolicy";
-import { encryptCredential } from "./credentialCrypto";
 import {
   users,
   tenants,
@@ -776,7 +775,7 @@ export class DatabaseStorage implements IStorage {
       isTrialAccount: false, // Created by admin as paid account
       isPaidAccount: true,
       postmarkServerId: data.postmarkServerId,
-      postmarkServerToken: encryptCredential(data.postmarkServerToken),
+      postmarkServerToken: data.postmarkServerToken,
       postmarkServerName: data.postmarkServerName,
     }).returning();
     

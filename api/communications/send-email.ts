@@ -14,10 +14,10 @@ import {
   getCompanyMessagingBlockMessage,
   isServiceRestrictedForMember,
 } from '@shared/utils/messagingAccess';
-import { postmarkServerService } from '../../server/postmarkServerService';
-import { resolvePostmarkServerToken } from '../../server/postmarkCredentialResolver';
+import { decryptCredential } from '../../server/credentialCrypto';
 import {
   resolveTenantFromAddress,
+  resolveTenantPostmarkToken,
   resolveTenantTransactionalStream,
 } from '../_lib/postmarkTenantRouting';
 
@@ -369,24 +369,10 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       customBranding: tenantBranding,
     };
 
-    // Use the same credential path as campaign delivery. Besides decrypting
-    // tenant tokens, it can repair a token stranded by an application-key
-    // rotation by reloading that server through the Postmark account API.
-    const tenantPostmarkToken = await resolvePostmarkServerToken({
-      tenant: tenantRecord,
-      recoverServerToken: async serverId => {
-        const serverResult = await postmarkServerService.getServer(serverId);
-        if (!serverResult.success) {
-          throw new Error(serverResult.error || `Unable to recover Postmark server ${serverId}`);
-        }
-        return serverResult.server?.ApiTokens?.[0] || null;
-      },
-      persistRecoveredToken: async encryptedToken => {
-        await db.update(tenants)
-          .set({ postmarkServerToken: encryptedToken })
-          .where(eq(tenants.id, tenantId));
-      },
-    });
+    // Tenant credentials are encrypted by the production migration. Passing
+    // the stored `enc:v1:` value to Postmark makes every dedicated-server send
+    // fail authentication even though the global fallback server still works.
+    const tenantPostmarkToken = resolveTenantPostmarkToken(tenantRecord, decryptCredential);
     const activePostmarkClient = tenantPostmarkToken
       ? new Client(tenantPostmarkToken)
       : postmarkClient;
