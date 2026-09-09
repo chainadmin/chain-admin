@@ -23420,6 +23420,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         postmarkInboundAddress: z.string().email().nullable().optional(),
         customSenderEmail: z.string().email().nullable().optional(),
       }).parse(req.body);
+      if (data.postmarkServerToken) {
+        const { encryptCredential } = await import('./credentialCrypto');
+        data.postmarkServerToken = encryptCredential(data.postmarkServerToken);
+      }
       const tenant = await storage.updateTenant(req.params.tenantId, data as Partial<Tenant>);
       res.json({
         id: tenant.id,
