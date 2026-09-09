@@ -2785,6 +2785,37 @@ export default function Settings() {
                       </Button>
                       {(authUser?.role === 'owner' || authUser?.role === 'platform_admin') && <Button
                         type="button"
+                        variant="outline"
+                        onClick={async () => {
+                          try {
+                            const previewResponse = await apiRequest("POST", "/api/dmp/balance-repair", { apply: false });
+                            const preview = await previewResponse.json();
+                            if (!preview.changed) {
+                              toast({ title: "Balances Already Correct", description: `${preview.matched} DMP accounts checked.` });
+                              return;
+                            }
+                            if (!window.confirm(`Repair balances for ${preview.changed} matched DMP accounts? This uses current values from DMP.`)) return;
+                            const applyResponse = await apiRequest("POST", "/api/dmp/balance-repair", {
+                              apply: true,
+                              confirmation: "APPLY DMP BALANCE REPAIR",
+                              previewToken: preview.previewToken,
+                            });
+                            const result = await applyResponse.json();
+                            toast({ title: "DMP Balances Repaired", description: `${result.applied} account balances updated.` });
+                          } catch (error: any) {
+                            toast({
+                              title: "Balance Repair Failed",
+                              description: error?.data?.message || error.message || "Failed to repair DMP balances",
+                              variant: "destructive",
+                            });
+                          }
+                        }}
+                        data-testid="button-repair-dmp-balances"
+                      >
+                        Repair DMP Balances
+                      </Button>}
+                      {(authUser?.role === 'owner' || authUser?.role === 'platform_admin') && <Button
+                        type="button"
                         variant="destructive"
                         onClick={async () => {
                           if (!window.confirm("Delete every account for this company? This cannot be undone.")) return;

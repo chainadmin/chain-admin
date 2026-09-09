@@ -139,6 +139,7 @@ import {
   type ProposedArrangement,
   type InsertProposedArrangement,
 } from "@shared/schema";
+import type { DmpBalanceRepairChange } from "./dmpBalanceRepair";
 import { messagingPlans, EMAIL_OVERAGE_RATE_PER_EMAIL, SMS_OVERAGE_RATE_PER_SEGMENT, DOCUMENT_SIGNING_ADDON_PRICE, MOBILE_APP_BRANDING_MONTHLY, AI_AUTO_RESPONSE_ADDON_PRICE, AUTO_RESPONSE_INCLUDED_RESPONSES, AUTO_RESPONSE_OVERAGE_PER_RESPONSE, type MessagingPlanId } from "@shared/billing-plans";
 import { db } from "./db";
 import { eq, and, or, desc, gt, sql, inArray, gte, lte, isNull, isNotNull } from "drizzle-orm";
@@ -298,6 +299,7 @@ export interface IStorage {
   getAccountsByConsumer(consumerId: string): Promise<Account[]>;
   createAccount(account: InsertAccount): Promise<Account>;
   updateAccount(id: string, updates: Partial<Account>): Promise<Account>;
+  applyDmpBalanceRepair(tenantId: string, changes: DmpBalanceRepairChange[]): Promise<number>;
   bulkCreateAccounts(accounts: InsertAccount[]): Promise<Account[]>;
   
   // Email template operations
@@ -584,6 +586,7 @@ export interface IStorage {
   // Stats operations
   getTenantStats(tenantId: string): Promise<{
     totalConsumers: number;
+    totalAccounts: number;
     activeAccounts: number;
     totalBalance: number;
     collectionRate: number;
@@ -1550,6 +1553,37 @@ export class DatabaseStorage implements IStorage {
       .returning();
 
     return updatedAccount;
+  }
+
+  async applyDmpBalanceRepair(tenantId: string, changes: DmpBalanceRepairChange[]): Promise<number> {
+    return db.transaction(async (tx) => {
+      let applied = 0;
+      for (const change of changes) {
+        const updated = await tx
+          .update(accounts)
+          .set({
+            balanceCents: change.balanceCents,
+            originalBalanceCents: change.originalBalanceCents,
+          })
+          .where(and(
+            eq(accounts.id, change.accountId),
+            eq(accounts.tenantId, tenantId),
+            eq(accounts.filenumber, change.filenumber),
+            sql`${accounts.additionalData} ->> 'dmpSource' = 'dmp' OR ${accounts.additionalData} ? 'dmpClientName'`,
+            eq(accounts.balanceCents, change.expectedBalanceCents),
+            sql`${accounts.originalBalanceCents} IS NOT DISTINCT FROM ${change.expectedOriginalBalanceCents}`,
+          ))
+          .returning({ id: accounts.id });
+        if (updated.length !== 1) {
+          throw Object.assign(
+            new Error('DMP balance repair preview is stale; run a new preview before applying'),
+            { statusCode: 409 },
+          );
+        }
+        applied++;
+      }
+      return applied;
+    });
   }
 
   async bulkCreateAccounts(accountsData: InsertAccount[]): Promise<Account[]> {
@@ -4071,6 +4105,7 @@ export class DatabaseStorage implements IStorage {
   // Stats operations
   async getTenantStats(tenantId: string): Promise<{
     totalConsumers: number;
+    totalAccounts: number;
     activeAccounts: number;
     totalBalance: number;
     collectionRate: number;
@@ -4098,6 +4133,7 @@ export class DatabaseStorage implements IStorage {
     const tenantAccounts = await db.select().from(accounts).where(eq(accounts.tenantId, tenantId));
     
     const totalConsumers = tenantConsumers.length;
+    const totalAccounts = tenantAccounts.length;
     const activeAccounts = tenantAccounts.filter(account => account.status === 'active').length;
     const totalBalance = tenantAccounts.reduce((sum, account) => sum + (account.balanceCents || 0), 0) / 100;
     
@@ -4151,6 +4187,7 @@ export class DatabaseStorage implements IStorage {
     
     return {
       totalConsumers,
+      totalAccounts,
       activeAccounts,
       totalBalance,
       collectionRate,

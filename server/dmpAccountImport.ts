@@ -67,6 +67,7 @@ export async function importDmpAccounts(
           creditor: dmpAccount.creditorName || existing.creditor,
           additionalData: {
             ...(existing.additionalData || {}),
+            dmpSource: 'dmp',
             dmpClientName: dmpAccount.clientName || null,
             dmpLastContactDate: dmpAccount.lastContactDate || null,
             dmpNextFollowUpDate: dmpAccount.nextFollowUpDate || null,
@@ -174,6 +175,7 @@ export async function importDmpAccounts(
         status: dmpAccount.status || 'active',
         folderId: folderId || null,
         additionalData: {
+          dmpSource: 'dmp',
           dmpClientName: dmpAccount.clientName || null,
           dmpLastContactDate: dmpAccount.lastContactDate || null,
           dmpNextFollowUpDate: dmpAccount.nextFollowUpDate || null,

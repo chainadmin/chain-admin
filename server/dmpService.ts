@@ -1141,11 +1141,12 @@ export class DebtManagerProService {
       zipCode: acc.zipCode || acc.debtor_zip,
       consumerEmail: acc.consumerEmail || acc.email,
       consumerPhone: acc.phone_cell || acc.phone_home || acc.phone_work,
-      balance: acc.balance !== undefined ? Math.round(acc.balance * 100) : 0,
+      // DMP returns integer cents. Persist the provider value directly.
+      balance: acc.balance !== undefined ? Math.max(0, Math.round(acc.balance)) : 0,
       originalBalance: acc.originalBalance !== undefined
-        ? Math.round(acc.originalBalance * 100)
+        ? Math.max(0, Math.round(acc.originalBalance))
         : acc.original_balance !== undefined
-          ? Math.round(acc.original_balance * 100)
+          ? Math.max(0, Math.round(acc.original_balance))
           : undefined,
       creditorName: acc.creditorName || acc.creditor,
       clientName: acc.clientName,

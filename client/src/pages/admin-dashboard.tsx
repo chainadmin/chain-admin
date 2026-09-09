@@ -309,10 +309,10 @@ export default function AdminDashboard() {
             <>
               <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
                 <StatsCard
-                  title="Total Consumers"
-                  value={(stats as any)?.totalConsumers?.toLocaleString() || "0"}
+                  title="Total Accounts"
+                  value={(stats as any)?.totalAccounts?.toLocaleString() || "0"}
                   icon="fas fa-users"
-                  data-testid="stat-total-consumers"
+                  data-testid="stat-total-accounts"
                 />
                 <StatsCard
                   title="Active Accounts"

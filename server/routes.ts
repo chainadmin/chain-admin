@@ -11247,6 +11247,86 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post('/api/dmp/balance-repair', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) return res.status(403).json({ message: "No tenant access" });
+      if (req.user.role !== 'owner' && req.user.role !== 'platform_admin') {
+        return res.status(403).json({ message: "Only an account owner or platform administrator can repair DMP balances" });
+      }
+      const settings = await storage.getTenantSettings(tenantId);
+      if (!(settings as any)?.dmpEnabled) {
+        return res.status(400).json({ message: "Debt Manager Pro integration is not enabled" });
+      }
+      const apply = req.body?.apply === true;
+      const {
+        applyDmpBalanceRepair,
+        DMP_BALANCE_REPAIR_CONFIRMATION,
+        planDmpBalanceRepair,
+      } = await import('./dmpBalanceRepair');
+      if (apply && req.body?.confirmation !== DMP_BALANCE_REPAIR_CONFIRMATION) {
+        return res.status(400).json({ message: "Balance repair confirmation is required" });
+      }
+      if (!process.env.JWT_SECRET) {
+        return res.status(503).json({ message: "Balance repair is temporarily unavailable" });
+      }
+      const { dmpService } = await import('./dmpService');
+      const dmpFetch = await dmpService.getAccountsWithStats(tenantId);
+      const plan = await planDmpBalanceRepair(storage, tenantId, dmpFetch.accounts);
+      let result;
+      let previewToken: string | undefined;
+      if (apply) {
+        let preview: any;
+        try {
+          preview = jwt.verify(String(req.body?.previewToken || ''), process.env.JWT_SECRET);
+        } catch {
+          return res.status(400).json({ message: "Balance repair preview is missing or expired; run a new preview" });
+        }
+        if (
+          preview?.purpose !== 'dmp-balance-repair'
+          || preview?.tenantId !== tenantId
+          || preview?.digest !== plan.digest
+        ) {
+          return res.status(409).json({ message: "DMP balances changed after preview; run a new preview before applying" });
+        }
+        result = await applyDmpBalanceRepair(storage, tenantId, plan);
+      } else {
+        result = {
+          matched: plan.matched,
+          changed: plan.changed,
+          unchanged: plan.unchanged,
+          skipped: plan.skipped,
+          applied: 0,
+        };
+        previewToken = jwt.sign({
+          purpose: 'dmp-balance-repair',
+          tenantId,
+          digest: plan.digest,
+        }, process.env.JWT_SECRET, { expiresIn: '10m' });
+      }
+      console.info('[DMP Balance Repair]', {
+        tenantId,
+        mode: apply ? 'apply' : 'dry-run',
+        ...result,
+      });
+      res.json({
+        success: true,
+        dryRun: !apply,
+        fetched: dmpFetch.fetched,
+        rejected: dmpFetch.rejected,
+        previewToken,
+        ...result,
+      });
+    } catch (error: any) {
+      console.error("Error repairing DMP balances:", error);
+      const statusCode = Number.isInteger(error?.statusCode) ? error.statusCode : 500;
+      res.status(statusCode).json({
+        success: false,
+        message: error.message || "Failed to repair DMP balances",
+      });
+    }
+  });
+
   app.delete('/api/dmp/accounts', authenticateUser, async (req: any, res) => {
     try {
       const { canDeleteAllDmpAccounts, DMP_DELETE_CONFIRMATION } = await import('./dmpAccountImport');

@@ -12,6 +12,7 @@ import {
   DMP_DELETE_CONFIRMATION,
   importDmpAccounts,
 } from './dmpAccountImport';
+import { applyDmpBalanceRepair, planDmpBalanceRepair } from './dmpBalanceRepair';
 import { storage } from './storage';
 
 test('normalizes flat and wrapped DMP lists', () => {
@@ -850,8 +851,8 @@ test('maps the confirmed camelCase DMP response into complete consumer and accou
       consumerId: 'consumer-1',
       accountNumber: 'account-1',
       filenumber: 'file-1',
-      balanceCents: 750000,
-      originalBalanceCents: 1000000,
+      balanceCents: 7500,
+      originalBalanceCents: 10000,
       creditor: 'Original Creditor',
       status: 'open',
       folderId: null,
@@ -867,6 +868,52 @@ test('maps the confirmed camelCase DMP response into complete consumer and accou
     storage.getTenantSettings = originalSettings;
     globalThis.fetch = originalFetch;
   }
+});
+
+test('DMP balance repair previews and idempotently applies authoritative cents by file number', async () => {
+  const updates: any[] = [];
+  const fakeStorage = {
+    getAccountsByTenant: async () => [
+      { id: 'dmp-1', filenumber: 'file-1', balanceCents: 750000, originalBalanceCents: 1000000, additionalData: { dmpSource: 'dmp' } },
+      { id: 'dmp-2', filenumber: 'file-2', balanceCents: 5000, originalBalanceCents: 6000, additionalData: { dmpClientName: null } },
+      { id: 'manual-1', filenumber: null, balanceCents: 9900, originalBalanceCents: 9900 },
+      { id: 'smax-1', filenumber: 'file-3', balanceCents: 1000, originalBalanceCents: 1000, additionalData: {} },
+    ],
+    applyDmpBalanceRepair: async (tenantId: string, changes: any[]) => {
+      updates.push({ tenantId, changes });
+      return changes.length;
+    },
+  };
+  const provider = [
+    { filenumber: 'file-1', balance: 7500, originalBalance: 10000 },
+    { filenumber: 'file-2', balance: 5000, originalBalance: 6000 },
+    { filenumber: 'file-3', balance: 100, originalBalance: 100 },
+    { filenumber: 'missing', balance: 100, originalBalance: 100 },
+  ];
+
+  const preview = await planDmpBalanceRepair(fakeStorage, 'tenant-1', provider);
+  assert.deepEqual({
+    matched: preview.matched,
+    changed: preview.changed,
+    unchanged: preview.unchanged,
+    skipped: preview.skipped,
+    applied: preview.applied,
+  }, { matched: 2, changed: 1, unchanged: 1, skipped: 2, applied: 0 });
+  assert.deepEqual(updates, []);
+
+  const applied = await applyDmpBalanceRepair(fakeStorage, 'tenant-1', preview);
+  assert.deepEqual(applied, { matched: 2, changed: 1, unchanged: 1, skipped: 2, applied: 1 });
+  assert.deepEqual(updates, [{
+    tenantId: 'tenant-1',
+    changes: [{
+      accountId: 'dmp-1',
+      filenumber: 'file-1',
+      expectedBalanceCents: 750000,
+      expectedOriginalBalanceCents: 1000000,
+      balanceCents: 7500,
+      originalBalanceCents: 10000,
+    }],
+  }]);
 });
 
 test('reimport repairs a retained placeholder consumer instead of creating another consumer', async () => {
