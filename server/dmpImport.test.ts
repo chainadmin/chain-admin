@@ -191,6 +191,234 @@ test('import surfaces upstream failures rather than reporting zero accounts', as
   }
 });
 
+test('import surfaces a structured DMP validation reason without exposing other response fields', async () => {
+  const originalSettings = storage.getTenantSettings;
+  const originalFetch = globalThis.fetch;
+  const originalConsoleError = console.error;
+  const loggedValues: unknown[] = [];
+  storage.getTenantSettings = (async () => ({
+    dmpEnabled: true,
+    dmpApiUrl: 'https://dmp.example',
+    dmpUsername: 'user',
+    dmpPassword: 'password',
+  })) as typeof storage.getTenantSettings;
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = String(input);
+    return url.endsWith('/api/v2/login')
+      ? new Response(JSON.stringify({ token: 'test-token' }), { status: 200 })
+      : new Response(JSON.stringify({
+        message: 'portfolioId is required for private-account with SSN 123-45-6789',
+        token: 'provider-secret-that-must-not-appear',
+        account: { filenumber: 'private-account' },
+      }), {
+        status: 400,
+        headers: { 'x-request-id': 'request-123' },
+      });
+  }) as typeof fetch;
+  console.error = (...values: unknown[]) => {
+    loggedValues.push(...values);
+  };
+
+  try {
+    await assert.rejects(
+      new DebtManagerProService().getAccounts('tenant-1', { portfolioId: 'portfolio-1' }),
+      (error: unknown) =>
+        error instanceof DmpImportError
+        && error.statusCode === 502
+        && error.message.includes('DMP requires a top-level portfolioId')
+        && !error.message.includes('provider-secret')
+        && !error.message.includes('private-account'),
+    );
+    const logs = JSON.stringify(loggedValues);
+    assert.match(logs, /request-123/);
+    assert.match(logs, /DMP requires a top-level portfolioId/);
+    assert.doesNotMatch(logs, /provider-secret/);
+    assert.doesNotMatch(logs, /private-account/);
+    assert.doesNotMatch(logs, /123-45-6789/);
+  } finally {
+    storage.getTenantSettings = originalSettings;
+    globalThis.fetch = originalFetch;
+    console.error = originalConsoleError;
+  }
+});
+
+for (const accountCount of [0, 100, 101, 500, 537]) {
+  test(`imports all ${accountCount} DMP accounts with the confirmed paginated request contract`, async () => {
+    const originalSettings = storage.getTenantSettings;
+    const originalFetch = globalThis.fetch;
+    const accountRequests: Array<{ body: any; authorization?: string; contentType?: string }> = [];
+    const sourceAccounts = Array.from({ length: accountCount }, (_, index) => ({
+      filenumber: `file-${index + 1}`,
+      accountnumber: `account-${index + 1}`,
+    }));
+    storage.getTenantSettings = (async () => ({
+      dmpEnabled: true,
+      dmpApiUrl: 'https://dmp.example',
+      dmpUsername: 'user',
+      dmpPassword: 'password',
+    })) as typeof storage.getTenantSettings;
+    globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/api/v2/login')) {
+        return new Response(JSON.stringify({ token: 'test-token' }), { status: 200 });
+      }
+      const body = JSON.parse(String(init?.body));
+      accountRequests.push({
+        body,
+        authorization: new Headers(init?.headers).get('Authorization') || undefined,
+        contentType: new Headers(init?.headers).get('Content-Type') || undefined,
+      });
+      return new Response(JSON.stringify({
+        accounts: sourceAccounts.slice(body.offset, body.offset + body.limit),
+      }), { status: 200 });
+    }) as typeof fetch;
+
+    try {
+      const accounts = await new DebtManagerProService().getAccounts(
+        'tenant-1',
+        { portfolioId: 'portfolio-1' },
+      );
+      assert.equal(accounts.length, accountCount);
+      assert.equal(new Set(accounts.map(account => account.filenumber)).size, accountCount);
+      assert.deepEqual(
+        accountRequests.map(request => request.body),
+        Array.from(
+          {
+            length: accountCount === 0
+              ? 1
+              : Math.ceil(accountCount / 100) + (accountCount % 100 === 0 ? 1 : 0),
+          },
+          (_, index) => ({
+            portfolioId: 'portfolio-1',
+            limit: 100,
+            offset: index * 100,
+          }),
+        ),
+      );
+      assert.ok(accountRequests.every(request => request.authorization === 'Bearer test-token'));
+      assert.ok(accountRequests.every(request => request.contentType === 'application/json'));
+    } finally {
+      storage.getTenantSettings = originalSettings;
+      globalThis.fetch = originalFetch;
+    }
+  });
+}
+
+test('imports every DMP portfolio and removes duplicate accounts across portfolios', async () => {
+  const originalSettings = storage.getTenantSettings;
+  const originalFetch = globalThis.fetch;
+  const requestedPortfolioIds: string[] = [];
+  storage.getTenantSettings = (async () => ({
+    dmpEnabled: true,
+    dmpApiUrl: 'https://dmp.example',
+    dmpUsername: 'user',
+    dmpPassword: 'password',
+  })) as typeof storage.getTenantSettings;
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    if (url.endsWith('/api/v2/login')) {
+      return new Response(JSON.stringify({ token: 'test-token' }), { status: 200 });
+    }
+    if (url.endsWith('/api/v2/getportfoliolist')) {
+      return new Response(JSON.stringify({
+        portfolios: Array.from({ length: 7 }, (_, index) => ({
+          id: `portfolio-${index + 1}`,
+          name: `Portfolio ${index + 1}`,
+        })),
+      }), { status: 200 });
+    }
+    const body = JSON.parse(String(init?.body));
+    requestedPortfolioIds.push(body.portfolioId);
+    return new Response(JSON.stringify({
+      accounts: [
+        { filenumber: 'shared-file' },
+        { filenumber: `file-${body.portfolioId}` },
+      ],
+    }), { status: 200 });
+  }) as typeof fetch;
+
+  try {
+    const accounts = await new DebtManagerProService().getAccounts('tenant-1');
+    assert.deepEqual(requestedPortfolioIds, Array.from(
+      { length: 7 },
+      (_, index) => `portfolio-${index + 1}`,
+    ));
+    assert.equal(accounts.length, 8);
+    assert.equal(accounts.filter(account => account.filenumber === 'shared-file').length, 1);
+  } finally {
+    storage.getTenantSettings = originalSettings;
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('stops safely when DMP repeats a full account page', async () => {
+  const originalSettings = storage.getTenantSettings;
+  const originalFetch = globalThis.fetch;
+  storage.getTenantSettings = (async () => ({
+    dmpEnabled: true,
+    dmpApiUrl: 'https://dmp.example',
+    dmpUsername: 'user',
+    dmpPassword: 'password',
+  })) as typeof storage.getTenantSettings;
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = String(input);
+    return url.endsWith('/api/v2/login')
+      ? new Response(JSON.stringify({ token: 'test-token' }), { status: 200 })
+      : new Response(JSON.stringify({
+        accounts: Array.from({ length: 100 }, (_, index) => ({
+          filenumber: `file-${index + 1}`,
+        })),
+      }), { status: 200 });
+  }) as typeof fetch;
+
+  try {
+    await assert.rejects(
+      new DebtManagerProService().getAccounts('tenant-1', { portfolioId: 'portfolio-1' }),
+      /repeated an account page/,
+    );
+  } finally {
+    storage.getTenantSettings = originalSettings;
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('uses DMP total metadata to complete a full final page without an extra request', async () => {
+  const originalSettings = storage.getTenantSettings;
+  const originalFetch = globalThis.fetch;
+  let accountRequestCount = 0;
+  storage.getTenantSettings = (async () => ({
+    dmpEnabled: true,
+    dmpApiUrl: 'https://dmp.example',
+    dmpUsername: 'user',
+    dmpPassword: 'password',
+  })) as typeof storage.getTenantSettings;
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = String(input);
+    if (url.endsWith('/api/v2/login')) {
+      return new Response(JSON.stringify({ token: 'test-token' }), { status: 200 });
+    }
+    accountRequestCount++;
+    return new Response(JSON.stringify({
+      accounts: Array.from({ length: 100 }, (_, index) => ({
+        filenumber: `file-${index + 1}`,
+      })),
+      pagination: { total: 100 },
+    }), { status: 200 });
+  }) as typeof fetch;
+
+  try {
+    const accounts = await new DebtManagerProService().getAccounts(
+      'tenant-1',
+      { portfolioId: 'portfolio-1' },
+    );
+    assert.equal(accounts.length, 100);
+    assert.equal(accountRequestCount, 1);
+  } finally {
+    storage.getTenantSettings = originalSettings;
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test('updates an existing account while preserving import payment fields', async () => {
   const updates: any[] = [];
   const fakeStorage = {
@@ -226,4 +454,109 @@ test('updates an existing account while preserving import payment fields', async
       creditor: 'New creditor',
     },
   }]);
+});
+
+test('DMP imports never update an account based only on a colliding Chain account number', async () => {
+  const createdAccounts: any[] = [];
+  const updatedAccounts: any[] = [];
+  const fakeStorage = {
+    getAccountsByTenant: async () => [{
+      id: 'chain-account',
+      filenumber: null,
+      accountNumber: 'shared-number',
+      status: 'active',
+      creditor: 'Chain creditor',
+    }],
+    updateAccount: async (id: string, values: any) => updatedAccounts.push({ id, values }),
+    getConsumerByEmailAndTenant: async () => null,
+    getConsumerByPhoneAndTenant: async () => null,
+    findConsumersByNameAndTenant: async () => [],
+    createConsumer: async () => ({ id: 'consumer-1' }),
+    createAccount: async (values: any) => createdAccounts.push(values),
+  };
+
+  const result = await importDmpAccounts(fakeStorage, 'tenant-1', [{
+    filenumber: 'dmp-file-1',
+    accountNumber: 'shared-number',
+    balance: 12345,
+  }]);
+
+  assert.equal(result.imported, 1);
+  assert.equal(result.updated, 0);
+  assert.equal(updatedAccounts.length, 0);
+  assert.equal(createdAccounts[0].filenumber, 'dmp-file-1');
+});
+
+test('DMP imports normalize numeric file numbers before matching and persistence', async () => {
+  const createdAccounts: any[] = [];
+  const fakeStorage = {
+    getAccountsByTenant: async () => [],
+    updateAccount: async () => undefined,
+    getConsumerByEmailAndTenant: async () => null,
+    getConsumerByPhoneAndTenant: async () => null,
+    findConsumersByNameAndTenant: async () => [],
+    createConsumer: async () => ({ id: 'consumer-1' }),
+    createAccount: async (values: any) => createdAccounts.push(values),
+  };
+
+  const result = await importDmpAccounts(fakeStorage, 'tenant-1', [{
+    filenumber: 12345,
+    balance: 1000,
+  }]);
+
+  assert.deepEqual(result, { imported: 1, updated: 0, skipped: 0, errors: [] });
+  assert.equal(createdAccounts[0].filenumber, '12345');
+  assert.equal(createdAccounts[0].accountNumber, '12345');
+});
+
+test('scheduled DMP import options reuse the shared importer without creating disabled accounts', async () => {
+  const consumerUpdates: any[] = [];
+  const createdAccounts: any[] = [];
+  const fakeStorage = {
+    getAccountsByTenant: async () => [{
+      id: 'existing-account',
+      filenumber: 'existing-file',
+      consumerId: 'consumer-1',
+      status: 'active',
+      creditor: 'Old creditor',
+    }],
+    updateAccount: async () => undefined,
+    updateConsumer: async (id: string, values: any) => consumerUpdates.push({ id, values }),
+    getConsumerByEmailAndTenant: async () => null,
+    getConsumerByPhoneAndTenant: async () => null,
+    findConsumersByNameAndTenant: async () => [],
+    createConsumer: async () => ({ id: 'consumer-created' }),
+    createAccount: async (values: any) => createdAccounts.push(values),
+  };
+
+  const result = await importDmpAccounts(
+    fakeStorage,
+    'tenant-1',
+    [
+      {
+        filenumber: 'existing-file',
+        consumerEmail: 'updated@example.com',
+        city: 'Updated City',
+      },
+      {
+        filenumber: 'new-file',
+        consumerEmail: 'new@example.com',
+      },
+    ],
+    null,
+    {
+      createMissing: false,
+      syncExistingConsumerContact: true,
+    },
+  );
+
+  assert.deepEqual(result, { imported: 0, updated: 1, skipped: 1, errors: [] });
+  assert.deepEqual(consumerUpdates, [{
+    id: 'consumer-1',
+    values: {
+      email: 'updated@example.com',
+      city: 'Updated City',
+    },
+  }]);
+  assert.equal(createdAccounts.length, 0);
 });

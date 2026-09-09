@@ -11211,9 +11211,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({
           success: true,
           message: "No accounts found in DMP to import",
+          fetched: 0,
           imported: 0,
           updated: 0,
-          skipped: 0
+          skipped: 0,
+          failed: 0,
         });
       }
 
@@ -11223,6 +11225,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({
         success: true,
         message: `Imported ${results.imported} new accounts, updated ${results.updated} existing`,
+        fetched: dmpAccounts.length,
+        failed: results.errors.length,
         ...results
       });
     } catch (error: any) {
@@ -17153,80 +17157,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const { dmpService } = await import('./dmpService');
               const dmpAccounts = await dmpService.getAccounts(tenant.id);
               if (dmpAccounts && dmpAccounts.length > 0) {
-                const existingAccounts = await storage.getAccountsByTenant(tenant.id);
-                let synced = 0, created = 0;
-                for (const dmpAccount of dmpAccounts) {
-                  try {
-                    // Only match by filenumber — accountNumber is not DMP-specific
-                    // and could accidentally update unrelated Chain accounts.
-                    const existing = dmpAccount.filenumber
-                      ? existingAccounts.find(a => a.filenumber === dmpAccount.filenumber)
-                      : null;
-                    if (existing) {
-                      await storage.updateAccount(existing.id, {
-                        balanceCents: dmpAccount.balance || 0,
-                        status: dmpAccount.status || existing.status,
-                        creditor: dmpAccount.creditorName || existing.creditor,
-                      });
-                      // Also sync DMP contact details to the linked consumer
-                      if (existing.consumerId && (dmpAccount.consumerEmail || dmpAccount.consumerPhone || dmpAccount.address)) {
-                        try {
-                          const consumerUpdates: Record<string, any> = {};
-                          if (dmpAccount.consumerEmail) consumerUpdates.email = dmpAccount.consumerEmail;
-                          if (dmpAccount.consumerPhone) consumerUpdates.phone = dmpAccount.consumerPhone;
-                          if (dmpAccount.address) consumerUpdates.address = dmpAccount.address;
-                          if (dmpAccount.city) consumerUpdates.city = dmpAccount.city;
-                          if (dmpAccount.state) consumerUpdates.state = dmpAccount.state;
-                          if (dmpAccount.zipCode) consumerUpdates.zipCode = dmpAccount.zipCode;
-                          if (Object.keys(consumerUpdates).length > 0) {
-                            await storage.updateConsumer(existing.consumerId, consumerUpdates);
-                          }
-                        } catch (consumerSyncErr) {
-                          console.error(`[DMP Sync] Consumer contact sync error for filenumber ${dmpAccount.filenumber}:`, consumerSyncErr);
-                        }
-                      }
-                      synced++;
-                    } else if ((tenantSettings as any)?.dmpAutoImport && dmpAccount.filenumber) {
-                      let consumer: any = null;
-                      if (dmpAccount.consumerEmail) {
-                        consumer = await storage.getConsumerByEmailAndTenant(dmpAccount.consumerEmail, tenant.id) || null;
-                      }
-                      if (!consumer && dmpAccount.consumerPhone) {
-                        consumer = await storage.getConsumerByPhoneAndTenant(dmpAccount.consumerPhone, tenant.id) || null;
-                      }
-                      if (!consumer && dmpAccount.firstName && dmpAccount.lastName) {
-                        const nameMatches = await storage.findConsumersByNameAndTenant(dmpAccount.firstName, dmpAccount.lastName, tenant.id);
-                        consumer = nameMatches[0] || null;
-                      }
-                      if (!consumer) {
-                        consumer = await storage.createConsumer({
-                          tenantId: tenant.id,
-                          firstName: dmpAccount.firstName || 'Unknown',
-                          lastName: dmpAccount.lastName || 'Consumer',
-                          email: dmpAccount.consumerEmail || null,
-                          phone: dmpAccount.consumerPhone || null,
-                          address: dmpAccount.address || null,
-                          city: dmpAccount.city || null,
-                          state: dmpAccount.state || null,
-                          zipCode: dmpAccount.zipCode || null,
-                        });
-                      }
-                      await storage.createAccount({
-                        tenantId: tenant.id,
-                        consumerId: consumer.id,
-                        accountNumber: dmpAccount.accountNumber || dmpAccount.filenumber,
-                        filenumber: dmpAccount.filenumber,
-                        balanceCents: dmpAccount.balance || 0,
-                        creditor: dmpAccount.creditorName || 'Unknown Creditor',
-                        status: dmpAccount.status || 'active',
-                      });
-                      created++;
-                    }
-                  } catch (accErr) {
-                    console.error(`[DMP Sync] Error processing account ${dmpAccount.filenumber}:`, accErr);
-                  }
-                }
-                console.log(`[DMP Sync] Tenant ${tenant.name}: ${synced} updated, ${created} created from ${dmpAccounts.length} DMP accounts`);
+                const { importDmpAccounts } = await import('./dmpAccountImport');
+                const results = await importDmpAccounts(
+                  storage,
+                  tenant.id,
+                  dmpAccounts,
+                  null,
+                  {
+                    createMissing: Boolean((tenantSettings as any)?.dmpAutoImport),
+                    syncExistingConsumerContact: true,
+                  },
+                );
+                console.log(
+                  `[DMP Sync] Tenant ${tenant.name}: ${results.updated} updated, `
+                  + `${results.imported} created, ${results.skipped} skipped `
+                  + `from ${dmpAccounts.length} DMP accounts`,
+                );
               }
             }
           } catch (dmpSyncError) {

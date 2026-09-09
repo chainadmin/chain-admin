@@ -1,6 +1,7 @@
 type ImportStorage = {
   getAccountsByTenant(tenantId: string): Promise<any[]>;
   updateAccount(id: string, updates: any): Promise<any>;
+  updateConsumer?(id: string, updates: any): Promise<any>;
   getConsumerByEmailAndTenant(email: string, tenantId: string): Promise<any>;
   getConsumerByPhoneAndTenant(phone: string, tenantId: string): Promise<any>;
   findConsumersByNameAndTenant(firstName: string, lastName: string, tenantId: string): Promise<any[]>;
@@ -15,11 +16,17 @@ export interface DmpAccountImportResults {
   errors: string[];
 }
 
+export interface DmpAccountImportOptions {
+  createMissing?: boolean;
+  syncExistingConsumerContact?: boolean;
+}
+
 export async function importDmpAccounts(
   storage: ImportStorage,
   tenantId: string,
   dmpAccounts: any[],
-  folderId?: string | null
+  folderId?: string | null,
+  options: DmpAccountImportOptions = {},
 ): Promise<DmpAccountImportResults> {
   const results: DmpAccountImportResults = {
     imported: 0,
@@ -28,13 +35,22 @@ export async function importDmpAccounts(
     errors: [],
   };
   const existingAccounts = await storage.getAccountsByTenant(tenantId);
+  const createMissing = options.createMissing ?? true;
 
   for (const dmpAccount of dmpAccounts) {
     try {
-      const existing = existingAccounts.find(account =>
-        account.filenumber === dmpAccount.filenumber ||
-        account.accountNumber === dmpAccount.accountNumber
-      );
+      const filenumber = (
+        typeof dmpAccount.filenumber === 'string'
+        || typeof dmpAccount.filenumber === 'number'
+      )
+        ? String(dmpAccount.filenumber).trim()
+        : '';
+      if (!filenumber) {
+        throw new Error('DMP account is missing a valid file number');
+      }
+      // A DMP file number is the provider-owned identity. Chain account
+      // numbers can collide and must never be used to select an update target.
+      const existing = existingAccounts.find(account => account.filenumber === filenumber);
 
       if (existing) {
         await storage.updateAccount(existing.id, {
@@ -42,7 +58,34 @@ export async function importDmpAccounts(
           status: dmpAccount.status || existing.status,
           creditor: dmpAccount.creditorName || existing.creditor,
         });
+        if (
+          options.syncExistingConsumerContact
+          && storage.updateConsumer
+          && existing.consumerId
+        ) {
+          const consumerUpdates: Record<string, any> = {};
+          if (dmpAccount.consumerEmail) consumerUpdates.email = dmpAccount.consumerEmail;
+          if (dmpAccount.consumerPhone) consumerUpdates.phone = dmpAccount.consumerPhone;
+          if (dmpAccount.address) consumerUpdates.address = dmpAccount.address;
+          if (dmpAccount.city) consumerUpdates.city = dmpAccount.city;
+          if (dmpAccount.state) consumerUpdates.state = dmpAccount.state;
+          if (dmpAccount.zipCode) consumerUpdates.zipCode = dmpAccount.zipCode;
+          if (Object.keys(consumerUpdates).length > 0) {
+            try {
+              await storage.updateConsumer(existing.consumerId, consumerUpdates);
+            } catch (error) {
+              console.error('[DMP Import] Existing consumer contact sync failed', {
+                errorType: error instanceof Error ? error.name : 'UnknownError',
+              });
+            }
+          }
+        }
         results.updated++;
+        continue;
+      }
+
+      if (!createMissing) {
+        results.skipped++;
         continue;
       }
 
@@ -79,8 +122,8 @@ export async function importDmpAccounts(
       await storage.createAccount({
         tenantId,
         consumerId: consumer.id,
-        accountNumber: dmpAccount.accountNumber || dmpAccount.filenumber,
-        filenumber: dmpAccount.filenumber,
+        accountNumber: dmpAccount.accountNumber || filenumber,
+        filenumber,
         balanceCents: dmpAccount.balance || 0,
         creditor: dmpAccount.creditorName || 'Unknown Creditor',
         status: dmpAccount.status || 'active',
@@ -88,7 +131,7 @@ export async function importDmpAccounts(
       });
       results.imported++;
     } catch (error: any) {
-      results.errors.push(`Account ${dmpAccount.filenumber}: ${error.message}`);
+      results.errors.push(`DMP account import failed: ${error.message}`);
       results.skipped++;
     }
   }
