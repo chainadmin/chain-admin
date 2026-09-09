@@ -114,6 +114,13 @@ export class EmailService {
       const tenantToken = tenant?.postmarkServerToken
         ? (tenant.postmarkServerToken.startsWith('enc:v1:') ? decryptCredential(tenant.postmarkServerToken) : tenant.postmarkServerToken)
         : null;
+      if (tenantToken && options.useBroadcastStream) {
+        const streamId = tenant?.postmarkBroadcastStream || getBroadcastStreamId();
+        const stream = await postmarkServerService.ensureBroadcastStream(tenantToken, streamId);
+        if (!stream.success) {
+          throw new Error(stream.error || `Postmark broadcast stream "${streamId}" is unavailable`);
+        }
+      }
       const activeClient = tenantToken ? new Client(tenantToken) : postmarkClient;
       const result = await activeClient.sendEmail(emailPayload);
 
