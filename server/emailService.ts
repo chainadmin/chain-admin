@@ -64,7 +64,12 @@ export class EmailService {
     tenantId: string | undefined,
     tenant: Awaited<ReturnType<EmailService['getTenantDeliveryConfig']>>,
   ) {
-    if (!tenant?.postmarkServerToken) return null;
+    if (!tenant?.postmarkServerToken) {
+      if (tenant?.postmarkServerId) {
+        throw new Error(`Dedicated Postmark server ${tenant.postmarkServerId} has no stored server token`);
+      }
+      return null;
+    }
     return resolvePostmarkServerToken({
       tenant,
       recoverServerToken: async serverId => {
@@ -79,6 +84,28 @@ export class EmailService {
           }
         : undefined,
     });
+  }
+
+  async validateTenantDelivery(tenantId: string, useBroadcastStream = false): Promise<{
+    server: 'tenant' | 'global';
+    messageStream: string;
+  }> {
+    const tenant = await this.getTenantDeliveryConfig(tenantId);
+    if (!tenant) throw new Error('Tenant email configuration was not found');
+
+    const tenantToken = await this.getTenantServerToken(tenantId, tenant);
+    const messageStream = useBroadcastStream
+      ? tenant.postmarkBroadcastStream || getBroadcastStreamId()
+      : tenant.postmarkTransactionalStream || process.env.POSTMARK_TRANSACTIONAL_STREAM || 'outbound';
+
+    if (tenantToken && useBroadcastStream) {
+      const stream = await postmarkServerService.ensureBroadcastStream(tenantToken, messageStream);
+      if (!stream.success) {
+        throw new Error(stream.error || `Postmark broadcast stream "${messageStream}" is unavailable`);
+      }
+    }
+
+    return { server: tenantToken ? 'tenant' : 'global', messageStream };
   }
 
   async sendEmail(options: EmailOptions): Promise<{ messageId: string; success: boolean; error?: string }> {
