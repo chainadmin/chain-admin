@@ -99,8 +99,15 @@ export class PostmarkServerService {
       };
       const existing = await fetch(`${this.baseUrl}/message-streams/${encodeURIComponent(streamId)}`, { headers });
       if (existing.ok) return { success: true };
-      if (existing.status !== 404) {
-        return { success: false, error: `Failed to inspect Postmark message stream: HTTP ${existing.status}` };
+      // Postmark commonly reports a missing message stream as HTTP 422 with a
+      // provider ErrorCode rather than as HTTP 404. Both responses mean that
+      // this newly-created server needs its Broadcast stream provisioned.
+      if (existing.status !== 404 && existing.status !== 422) {
+        const detail = (await existing.text()).slice(0, 500);
+        return {
+          success: false,
+          error: `Failed to inspect Postmark message stream: HTTP ${existing.status}${detail ? ` - ${detail}` : ''}`,
+        };
       }
 
       const created = await fetch(`${this.baseUrl}/message-streams`, {
@@ -117,7 +124,11 @@ export class PostmarkServerService {
       // Verify it rather than treating every validation response as success.
       const afterCreate = await fetch(`${this.baseUrl}/message-streams/${encodeURIComponent(streamId)}`, { headers });
       if (afterCreate.ok) return { success: true };
-      return { success: false, error: `Failed to create Postmark broadcast stream: HTTP ${created.status}` };
+      const detail = (await created.text()).slice(0, 500);
+      return {
+        success: false,
+        error: `Failed to create Postmark broadcast stream: HTTP ${created.status}${detail ? ` - ${detail}` : ''}`,
+      };
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error occurred' };
     }
