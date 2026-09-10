@@ -14,11 +14,8 @@ import {
   getCompanyMessagingBlockMessage,
   isServiceRestrictedForMember,
 } from '@shared/utils/messagingAccess';
-import { decryptCredential } from '../../server/credentialCrypto';
-import { isPostmarkAuthenticationError, resolvePostmarkTokenForDelivery } from '../../server/postmarkDeliveryFallback';
 import {
   resolveTenantFromAddress,
-  resolveTenantTransactionalStream,
 } from '../_lib/postmarkTenantRouting';
 
 const DEFAULT_FROM_EMAIL = 'support@chainsoftwaregroup.com';
@@ -369,15 +366,9 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       customBranding: tenantBranding,
     };
 
-    // Tenant credentials are encrypted by the production migration. Passing
-    // the stored `enc:v1:` value to Postmark makes every dedicated-server send
-    // fail authentication even though the global fallback server still works.
-    const tenantPostmarkToken = resolvePostmarkTokenForDelivery(tenantRecord.postmarkServerToken, decryptCredential);
-    const activePostmarkClient = tenantPostmarkToken
-      ? new Client(tenantPostmarkToken)
-      : postmarkClient;
-
-    if (!activePostmarkClient) {
+    // Direct messages use the established platform Postmark server. Tenant
+    // credentials remain administrative data and cannot disable live sends.
+    if (!postmarkClient) {
       res.status(500).json({ error: 'Email service is not configured' });
       return;
     }
@@ -459,16 +450,9 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       TextBody: textBody,
       Tag: 'direct-email',
       Metadata: metadata,
-      MessageStream: resolveTenantTransactionalStream(tenantRecord),
+      MessageStream: process.env.POSTMARK_TRANSACTIONAL_STREAM || 'outbound',
     };
-    let result;
-    try {
-      result = await activePostmarkClient.sendEmail(emailPayload);
-    } catch (error) {
-      if (!tenantPostmarkToken || !postmarkClient || !isPostmarkAuthenticationError(error)) throw error;
-      console.warn(`Tenant Postmark credential was rejected for ${tenantId}; retrying on the platform server`);
-      result = await postmarkClient.sendEmail(emailPayload);
-    }
+    const result = await postmarkClient.sendEmail(emailPayload);
 
     try {
       await db.insert(emailLogs).values({
