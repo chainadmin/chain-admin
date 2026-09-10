@@ -356,7 +356,10 @@ function normalizeDmpAccount(account: Record<string, unknown>, filenumber: strin
     firstName: dmpString(account, 'firstName', 'debtor_firstname'),
     lastName: dmpString(account, 'lastName', 'debtor_lastname'),
     fullName: dmpString(account, 'fullName'),
-    dateOfBirth: dmpString(account, 'dateOfBirth', 'debtor_dob'),
+    // DMP installations do not all expose the consumer DOB under the same
+    // casing/name. Prefer the v2 camelCase field, while accepting the legacy
+    // and export-style names used by older installations.
+    dateOfBirth: dmpString(account, 'dateOfBirth', 'date_of_birth', 'birthDate', 'dob', 'debtor_dob'),
     ssnLast4: dmpString(account, 'ssnLast4'),
     consumerEmail: dmpString(account, 'email', 'consumerEmail'),
     address: dmpString(account, 'address', 'debtor_address'),
@@ -365,7 +368,9 @@ function normalizeDmpAccount(account: Record<string, unknown>, filenumber: strin
     zipCode: dmpString(account, 'zipCode', 'debtor_zip'),
     creditorName: dmpString(account, 'originalCreditor', 'creditorName', 'creditor'),
     clientName: dmpString(account, 'clientName'),
-    balance: dmpNumber(account, 'currentBalance', 'balance'),
+    // Never substitute originalBalance for the live balance. These aliases
+    // represent DMP's current/remaining balance across its API versions.
+    balance: dmpNumber(account, 'currentBalance', 'current_balance', 'remainingBalance', 'balance'),
     originalBalance: dmpNumber(account, 'originalBalance', 'original_balance'),
     status: dmpString(account, 'status'),
     lastContactDate: dmpString(account, 'lastContactDate'),

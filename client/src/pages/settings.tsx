@@ -36,7 +36,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Trash2, Upload, Plus, Save, CreditCard, Shield, Settings as SettingsIcon, ImageIcon, Copy, ExternalLink, Repeat, FileText, Users, MessagesSquare, DollarSign, Code, Table, Eye, Bold, Italic, Underline, List, ListOrdered, Heading1, Heading2, Heading3, Palette, Link2, Link2Off, Eraser, Send, Check, ChevronsUpDown, Download } from "lucide-react";
+import { Trash2, Upload, Plus, Save, CreditCard, Shield, Settings as SettingsIcon, ImageIcon, Copy, ExternalLink, Repeat, FileText, Users, MessagesSquare, DollarSign, Code, Table, Eye, Bold, Italic, Underline, List, ListOrdered, Heading1, Heading2, Heading3, Palette, Link2, Link2Off, Eraser, Send, Check, ChevronsUpDown, RefreshCw } from "lucide-react";
 import { useRef } from "react";
 import { isSubdomainSupported } from "@shared/utils/subdomain";
 import { resolveConsumerPortalUrl } from "@shared/utils/consumerPortal";
@@ -168,6 +168,7 @@ export default function Settings() {
   const [newStatusInput, setNewStatusInput] = useState("");
   const [showExternalApiKey, setShowExternalApiKey] = useState(false);
   const [expandedCampaignLogId, setExpandedCampaignLogId] = useState<string | null>(null);
+  const [isSyncingDmp, setIsSyncingDmp] = useState(false);
 
   const cardBaseClasses =
     "border border-white/10 bg-white/5 text-blue-50 shadow-lg shadow-blue-900/20 backdrop-blur";
@@ -2741,47 +2742,51 @@ export default function Settings() {
                   {/* DMP Import Accounts - Only show when enabled */}
                   {(localSettings as any)?.dmpEnabled && (
                     <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-4">
-                      <h3 className="text-base font-medium text-white">Import Accounts from DMP</h3>
+                      <h3 className="text-base font-medium text-white">Sync Accounts from DMP</h3>
                       <p className="text-sm text-blue-100/70">
-                        Manually import accounts from Debt Manager Pro. This will create new accounts or update existing ones.
+                        Pull the latest current balances and consumer details, including date of birth, from Debt Manager Pro. DMP should send DOB as <code>dateOfBirth</code> in YYYY-MM-DD format.
                       </p>
                       <Button
                         type="button"
                         onClick={async () => {
+                          setIsSyncingDmp(true);
                           try {
                             toast({
-                              title: "Importing...",
-                              description: "Fetching accounts from DMP...",
+                              title: "Syncing...",
+                              description: "Fetching current balances and consumer details from DMP...",
                             });
                             const response = await apiRequest("POST", "/api/dmp/import-accounts", {});
                             const result = await response.json();
 
                             if (result.success) {
                               toast({
-                                title: "Import Complete",
-                                description: result.message || `Imported ${result.imported} accounts, updated ${result.updated}`,
+                                title: "Sync Complete",
+                                description: result.message || `Added ${result.imported} accounts and refreshed ${result.updated}`,
                               });
                             } else {
                               toast({
-                                title: "Import Failed",
-                                description: result.error || "Failed to import accounts from DMP",
+                                title: "Sync Failed",
+                                description: result.error || "Failed to sync accounts from DMP",
                                 variant: "destructive",
                               });
                             }
                           } catch (error: any) {
                             const responseError = error?.data;
                             toast({
-                              title: "Import Error",
-                              description: responseError?.error || responseError?.message || error.message || "Failed to import accounts from DMP",
+                              title: "Sync Error",
+                              description: responseError?.error || responseError?.message || error.message || "Failed to sync accounts from DMP",
                               variant: "destructive",
                             });
+                          } finally {
+                            setIsSyncingDmp(false);
                           }
                         }}
+                        disabled={isSyncingDmp}
                         className="rounded-xl bg-gradient-to-r from-emerald-500/80 to-teal-500/80 px-6 py-2 text-sm font-semibold text-white shadow-lg transition hover:from-emerald-400/80 hover:to-teal-400/80"
-                        data-testid="button-import-dmp-accounts"
+                        data-testid="button-sync-dmp-accounts"
                       >
-                        <Download className="h-4 w-4 mr-2" />
-                        Import Accounts
+                        <RefreshCw className={cn("h-4 w-4 mr-2", isSyncingDmp && "animate-spin")} />
+                        {isSyncingDmp ? "Syncing..." : "Sync Now"}
                       </Button>
                       {(authUser?.role === 'owner' || authUser?.role === 'platform_admin') && <Button
                         type="button"
@@ -2974,6 +2979,10 @@ export default function Settings() {
                   <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-4">
                     <h3 className="text-base font-medium text-white">What gets synced with DMP?</h3>
                     <ul className="space-y-2 text-sm text-blue-100/70">
+                      <li className="flex items-start">
+                        <span className="mr-2">•</span>
+                        <span>Current balances and consumer details (including DOB)</span>
+                      </li>
                       <li className="flex items-start">
                         <span className="mr-2">•</span>
                         <span>Payment transactions and results</span>

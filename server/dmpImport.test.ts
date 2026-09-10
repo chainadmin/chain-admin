@@ -870,6 +870,7 @@ test('maps the confirmed camelCase DMP response into complete consumer and accou
       status: 'open',
       folderId: null,
       additionalData: {
+        dmpSource: 'dmp',
         dmpClientName: 'Client',
         dmpLastContactDate: '2026-09-01',
         dmpNextFollowUpDate: '2026-09-15',
@@ -877,6 +878,40 @@ test('maps the confirmed camelCase DMP response into complete consumer and accou
         dmpAssignedCollectorId: 'collector-1',
       },
     });
+  } finally {
+    storage.getTenantSettings = originalSettings;
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('accepts legacy DOB and current-balance field names from DMP', async () => {
+  const originalSettings = storage.getTenantSettings;
+  const originalFetch = globalThis.fetch;
+  storage.getTenantSettings = (async () => ({
+    dmpEnabled: true,
+    dmpApiUrl: 'https://dmp.example',
+    dmpUsername: 'user',
+    dmpPassword: 'password',
+  })) as typeof storage.getTenantSettings;
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    if (String(input).endsWith('/api/v2/login')) {
+      return new Response(JSON.stringify({ token: 'test-token' }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ data: [{
+      fileNumber: 'file-legacy',
+      date_of_birth: '1985-05-06',
+      current_balance: '4321',
+      originalBalance: 10000,
+    }] }), { status: 200 });
+  }) as typeof fetch;
+
+  try {
+    const [account] = await new DebtManagerProService().getAccounts('tenant-1', {
+      portfolioId: 'portfolio-legacy',
+    });
+    assert.equal(account.dateOfBirth, '1985-05-06');
+    assert.equal(account.balance, 4321);
+    assert.equal(account.originalBalance, 10000);
   } finally {
     storage.getTenantSettings = originalSettings;
     globalThis.fetch = originalFetch;
