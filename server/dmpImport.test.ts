@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildDmpEmailOpenNote,
   DebtManagerProService,
   DmpImportError,
   normalizeDmpList,
@@ -14,6 +15,18 @@ import {
 } from './dmpAccountImport';
 import { applyDmpBalanceRepair, planDmpBalanceRepair } from './dmpBalanceRepair';
 import { storage } from './storage';
+
+test('builds a DMP note for a Postmark email-open event', () => {
+  assert.deepEqual(buildDmpEmailOpenNote(' file-1 ', ' person@example.com '), {
+    filenumber: 'file-1',
+    collectorname: 'System',
+    logmessage: 'Email opened by person@example.com',
+  });
+  assert.equal(
+    buildDmpEmailOpenNote('file-1').logmessage,
+    'Email opened by recipient',
+  );
+});
 
 test('normalizes flat and wrapped DMP lists', () => {
   const portfolios = [{ id: 'portfolio-1', name: 'Primary' }];

@@ -24862,6 +24862,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
           fileNumber = ''; // Clear so the lookup will run
         }
 
+        // Prefer the exact account ID when the sender supplied one. This avoids
+        // attaching an engagement note to the wrong debt when one consumer has
+        // multiple accounts.
+        if (!fileNumber && Metadata?.accountId) {
+          const [account] = await db
+            .select()
+            .from(accountsTable)
+            .where(
+              and(
+                eq(accountsTable.id, Metadata.accountId),
+                eq(accountsTable.tenantId, resolvedTenantId)
+              )
+            )
+            .limit(1);
+
+          if (account?.filenumber) {
+            fileNumber = account.filenumber.trim();
+            console.log(`📋 Found filenumber ${fileNumber} via accountId lookup`);
+          }
+        }
+
         // If no filenumber in metadata but we have accountNumber, look up the account to get filenumber
         if (!fileNumber && Metadata?.accountNumber) {
           const [account] = await db
@@ -24909,6 +24930,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
             console.log('✅ SMAX note inserted:', smaxResult);
           } else {
             console.log('⚠️ SMAX note insertion returned no result');
+          }
+
+          // Mirror the engagement event into DMP. insertNote is a safe no-op
+          // when DMP is not enabled for the tenant.
+          const { buildDmpEmailOpenNote, dmpService } = await import('./dmpService');
+          const dmpResult = await dmpService.insertNote(
+            resolvedTenantId,
+            buildDmpEmailOpenNote(fileNumber, Recipient),
+          );
+          if (dmpResult) {
+            console.log('✅ DMP email-open note inserted');
           }
         } else {
           console.log('⚠️ Skipping SMAX email tracking - no filenumber found after all lookup attempts');

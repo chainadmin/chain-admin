@@ -141,6 +141,17 @@ interface DmpNoteData {
   logmessage: string;
 }
 
+export function buildDmpEmailOpenNote(filenumber: string, recipient?: string): DmpNoteData {
+  const normalizedRecipient = recipient?.trim();
+  return {
+    filenumber: filenumber.trim(),
+    collectorname: 'System',
+    logmessage: normalizedRecipient
+      ? `Email opened by ${normalizedRecipient}`
+      : 'Email opened by recipient',
+  };
+}
+
 interface DmpSmsData {
   filenumber: string;
   phone_number: string;
