@@ -14,11 +14,8 @@ import {
   getCompanyMessagingBlockMessage,
   isServiceRestrictedForMember,
 } from '@shared/utils/messagingAccess';
-import { decryptCredential } from '../../server/credentialCrypto';
 import {
   resolveTenantFromAddress,
-  resolveTenantPostmarkToken,
-  resolveTenantTransactionalStream,
 } from '../_lib/postmarkTenantRouting';
 
 const DEFAULT_FROM_EMAIL = 'support@chainsoftwaregroup.com';
@@ -369,15 +366,9 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       customBranding: tenantBranding,
     };
 
-    // Tenant credentials are encrypted by the production migration. Passing
-    // the stored `enc:v1:` value to Postmark makes every dedicated-server send
-    // fail authentication even though the global fallback server still works.
-    const tenantPostmarkToken = resolveTenantPostmarkToken(tenantRecord, decryptCredential);
-    const activePostmarkClient = tenantPostmarkToken
-      ? new Client(tenantPostmarkToken)
-      : postmarkClient;
-
-    if (!activePostmarkClient) {
+    // Direct messages use the established platform Postmark server. Tenant
+    // credentials remain administrative data and cannot disable live sends.
+    if (!postmarkClient) {
       res.status(500).json({ error: 'Email service is not configured' });
       return;
     }
@@ -450,7 +441,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
     // Match the main email service by using the configured custom sender or
     // the account's verified Chain-domain sender.
     const fromEmail = resolveTenantFromAddress(tenantRecord, DEFAULT_FROM_EMAIL);
-    const result = await activePostmarkClient.sendEmail({
+    const emailPayload = {
       From: fromEmail,
       To: consumerRecord.email,
       ReplyTo: tenantRecord.postmarkInboundAddress || process.env.POSTMARK_INBOUND_EMAIL,
@@ -459,8 +450,9 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       TextBody: textBody,
       Tag: 'direct-email',
       Metadata: metadata,
-      MessageStream: resolveTenantTransactionalStream(tenantRecord),
-    });
+      MessageStream: process.env.POSTMARK_TRANSACTIONAL_STREAM || 'outbound',
+    };
+    const result = await postmarkClient.sendEmail(emailPayload);
 
     try {
       await db.insert(emailLogs).values({

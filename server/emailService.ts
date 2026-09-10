@@ -4,7 +4,6 @@ import { emailLogs, tenants, tenantSettings } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 import { smaxService } from './smaxService';
 import { storage } from './storage';
-import { decryptCredential } from './credentialCrypto';
 
 // Postmark client will be validated at server startup, not module load
 // This allows Docker build to succeed without runtime env vars
@@ -47,9 +46,6 @@ export class EmailService {
         name: tenants.name,
         slug: tenants.slug,
         customSenderEmail: tenants.customSenderEmail,
-        postmarkServerToken: tenants.postmarkServerToken,
-        postmarkTransactionalStream: tenants.postmarkTransactionalStream,
-        postmarkBroadcastStream: tenants.postmarkBroadcastStream,
         postmarkInboundAddress: tenants.postmarkInboundAddress,
       })
       .from(tenants)
@@ -107,17 +103,13 @@ export class EmailService {
       
       // Use broadcast stream for marketing/bulk emails (automations, campaigns)
       emailPayload.MessageStream = options.useBroadcastStream
-        ? tenant?.postmarkBroadcastStream || getBroadcastStreamId()
-        : tenant?.postmarkTransactionalStream || process.env.POSTMARK_TRANSACTIONAL_STREAM || 'outbound';
-      
-      const tenantToken = tenant?.postmarkServerToken
-        ? (tenant.postmarkServerToken.startsWith('enc:v1:') ? decryptCredential(tenant.postmarkServerToken) : tenant.postmarkServerToken)
-        : null;
-      // Keep the proven global-server send path unchanged; a tenant token only
-      // swaps the Postmark client. Streams are provisioned when the dedicated
-      // server is created, not during a live send.
-      const activeClient = tenantToken ? new Client(tenantToken) : postmarkClient;
-      const result = await activeClient.sendEmail(emailPayload);
+        ? getBroadcastStreamId()
+        : process.env.POSTMARK_TRANSACTIONAL_STREAM || 'outbound';
+
+      // All application mail intentionally uses the established platform
+      // Postmark server. Tenant credentials are retained for administration,
+      // but must not interrupt live customer delivery.
+      const result = await postmarkClient.sendEmail(emailPayload);
 
       // Log email to database if tenantId is provided
       if (options.tenantId) {
@@ -208,22 +200,16 @@ export class EmailService {
               Tag: email.tag,
               Metadata: normalizedMetadata,
               TrackOpens: true,
-              MessageStream: tenant?.postmarkBroadcastStream || getBroadcastStreamId(),
+              MessageStream: getBroadcastStreamId(),
             };
           })
         );
 
         // Send batch via Postmark's batch API
         console.log(`📧 Sending batch of ${batchMessages.length} emails via broadcast stream...`);
-        const batchTenantId = batch.find(email => email.tenantId)?.tenantId;
-        const batchTenant = batchTenantId ? tenantConfigs.get(batchTenantId) : null;
-        const batchTenantToken = batchTenant?.postmarkServerToken
-          ? (batchTenant.postmarkServerToken.startsWith('enc:v1:') ? decryptCredential(batchTenant.postmarkServerToken) : batchTenant.postmarkServerToken)
-          : null;
-        // This is intentionally the same batch operation used by the main
-        // server. The sole difference is the client token selected here.
-        const activeClient = batchTenantToken ? new Client(batchTenantToken) : postmarkClient;
-        const batchResult = await activeClient.sendEmailBatch(batchMessages);
+        // Campaigns use the same established platform server as individual
+        // messages so a tenant-specific server cannot block customer mail.
+        const batchResult = await postmarkClient.sendEmailBatch(batchMessages);
         
         // Persist provider results in one insert and run optional integrations in
         // parallel. The old per-recipient awaits made a 500-recipient campaign
