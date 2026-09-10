@@ -1,5 +1,6 @@
-import React, { type ReactNode } from "react";
+import React, { type ReactNode, useEffect } from "react";
 import type { ProviderCall } from "@/lib/softphone-call-lifecycle";
+import { softphoneEnterAction } from "@/lib/softphone-keyboard";
 import {
   Building2, Check, ChevronRight, Download, EyeOff, History, LogOut, Mic, MicOff,
   Pause, Phone, PhoneCall, PhoneIncoming, PhoneOff, PhoneOutgoing, ParkingCircle,
@@ -78,6 +79,32 @@ export function ConnectPhoneWorkspace(props: Props) {
   const busy = props.callPreparing || props.isRetentionPending || props.callTransitionPending || !!props.pendingReconnect;
   const activeName = props.activeCallerName || props.dialpadNumber || "Enter a number";
   const phoneStatus = props.connectionStatus === "offline" ? "Offline" : props.connectionStatus === "reconnecting" || !props.isProviderRegistered ? "Connecting" : "Ready";
+
+  useEffect(() => {
+    const handleEnter = (event: KeyboardEvent) => {
+      if (event.key !== "Enter" || event.repeat || event.isComposing || event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest("button, a, select, textarea, [contenteditable='true']")) return;
+      if (target?.closest("input") && !target.closest("[data-softphone-number]")) return;
+
+      const action = softphoneEnterAction({
+        callState: props.callState,
+        hasNumber: Boolean(props.dialpadNumber.trim()),
+        busy,
+        callTransitionPending: props.callTransitionPending,
+      });
+      if (!action) return;
+
+      event.preventDefault();
+      if (action === "call") props.onCall();
+      else props.onHangup();
+    };
+
+    window.addEventListener("keydown", handleEnter);
+    return () => window.removeEventListener("keydown", handleEnter);
+  }, [busy, props.callState, props.callTransitionPending, props.dialpadNumber, props.onCall, props.onHangup]);
+
   return (
     <main className="min-h-[100dvh] bg-[#e6f1ed] px-3 py-3 text-[#123d38] sm:px-5 sm:py-5">
       <div className="mx-auto max-w-[1180px]">
@@ -111,7 +138,8 @@ export function ConnectPhoneWorkspace(props: Props) {
               {props.callState === "idle" && <><div className="mb-2 grid grid-cols-3 gap-1.5 rounded-xl bg-white/7 p-1.5"><button type="button" onClick={() => props.setCallerIdMode("auto")} className={`rounded-lg py-2 text-xs font-semibold ${props.callerIdMode === "auto" ? "bg-white text-[#06443d]" : "text-[#bfe0d6]"}`}>Auto</button><button type="button" onClick={() => props.setCallerIdMode(props.callerIdMode === "private" ? "auto" : "private")} className={`rounded-lg py-2 text-xs font-semibold ${props.callerIdMode === "private" ? "bg-white text-[#06443d]" : "text-[#bfe0d6]"}`}><EyeOff size={13} className="mr-1 inline" />Private</button><button type="button" onClick={() => props.setCallerIdMode(props.callerIdMode === "office" ? "auto" : "office")} className={`rounded-lg py-2 text-xs font-semibold ${props.callerIdMode === "office" ? "bg-white text-[#06443d]" : "text-[#bfe0d6]"}`}><Building2 size={13} className="mr-1 inline" />Office</button></div>
               <p className={`mb-3 rounded-lg px-2.5 py-2 text-[11px] leading-4 ${props.callerIdMode === "private" && !props.privacyLineNumber ? "bg-amber-200/15 text-[#fedc8a]" : "bg-white/7 text-[#bfe0d6]"}`}>{props.callerIdMode === "private" ? props.privacyLineNumber ? <>Private shows <span className="font-mono font-bold">{props.privacyLineNumber}</span>. Callbacks go to its separate voicemail.</> : "Privacy Line setup required. A manager must assign a dedicated company number before this call can be placed." : "Private uses a dedicated company Privacy Line, not an anonymous or withheld number."}</p>
               {props.heldCall && <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-[#e1b65d]/45 bg-[#79550d]/35 px-3 py-2.5"><div className="min-w-0"><p className="text-[10px] font-bold uppercase tracking-wider text-[#fedc8a]">Held call</p><p className="truncate text-sm font-semibold">{nameOrNumber(props.heldCall)}</p></div><button type="button" disabled={!!props.pendingReconnect || retainedUnavailable(props.heldCall)} onClick={props.onResume} className="shrink-0 rounded-lg bg-[#f6c864] px-3 py-2 text-xs font-bold text-[#4c3505] disabled:opacity-50">{props.pendingReconnect?.id === props.heldCall.id ? "Reconnecting" : retainedUnavailable(props.heldCall) ? "Unavailable" : "Resume"}</button></div>}
-              <input value={props.dialpadNumber} onChange={(e) => props.setDialpadNumber(e.target.value)} placeholder="Type a number" aria-label="Phone number" className="mb-3 h-12 w-full rounded-xl border border-white/15 bg-[#052f2b] px-3 text-center font-mono text-lg text-white outline-none placeholder:text-[#77a69a] focus:border-[#75cdbc]" />
+              <input data-softphone-number value={props.dialpadNumber} onChange={(e) => props.setDialpadNumber(e.target.value)} placeholder="Type a number" aria-label="Phone number" aria-describedby="softphone-enter-hint" className="h-12 w-full rounded-xl border border-white/15 bg-[#052f2b] px-3 text-center font-mono text-lg text-white outline-none placeholder:text-[#77a69a] focus:border-[#75cdbc]" />
+              <p id="softphone-enter-hint" className="mb-3 mt-1.5 text-center text-[10px] text-[#94c2b7]">Press Enter to call</p>
               <div className="grid grid-cols-3 gap-2">{keys.map(([digit, letters]) => <button type="button" key={digit} onClick={() => props.onDial(digit)} className="h-14 rounded-xl bg-white/9 text-xl font-medium transition hover:bg-white/16 active:scale-[.97] motion-reduce:transition-none"><span className="block leading-5">{digit}</span>{letters && <span className="block text-[9px] tracking-[.17em] text-[#94c2b7]">{letters}</span>}</button>)}</div>
               <button type="button" onClick={props.onCall} disabled={!props.dialpadNumber || props.callPreparing || props.callTransitionPending} className="mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#27a68e] text-sm font-bold text-white transition hover:bg-[#31b99e] disabled:opacity-45"><Phone size={17} />{props.callTransitionPending ? "Answering incoming call" : props.callPreparing ? "Preparing call" : "Call"}</button>
             </>}
