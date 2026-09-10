@@ -15,9 +15,9 @@ import {
   isServiceRestrictedForMember,
 } from '@shared/utils/messagingAccess';
 import { decryptCredential } from '../../server/credentialCrypto';
+import { isPostmarkAuthenticationError, resolvePostmarkTokenForDelivery } from '../../server/postmarkDeliveryFallback';
 import {
   resolveTenantFromAddress,
-  resolveTenantPostmarkToken,
   resolveTenantTransactionalStream,
 } from '../_lib/postmarkTenantRouting';
 
@@ -372,7 +372,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
     // Tenant credentials are encrypted by the production migration. Passing
     // the stored `enc:v1:` value to Postmark makes every dedicated-server send
     // fail authentication even though the global fallback server still works.
-    const tenantPostmarkToken = resolveTenantPostmarkToken(tenantRecord, decryptCredential);
+    const tenantPostmarkToken = resolvePostmarkTokenForDelivery(tenantRecord.postmarkServerToken, decryptCredential);
     const activePostmarkClient = tenantPostmarkToken
       ? new Client(tenantPostmarkToken)
       : postmarkClient;
@@ -450,7 +450,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
     // Match the main email service by using the configured custom sender or
     // the account's verified Chain-domain sender.
     const fromEmail = resolveTenantFromAddress(tenantRecord, DEFAULT_FROM_EMAIL);
-    const result = await activePostmarkClient.sendEmail({
+    const emailPayload = {
       From: fromEmail,
       To: consumerRecord.email,
       ReplyTo: tenantRecord.postmarkInboundAddress || process.env.POSTMARK_INBOUND_EMAIL,
@@ -460,7 +460,15 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       Tag: 'direct-email',
       Metadata: metadata,
       MessageStream: resolveTenantTransactionalStream(tenantRecord),
-    });
+    };
+    let result;
+    try {
+      result = await activePostmarkClient.sendEmail(emailPayload);
+    } catch (error) {
+      if (!tenantPostmarkToken || !postmarkClient || !isPostmarkAuthenticationError(error)) throw error;
+      console.warn(`Tenant Postmark credential was rejected for ${tenantId}; retrying on the platform server`);
+      result = await postmarkClient.sendEmail(emailPayload);
+    }
 
     try {
       await db.insert(emailLogs).values({
