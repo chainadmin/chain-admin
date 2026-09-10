@@ -11231,11 +11231,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { importDmpAccounts } = await import('./dmpAccountImport');
-      const results = await importDmpAccounts(storage, tenantId, dmpAccounts, folderId);
+      const results = await importDmpAccounts(storage, tenantId, dmpAccounts, folderId, {
+        // A manual sync is expected to refresh the complete DMP record, not
+        // only its account row. This includes DOB and the other consumer
+        // identity/contact fields needed by portal verification.
+        syncExistingConsumerContact: true,
+      });
 
       res.json({
         success: true,
-        message: `Imported ${results.imported} new accounts, updated ${results.updated} existing`
+        message: `Synced ${results.imported} new accounts and refreshed ${results.updated} existing accounts (including current balances and consumer DOB)`
           + (dmpFetch.rejected > 0
             ? `. Rejected ${dmpFetch.rejected} DMP ${dmpFetch.rejected === 1 ? 'row' : 'rows'} without a valid file number.`
             : ''),
