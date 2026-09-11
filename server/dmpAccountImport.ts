@@ -9,6 +9,85 @@ type ImportStorage = {
   createAccount(account: any): Promise<any>;
 };
 
+type DmpPaymentSyncStorage = Pick<ImportStorage, 'getAccountsByTenant' | 'updateAccount'>;
+
+export interface DmpPaymentSyncResults {
+  accountsSynced: number;
+  historyPayments: number;
+  pendingPayments: number;
+  errors: string[];
+}
+
+const terminalPaymentStatus = /declin|cancel|void|nsf|charge.?back|refund|revers|fail|return/i;
+const postedPaymentStatus = /posted|paid|complete|success|settled/i;
+
+/** Cache DMP payment records on their Chain account for account-level views. */
+export async function syncDmpAccountPayments(
+  storage: DmpPaymentSyncStorage,
+  tenantId: string,
+  getPayments: (filenumber: string) => Promise<any[] | null>,
+): Promise<DmpPaymentSyncResults> {
+  const results: DmpPaymentSyncResults = {
+    accountsSynced: 0,
+    historyPayments: 0,
+    pendingPayments: 0,
+    errors: [],
+  };
+  const accounts = await storage.getAccountsByTenant(tenantId);
+
+  for (const account of accounts) {
+    const filenumber = typeof account.filenumber === 'string' ? account.filenumber.trim() : '';
+    if (!filenumber || account.additionalData?.dmpSource !== 'dmp') continue;
+
+    try {
+      const rawPayments = await getPayments(filenumber);
+      if (!Array.isArray(rawPayments)) throw new Error('DMP returned an invalid payment list');
+
+      const payments = rawPayments.map((payment: any) => {
+        const amount = Number(payment?.paymentamount ?? payment?.payment_amount ?? payment?.amount ?? 0);
+        const rawDate = payment?.paymentdate ?? payment?.payment_date ?? payment?.date
+          ?? payment?.scheduleddate ?? payment?.scheduled_date;
+        const parsedDate = rawDate ? new Date(rawDate) : null;
+        return {
+          date: parsedDate && !Number.isNaN(parsedDate.getTime())
+            ? parsedDate.toISOString().slice(0, 10)
+            : null,
+          amountCents: Number.isFinite(amount) ? Math.round(amount * 100) : 0,
+          status: String(payment?.paymentstatus ?? payment?.payment_status ?? payment?.status ?? '').trim(),
+          transactionId: String(payment?.transactionid ?? payment?.transaction_id ?? payment?.reference ?? '').trim() || null,
+          paymentMethod: String(payment?.paymentmethod ?? payment?.payment_method ?? payment?.method ?? '').trim() || null,
+        };
+      });
+      const history = payments.filter(payment =>
+        payment.date && payment.amountCents > 0
+        && postedPaymentStatus.test(payment.status)
+        && !terminalPaymentStatus.test(payment.status)
+      );
+      const pending = payments.filter(payment =>
+        payment.date && payment.amountCents > 0
+        && !postedPaymentStatus.test(payment.status)
+        && !terminalPaymentStatus.test(payment.status)
+      );
+
+      await storage.updateAccount(account.id, {
+        additionalData: {
+          ...(account.additionalData || {}),
+          dmpPaymentHistory: history,
+          dmpPendingPayments: pending,
+          dmpPaymentsSyncedAt: new Date().toISOString(),
+        },
+      });
+      results.accountsSynced++;
+      results.historyPayments += history.length;
+      results.pendingPayments += pending.length;
+    } catch (error: any) {
+      results.errors.push(`Payment sync failed for DMP account ${filenumber}: ${error?.message || 'Unknown error'}`);
+    }
+  }
+
+  return results;
+}
+
 export interface DmpAccountImportResults {
   imported: number;
   updated: number;

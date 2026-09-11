@@ -12,6 +12,7 @@ import {
   canDeleteAllDmpAccounts,
   DMP_DELETE_CONFIRMATION,
   importDmpAccounts,
+  syncDmpAccountPayments,
 } from './dmpAccountImport';
 import { applyDmpBalanceRepair, planDmpBalanceRepair } from './dmpBalanceRepair';
 import { storage } from './storage';
@@ -26,6 +27,41 @@ test('builds a DMP note for a Postmark email-open event', () => {
     buildDmpEmailOpenNote('file-1').logmessage,
     'Email opened by recipient',
   );
+});
+
+test('manual DMP sync caches posted history and pending payments on each DMP account', async () => {
+  const updates: any[] = [];
+  const result = await syncDmpAccountPayments({
+    getAccountsByTenant: async () => [
+      { id: 'account-1', filenumber: 'file-1', additionalData: { dmpSource: 'dmp', retained: true } },
+      { id: 'local-account', filenumber: 'local-1', additionalData: {} },
+    ],
+    updateAccount: async (id: string, values: any) => updates.push({ id, values }),
+  }, 'tenant-1', async filenumber => {
+    assert.equal(filenumber, 'file-1');
+    return [
+      { paymentdate: '2026-09-01', paymentamount: '25.50', paymentstatus: 'Posted', transactionid: 'txn-1' },
+      { scheduled_date: '2026-10-01', amount: 30, status: 'Scheduled', method: 'ACH' },
+      { paymentdate: '2026-08-01', paymentamount: 10, paymentstatus: 'Declined' },
+    ];
+  });
+
+  assert.deepEqual({
+    accountsSynced: result.accountsSynced,
+    historyPayments: result.historyPayments,
+    pendingPayments: result.pendingPayments,
+    errors: result.errors,
+  }, { accountsSynced: 1, historyPayments: 1, pendingPayments: 1, errors: [] });
+  assert.equal(updates.length, 1);
+  assert.equal(updates[0].id, 'account-1');
+  assert.equal(updates[0].values.additionalData.retained, true);
+  assert.deepEqual(updates[0].values.additionalData.dmpPaymentHistory, [{
+    date: '2026-09-01', amountCents: 2550, status: 'Posted', transactionId: 'txn-1', paymentMethod: null,
+  }]);
+  assert.deepEqual(updates[0].values.additionalData.dmpPendingPayments, [{
+    date: '2026-10-01', amountCents: 3000, status: 'Scheduled', transactionId: null, paymentMethod: 'ACH',
+  }]);
+  assert.match(updates[0].values.additionalData.dmpPaymentsSyncedAt, /^\d{4}-\d{2}-\d{2}T/);
 });
 
 test('normalizes flat and wrapped DMP lists', () => {
@@ -662,18 +698,19 @@ test('updates an existing account while preserving import payment fields', async
   assert.deepEqual(updates, [{
     id: 'account-1',
     values: {
-        accountNumber: 'account-number-1',
+      accountNumber: 'account-number-1',
       balanceCents: 12345,
-        originalBalanceCents: 12345,
+      originalBalanceCents: 12345,
       status: 'overdue',
       creditor: 'New creditor',
-        additionalData: {
-          dmpClientName: null,
-          dmpLastContactDate: null,
-          dmpNextFollowUpDate: null,
-          dmpPortfolioId: null,
-          dmpAssignedCollectorId: null,
-        },
+      additionalData: {
+        dmpSource: 'dmp',
+        dmpClientName: null,
+        dmpLastContactDate: null,
+        dmpNextFollowUpDate: null,
+        dmpPortfolioId: null,
+        dmpAssignedCollectorId: null,
+      },
     },
   }]);
 });

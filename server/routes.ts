@@ -11231,24 +11231,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const { importDmpAccounts } = await import('./dmpAccountImport');
+      const { importDmpAccounts, syncDmpAccountPayments } = await import('./dmpAccountImport');
       const results = await importDmpAccounts(storage, tenantId, dmpAccounts, folderId, {
         // A manual sync is expected to refresh the complete DMP record, not
         // only its account row. This includes DOB and the other consumer
         // identity/contact fields needed by portal verification.
         syncExistingConsumerContact: true,
       });
+      const paymentResults = await syncDmpAccountPayments(
+        storage,
+        tenantId,
+        filenumber => dmpService.getPayments(tenantId, filenumber),
+      );
 
       res.json({
         success: true,
-        message: `Synced ${results.imported} new accounts and refreshed ${results.updated} existing accounts (including current balances and consumer DOB)`
+        message: `Synced ${results.imported} new accounts and refreshed ${results.updated} existing accounts, plus ${paymentResults.historyPayments} payment history records and ${paymentResults.pendingPayments} pending payments`
           + (dmpFetch.rejected > 0
             ? `. Rejected ${dmpFetch.rejected} DMP ${dmpFetch.rejected === 1 ? 'row' : 'rows'} without a valid file number.`
             : ''),
         fetched: dmpFetch.fetched,
-        failed: dmpFetch.rejected + results.errors.length,
+        failed: dmpFetch.rejected + results.errors.length + paymentResults.errors.length,
         rejected: dmpFetch.rejected,
-        ...results
+        ...results,
+        payments: paymentResults,
       });
     } catch (error: any) {
       console.error("Error importing accounts from DMP:", error);
