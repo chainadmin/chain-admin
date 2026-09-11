@@ -1,5 +1,7 @@
 type ImportStorage = {
   getAccountsByTenant(tenantId: string): Promise<any[]>;
+  getFoldersByTenant?(tenantId: string): Promise<any[]>;
+  createFolder?(folder: any): Promise<any>;
   updateAccount(id: string, updates: any): Promise<any>;
   updateConsumer?(id: string, updates: any): Promise<any>;
   getConsumerByEmailAndTenant(email: string, tenantId: string): Promise<any>;
@@ -8,6 +10,12 @@ type ImportStorage = {
   createConsumer(consumer: any): Promise<any>;
   createAccount(account: any): Promise<any>;
 };
+
+function normalizeFolderStatus(value: unknown): string {
+  return typeof value === 'string'
+    ? value.trim().toLocaleLowerCase().replace(/[^a-z0-9]+/g, '')
+    : '';
+}
 
 type DmpPaymentSyncStorage = Pick<ImportStorage, 'getAccountsByTenant' | 'updateAccount'>;
 
@@ -166,6 +174,45 @@ export async function importDmpAccounts(
   };
   const existingAccounts = await storage.getAccountsByTenant(tenantId);
   const createMissing = options.createMissing ?? true;
+  const tenantFolders = storage.getFoldersByTenant
+    ? await storage.getFoldersByTenant(tenantId)
+    : [];
+  const foldersByStatus = new Map<string, string>();
+  for (const folder of tenantFolders) {
+    const normalizedName = normalizeFolderStatus(folder?.name);
+    if (normalizedName && typeof folder?.id === 'string' && !foldersByStatus.has(normalizedName)) {
+      foldersByStatus.set(normalizedName, folder.id);
+    }
+  }
+  let nextFolderSortOrder = tenantFolders.length;
+
+  const resolveImportFolderId = async (status: unknown): Promise<string | null> => {
+    // A folder deliberately selected for this import always takes precedence
+    // over DMP's status-based organization.
+    if (folderId) return folderId;
+
+    const normalizedStatus = normalizeFolderStatus(status);
+    if (!normalizedStatus) return null;
+
+    const existingFolderId = foldersByStatus.get(normalizedStatus);
+    if (existingFolderId) return existingFolderId;
+    if (!storage.createFolder) return null;
+
+    const statusName = String(status).trim();
+    const createdFolder = await storage.createFolder({
+      tenantId,
+      name: statusName,
+      description: `Accounts with ${statusName} status`,
+      color: '#3b82f6',
+      isDefault: false,
+      sortOrder: nextFolderSortOrder++,
+    });
+    if (typeof createdFolder?.id !== 'string') {
+      throw new Error(`Could not create a folder for DMP status "${statusName}"`);
+    }
+    foldersByStatus.set(normalizedStatus, createdFolder.id);
+    return createdFolder.id;
+  };
 
   for (const dmpAccount of dmpAccounts) {
     try {
@@ -181,6 +228,7 @@ export async function importDmpAccounts(
       // A DMP file number is the provider-owned identity. Chain account
       // numbers can collide and must never be used to select an update target.
       const existing = existingAccounts.find(account => account.filenumber === filenumber);
+      const importFolderId = await resolveImportFolderId(dmpAccount.status);
 
       if (existing) {
         await storage.updateAccount(existing.id, {
@@ -189,6 +237,7 @@ export async function importDmpAccounts(
           originalBalanceCents: dmpAccount.originalBalance ?? existing.originalBalanceCents ?? dmpAccount.balance ?? 0,
           status: dmpAccount.status || existing.status,
           creditor: dmpAccount.creditorName || existing.creditor,
+          ...(importFolderId ? { folderId: importFolderId } : {}),
           additionalData: {
             ...(existing.additionalData || {}),
             dmpSource: 'dmp',
@@ -297,7 +346,7 @@ export async function importDmpAccounts(
         originalBalanceCents: dmpAccount.originalBalance ?? dmpAccount.balance ?? 0,
         creditor: dmpAccount.creditorName || 'Unknown Creditor',
         status: dmpAccount.status || 'active',
-        folderId: folderId || null,
+        folderId: importFolderId,
         additionalData: {
           dmpSource: 'dmp',
           dmpClientName: dmpAccount.clientName || null,
