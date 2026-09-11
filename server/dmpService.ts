@@ -523,7 +523,16 @@ export class DebtManagerProService {
         return null;
       }
 
-      return await response.json();
+      const parsed = await response.json();
+      // DMP's v2 API wraps every response as { success, data }. Every caller
+      // of this method (getAccount, getPayments, getPhones, getNotes, etc.)
+      // works with the actual payload, not the envelope, so unwrap it here
+      // once rather than in each caller. A response that isn't wrapped this
+      // way is returned as-is.
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && 'data' in parsed) {
+        return (parsed as { data: T }).data;
+      }
+      return parsed;
     } catch (error) {
       console.error(`DMP API request failed: ${method} ${endpoint}`, error);
       return null;
