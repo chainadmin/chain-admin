@@ -18652,15 +18652,72 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Consumer not found" });
       }
 
-      const payments = await storage.getPaymentsByConsumer(consumerId, tenantId);
+      const localPayments = await storage.getPaymentsByConsumer(consumerId, tenantId);
+      const paymentHistory: any[] = [...localPayments];
+
+      // The admin history must reflect DMP's ledger as well as payments made
+      // through Chain. This mirrors the consumer portal behavior and makes
+      // pre-integration/direct-to-DMP payments visible without creating local
+      // payment rows or duplicating transactions already recorded by Chain.
+      const settings = await storage.getTenantSettings(tenantId);
+      if ((settings as any)?.dmpEnabled && !settings?.smaxEnabled) {
+        const consumerAccounts = await storage.getAccountsByConsumer(consumerId);
+        const transactionIds = new Set(
+          localPayments
+            .map(payment => payment.transactionId?.trim().toLowerCase())
+            .filter((id): id is string => Boolean(id)),
+        );
+        const compositeKeys = new Set(localPayments.map(payment => {
+          const timestamp = payment.processedAt || payment.createdAt;
+          const date = timestamp ? new Date(timestamp).toISOString().slice(0, 10) : '';
+          return `${payment.accountId || ''}|${date}|${payment.amountCents}`;
+        }));
+
+        for (const account of consumerAccounts) {
+          if (!account.filenumber) continue;
+          try {
+            const dmpPayments = await dmpService.getPayments(tenantId, account.filenumber);
+            if (!Array.isArray(dmpPayments)) continue;
+            dmpPayments.forEach((rawPayment: any, index: number) => {
+              const normalized = normalizeDmpPayment(rawPayment);
+              if (!isPostedDmpPayment(normalized)) return;
+              const transactionId = normalized.transactionId?.toLowerCase();
+              const compositeKey = `${account.id}|${normalized.date}|${normalized.amountCents}`;
+              if (transactionId ? transactionIds.has(transactionId) : compositeKeys.has(compositeKey)) return;
+              if (transactionId) transactionIds.add(transactionId);
+              compositeKeys.add(compositeKey);
+              const occurredAt = `${normalized.date}T12:00:00.000Z`;
+              paymentHistory.push({
+                id: `dmp_${account.id}_${normalized.transactionId || `${normalized.date}_${normalized.amountCents}_${index}`}`,
+                tenantId,
+                consumerId,
+                accountId: account.id,
+                amountCents: normalized.amountCents,
+                paymentMethod: String(rawPayment.paymentmethod ?? rawPayment.payment_method ?? rawPayment.method ?? 'dmp').trim() || 'dmp',
+                status: 'completed',
+                processedAt: occurredAt,
+                createdAt: occurredAt,
+                accountCreditor: account.creditor,
+                notes: 'Posted in Debt Manager Pro',
+                transactionId: normalized.transactionId,
+                source: 'dmp',
+              });
+            });
+          } catch (dmpError) {
+            console.error('Failed to fetch DMP admin payment history (non-blocking):', account.filenumber, dmpError);
+          }
+        }
+        paymentHistory.sort((a, b) => new Date(b.processedAt || b.createdAt || 0).getTime()
+          - new Date(a.processedAt || a.createdAt || 0).getTime());
+      }
       
       console.log('📜 Admin fetching payment history for consumer:', {
         consumerId,
         tenantId,
-        totalPayments: payments.length
+        totalPayments: paymentHistory.length
       });
 
-      res.json(payments);
+      res.json(paymentHistory);
     } catch (error) {
       console.error("Error fetching consumer payment history:", error);
       res.status(500).json({ message: "Failed to fetch payment history" });
