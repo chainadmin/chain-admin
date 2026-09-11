@@ -21,7 +21,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { AlertCircle, LogOut, User, Building2, CreditCard, DollarSign, TrendingUp, Mail, Phone, Edit, FileText, MessageSquare, Calendar, Upload, CalendarIcon, Settings, Trash2 } from "lucide-react";
+import { AlertCircle, LogOut, User, Building2, CreditCard, DollarSign, TrendingUp, Mail, Phone, Edit, FileText, MessageSquare, Calendar, Upload, CalendarIcon, Settings, Trash2, History, CheckCircle2, Clock, XCircle } from "lucide-react";
 import { SiVisa, SiMastercard, SiAmericanexpress, SiDiscover } from "react-icons/si";
 import { format } from "date-fns";
 import chainLogo from "@/assets/chain-logo.png";
@@ -398,6 +398,22 @@ export default function ConsumerDashboardSimple() {
       const token = getStoredConsumerToken();
       const response = await apiCall("GET", `/api/consumer/documents/${session?.email}?tenantSlug=${session?.tenantSlug}`, null, token);
       if (!response.ok) throw new Error("Failed to fetch documents");
+      return response.json();
+    },
+    enabled: !!session?.email && !!session?.tenantSlug,
+  });
+
+  // Chain payments and posted DMP payments are merged by this endpoint. Keeping
+  // this separate from account sync also lets the portal show the complete
+  // amount/date history without copying external payment records into accounts.
+  const { data: paymentHistory, isLoading: isLoadingPaymentHistory } = useQuery<any[]>({
+    queryKey: [`/api/consumer/payment-history/${session?.email}?tenantSlug=${session?.tenantSlug}`],
+    queryFn: async () => {
+      const token = getStoredConsumerToken();
+      const encodedEmail = encodeURIComponent(session?.email || '');
+      const encodedTenantSlug = encodeURIComponent(session?.tenantSlug || '');
+      const response = await apiCall("GET", `/api/consumer/payment-history/${encodedEmail}?tenantSlug=${encodedTenantSlug}`, null, token);
+      if (!response.ok) throw new Error("Failed to fetch payment history");
       return response.json();
     },
     enabled: !!session?.email && !!session?.tenantSlug,
@@ -1335,7 +1351,7 @@ export default function ConsumerDashboardSimple() {
         </div>
 
         <Tabs defaultValue="accounts" className="w-full">
-          <TabsList className="bg-white/5 border border-white/10">
+          <TabsList className="h-auto flex-wrap bg-white/5 border border-white/10">
             <TabsTrigger value="accounts" className="data-[state=active]:bg-white/20">
               <CreditCard className="h-4 w-4 mr-2" />
               Accounts
@@ -1347,6 +1363,10 @@ export default function ConsumerDashboardSimple() {
             <TabsTrigger value="arrangements" className="data-[state=active]:bg-white/20">
               <Calendar className="h-4 w-4 mr-2" />
               Payment Plans
+            </TabsTrigger>
+            <TabsTrigger value="history" className="data-[state=active]:bg-white/20">
+              <History className="h-4 w-4 mr-2" />
+              Payment History
             </TabsTrigger>
             <TabsTrigger value="payment-methods" className="data-[state=active]:bg-white/20">
               <CreditCard className="h-4 w-4 mr-2" />
@@ -1429,6 +1449,80 @@ export default function ConsumerDashboardSimple() {
                         </div>
                       </div>
                     ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="history" className="mt-6">
+            <Card className="border-white/10 bg-white/5 backdrop-blur">
+              <CardHeader className="border-b border-white/10">
+                <CardTitle className="flex items-center justify-between text-white">
+                  <span className="flex items-center">
+                    <History className="h-5 w-5 mr-2 text-blue-400" />
+                    Payment History
+                  </span>
+                  {!!paymentHistory?.length && (
+                    <Badge className="border-blue-400/30 bg-blue-500/10 text-blue-100">
+                      {paymentHistory.length} payment{paymentHistory.length === 1 ? '' : 's'}
+                    </Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-6">
+                {isLoadingPaymentHistory ? (
+                  <div className="py-12 text-center">
+                    <div className="mx-auto h-8 w-8 animate-spin rounded-full border-b-2 border-blue-400" />
+                    <p className="mt-4 text-blue-100/70">Loading payment history...</p>
+                  </div>
+                ) : !paymentHistory?.length ? (
+                  <div className="py-12 text-center">
+                    <History className="mx-auto mb-4 h-12 w-12 text-blue-400/30" />
+                    <p className="text-blue-100/70">No payment history found</p>
+                    <p className="mt-2 text-sm text-blue-100/50">Posted payments will appear here with their amount and date.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {paymentHistory.map((payment: any) => {
+                      const status = String(payment.status || 'unknown').toLowerCase();
+                      const StatusIcon = status === 'completed'
+                        ? CheckCircle2
+                        : status === 'pending' || status === 'processing'
+                          ? Clock
+                          : status === 'failed' || status === 'refunded'
+                            ? XCircle
+                            : CreditCard;
+                      const statusColor = status === 'completed'
+                        ? 'text-emerald-400'
+                        : status === 'pending' || status === 'processing'
+                          ? 'text-amber-400'
+                          : status === 'failed' || status === 'refunded'
+                            ? 'text-red-400'
+                            : 'text-blue-300';
+                      const paymentDate = payment.processedAt || payment.createdAt;
+
+                      return (
+                        <div key={payment.id} className="flex flex-col gap-4 rounded-xl border border-white/10 bg-white/5 p-5 sm:flex-row sm:items-center sm:justify-between" data-testid={`payment-history-item-${payment.id}`}>
+                          <div className="flex items-start gap-3">
+                            <StatusIcon className={`mt-1 h-5 w-5 shrink-0 ${statusColor}`} />
+                            <div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-lg font-bold text-white">{formatCurrency(payment.amountCents || 0)}</span>
+                                <Badge variant="outline" className="border-white/20 capitalize text-blue-100">{status}</Badge>
+                                {payment.source === 'dmp' && <Badge className="bg-sky-500/15 text-sky-200">DMP</Badge>}
+                              </div>
+                              <p className="mt-1 text-sm text-blue-100/70">{payment.accountCreditor || 'Account payment'}</p>
+                              <p className="mt-1 text-xs capitalize text-blue-100/50">{String(payment.paymentMethod || 'payment').replace(/_/g, ' ')}</p>
+                            </div>
+                          </div>
+                          <div className="sm:text-right">
+                            <p className="font-medium text-white">{paymentDate ? new Date(paymentDate).toLocaleDateString() : 'Date unavailable'}</p>
+                            {payment.transactionId && <p className="mt-1 text-xs text-blue-100/50">Ref: {payment.transactionId}</p>}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
