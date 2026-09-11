@@ -3472,15 +3472,6 @@ export default function Communications() {
                             <div className="border border-white/20 rounded-lg overflow-auto bg-white p-4 max-h-96">
                               {emailTemplateForm.html ? (
                                 <div className="bg-white">
-                                  {(tenantSettings as any)?.logoUrl && (
-                                    <div className="text-center mb-6 pb-6 border-b">
-                                      <img
-                                        src={(tenantSettings as any).logoUrl}
-                                        alt="Agency Logo" 
-                                        className="h-12 mx-auto"
-                                      />
-                                    </div>
-                                  )}
                                   <div className="mb-4 pb-4 border-b">
                                     <div className="text-xs text-gray-500 mb-1">Subject:</div>
                                     <div className="font-semibold text-gray-900">{renderSubjectPreview()}</div>

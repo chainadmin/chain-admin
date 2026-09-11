@@ -54,6 +54,17 @@ interface QuickSendTarget {
   type: 'sms' | 'email';
 }
 
+function getUserInitials(user: unknown, userData: unknown, isJwtAuth: boolean): string {
+  const platformUser = isJwtAuth ? (user as any) : (userData as any)?.platformUser;
+  const firstName: string | undefined = platformUser?.firstName;
+  const lastName: string | undefined = platformUser?.lastName;
+  if (firstName || lastName) {
+    return `${firstName?.[0] || ''}${lastName?.[0] || ''}`.toUpperCase();
+  }
+  const email: string | undefined = platformUser?.email;
+  return email?.[0]?.toUpperCase() || "?";
+}
+
 export default function AdminLayout({ children }: AdminLayoutProps) {
   const { user, isJwtAuth } = useAuth();
   const [location, navigate] = useLocation();
@@ -382,13 +393,22 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
               {/* User Profile */}
               <div className="mt-8 px-4">
                 <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/10 p-4">
-                  <img
-                    className="h-10 w-10 rounded-full border border-white/20 object-cover"
-                    src={(user as any)?.profileImageUrl || "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80"}
-                    alt="User avatar"
-                  />
-                  <div className="space-y-1">
-                    <p className="text-sm font-semibold text-white">
+                  {(user as any)?.profileImageUrl ? (
+                    <img
+                      className="h-10 w-10 flex-shrink-0 rounded-full border border-white/20 object-cover"
+                      src={(user as any).profileImageUrl}
+                      alt="User avatar"
+                    />
+                  ) : (
+                    <div
+                      className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-white/20 bg-gradient-to-br from-sky-400/40 to-indigo-500/40 text-sm font-semibold text-white"
+                      aria-hidden="true"
+                    >
+                      {getUserInitials(user, userData, isJwtAuth)}
+                    </div>
+                  )}
+                  <div className="min-w-0 space-y-1">
+                    <p className="truncate text-sm font-semibold text-white">
                       {(user as any)?.firstName || (user as any)?.lastName
                         ? `${(user as any).firstName} ${(user as any).lastName}`
                         : (user as any)?.email}
@@ -648,13 +668,22 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
             {/* User Profile */}
             <div className="border-t border-white/10 px-4 py-6">
               <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/10 p-4">
-                <img
-                  className="h-10 w-10 rounded-full border border-white/20 object-cover"
-                  src={(user as any)?.profileImageUrl || "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?ixlib=rb-1.2.1&ixid=eyJhcHBfaWQiOjEyMDd9&auto=format&fit=facearea&facepad=2&w=256&h=256&q=80"}
-                  alt="User avatar"
-                />
-                <div className="space-y-1">
-                  <p className="text-sm font-semibold text-white">
+                {(user as any)?.profileImageUrl ? (
+                  <img
+                    className="h-10 w-10 flex-shrink-0 rounded-full border border-white/20 object-cover"
+                    src={(user as any).profileImageUrl}
+                    alt="User avatar"
+                  />
+                ) : (
+                  <div
+                    className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-white/20 bg-gradient-to-br from-sky-400/40 to-indigo-500/40 text-sm font-semibold text-white"
+                    aria-hidden="true"
+                  >
+                    {getUserInitials(user, userData, isJwtAuth)}
+                  </div>
+                )}
+                <div className="min-w-0 space-y-1">
+                  <p className="truncate text-sm font-semibold text-white">
                     {(user as any)?.firstName || (user as any)?.lastName
                       ? `${(user as any).firstName} ${(user as any).lastName}`
                       : (user as any)?.email}
