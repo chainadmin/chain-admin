@@ -17,7 +17,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Trash2, FileSignature, RefreshCw } from "lucide-react";
+import { Trash2, FileSignature, RefreshCw, Eye, MessageCircle, Pencil } from "lucide-react";
 
 interface AccountsTableProps {
   accounts: any[];
@@ -365,45 +365,52 @@ export default function AccountsTable({
                       </td>
                     )}
                     <td className="px-2 py-2">
-                      <div className="flex flex-wrap items-center gap-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-6 rounded border border-white/10 bg-white/10 px-2 text-[10px] font-semibold text-blue-100 hover:bg-white/20"
+                          className="h-7 rounded-md border border-white/10 bg-white/10 px-2.5 text-xs font-semibold text-blue-100 hover:bg-white/20"
                           data-testid={`button-view-account-${account.id}`}
                           onClick={() => onView?.(account)}
+                          title="View account"
                         >
+                          <Eye className="mr-1 h-3.5 w-3.5" />
                           View
                         </Button>
                         {onEdit && (
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-6 rounded border border-sky-400/40 bg-sky-500/20 px-2 text-[10px] font-semibold text-white hover:bg-sky-500/30"
+                            className="h-7 rounded-md border border-sky-400/40 bg-sky-500/20 px-2.5 text-xs font-semibold text-white hover:bg-sky-500/30"
                             data-testid={`button-edit-account-${account.id}`}
                             onClick={() => onEdit(account)}
+                            title="Edit account"
                           >
+                            <Pencil className="mr-1 h-3.5 w-3.5" />
                             Edit
                           </Button>
                         )}
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-6 rounded border border-white/10 bg-white/10 px-2 text-[10px] font-semibold text-blue-100 hover:bg-white/20"
+                          className="h-7 rounded-md border border-white/10 bg-white/10 px-2.5 text-xs font-semibold text-blue-100 hover:bg-white/20"
                           data-testid={`button-contact-account-${account.id}`}
                           onClick={() => onContact?.(account)}
+                          title="Contact consumer"
                         >
+                          <MessageCircle className="mr-1 h-3.5 w-3.5" />
                           Contact
                         </Button>
                         {onSendDocument && (
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-6 rounded border border-indigo-400/40 bg-indigo-500/20 px-2 text-[10px] font-semibold text-white hover:bg-indigo-500/30"
+                            className="h-7 rounded-md border border-indigo-400/40 bg-indigo-500/20 px-2.5 text-xs font-semibold text-white hover:bg-indigo-500/30"
                             data-testid={`button-send-document-${account.id}`}
                             onClick={() => onSendDocument(account)}
+                            title="Send document for signature"
                           >
-                            <FileSignature className="h-3 w-3 mr-0.5" />
+                            <FileSignature className="mr-1 h-3.5 w-3.5" />
                             Doc
                           </Button>
                         )}
@@ -413,10 +420,11 @@ export default function AccountsTable({
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="rounded-lg border border-rose-400/30 bg-rose-500/10 px-3 text-xs font-semibold text-rose-100 hover:bg-rose-500/20"
+                                className="h-7 rounded-md border border-rose-400/30 bg-rose-500/10 px-2.5 text-xs font-semibold text-rose-100 hover:bg-rose-500/20"
                                 data-testid={`button-delete-account-${account.id}`}
+                                title="Delete account"
                               >
-                                <Trash2 className="h-4 w-4" />
+                                <Trash2 className="h-3.5 w-3.5" />
                               </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent className="border border-white/10 bg-[#0f1a3c] text-blue-100">

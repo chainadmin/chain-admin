@@ -6,6 +6,7 @@ export const POSTMARK_TEMPLATES = {
     thumbnail: '📄',
     html: `
 {{COMPANY_LOGO}}
+<div class="doc-eyebrow">Account Statement &middot; {{date}}</div>
 <h1>{{CUSTOM_GREETING}}</h1>
 <p>{{CUSTOM_MESSAGE}}</p>
 <table class="attributes" width="100%" cellpadding="0" cellspacing="0">
@@ -30,7 +31,7 @@ export const POSTMARK_TEMPLATES = {
 <table class="purchase" width="100%" cellpadding="0" cellspacing="0">
   <tr>
     <td>
-      <h3>Account Statement</h3>
+      <h3>Statement Details</h3>
     </td>
     <td>
       <h3 class="align-right">{{date}}</h3>
@@ -220,15 +221,26 @@ export const POSTMARK_TEMPLATES = {
   .align-right {
     text-align: right;
   }
+
+  .doc-eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    font-size: 11px;
+    color: #6B7280;
+    border-bottom: 2px solid #1F2A44;
+    padding-bottom: 12px;
+    margin-bottom: 20px;
+  }
 </style>`
   },
-  
+
   'postmark-welcome': {
     name: 'Welcome Message',
     description: 'Welcome message with portal information and action button',
     thumbnail: '👋',
     html: `
 {{COMPANY_LOGO}}
+<div class="welcome-badge">Welcome aboard</div>
 <h1>{{CUSTOM_GREETING}}</h1>
 <p>{{CUSTOM_MESSAGE}}</p>
 <table class="body-action" align="center" width="100%" cellpadding="0" cellspacing="0">
@@ -361,15 +373,27 @@ export const POSTMARK_TEMPLATES = {
     padding: 0;
     text-align: center;
   }
+
+  .welcome-badge {
+    display: inline-block;
+    background-color: #EFF6FF;
+    color: #3869D4;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 6px 14px;
+    border-radius: 999px;
+    margin-bottom: 16px;
+  }
 </style>`
   },
-  
+
   'postmark-access': {
     name: 'Portal Access',
     description: 'Simple portal access notification with single action button',
     thumbnail: '🔑',
     html: `
 {{COMPANY_LOGO}}
+<div class="access-divider"></div>
 <h1>{{CUSTOM_GREETING}}</h1>
 <p>{{CUSTOM_MESSAGE}}</p>
 <table class="body-action" align="center" width="100%" cellpadding="0" cellspacing="0">
@@ -475,14 +499,20 @@ export const POSTMARK_TEMPLATES = {
     color: #6B6E76;
     font-size: 13px;
   }
+
+  .access-divider {
+    border-top: 1px solid #EAEAEC;
+    margin: 4px 0 24px;
+  }
 </style>`
   },
-  
+
   'postmark-reminder': {
     name: 'Payment Reminder',
     description: 'Payment reminder with balance highlight and action button',
     thumbnail: '⏰',
     html: `
+<div class="urgent-ribbon">Payment Reminder</div>
 {{COMPANY_LOGO}}
 <h1>{{CUSTOM_GREETING}}</h1>
 <p>{{CUSTOM_MESSAGE}}</p>
@@ -618,6 +648,19 @@ export const POSTMARK_TEMPLATES = {
   .sub {
     color: #6B6E76;
     font-size: 13px;
+  }
+
+  .urgent-ribbon {
+    background-color: #B91C1C;
+    color: #ffffff;
+    text-align: center;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    padding: 10px;
+    border-radius: 6px;
+    margin-bottom: 24px;
   }
 </style>`
   }

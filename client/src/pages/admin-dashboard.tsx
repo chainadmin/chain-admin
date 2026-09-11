@@ -1,8 +1,8 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState } from "react";
+import { Link } from "wouter";
 import AdminLayout from "@/components/admin-layout";
 import StatsCard from "@/components/stats-card";
-import AccountsTable from "@/components/accounts-table";
 import ImportModal from "@/components/import-modal";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,16 +18,19 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calendar, Mail, MapPin, Phone, MessageSquare, TrendingUp, DollarSign, Send } from "lucide-react";
+import { Calendar, Mail, MapPin, Phone, MessageSquare, TrendingUp, DollarSign, Send, ArrowRight } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { formatDistanceToNow } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
 import { useServiceAccess } from "@/hooks/useServiceAccess";
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { useAgencyContext } from "@/hooks/useAgencyContext";
+import { BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 export default function AdminDashboard() {
   const { user, isJwtAuth } = useAuth();
+  const { agencySlug, buildAgencyUrl } = useAgencyContext();
+  const accountsHref = agencySlug ? buildAgencyUrl("/accounts") : "/accounts";
   const { data: authUser } = useQuery<any>({ queryKey: ["/api/auth/user"], enabled: !isJwtAuth });
   const { emailServiceEnabled } = useServiceAccess();
   const platformUser = isJwtAuth ? user : authUser?.platformUser;
@@ -210,6 +213,10 @@ export default function AdminDashboard() {
     queryKey: ["/api/accounts"],
   });
 
+  const recentAccounts = [...(((accounts as any[]) || []))]
+    .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime())
+    .slice(0, 5);
+
   const { data: enabledModulesData } = useQuery<{ enabledModules: string[] }>({
     queryKey: ["/api/settings/enabled-modules"],
   });
@@ -378,7 +385,7 @@ export default function AdminDashboard() {
                     </CardContent>
                   </Card>
 
-                  {/* Email & SMS Communication Chart */}
+                  {/* Email & SMS Communication Metrics */}
                   <Card className="border-white/10 bg-[#111d35] shadow-lg shadow-blue-900/20" data-testid="card-communication-chart">
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2 text-white">
@@ -386,55 +393,93 @@ export default function AdminDashboard() {
                         Communication Metrics
                       </CardTitle>
                     </CardHeader>
-                    <CardContent>
-                      <ResponsiveContainer width="100%" height={300}>
-                        <LineChart data={[
-                          { 
-                            name: 'Email',
-                            Sent: (stats as any)?.emailMetrics?.totalSent || 0,
-                            Opened: (stats as any)?.emailMetrics?.opened || 0,
-                            'Open Rate': (stats as any)?.emailMetrics?.openRate || 0,
-                          },
-                          { 
-                            name: 'SMS',
-                            Sent: (stats as any)?.smsMetrics?.totalSent || 0,
-                            Delivered: (stats as any)?.smsMetrics?.delivered || 0,
-                            'Click Rate': (stats as any)?.smsMetrics?.clickRate || 0,
-                          },
-                        ]}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" />
-                          <XAxis dataKey="name" stroke="#94a3b8" />
-                          <YAxis stroke="#94a3b8" />
-                          <Tooltip 
+                    <CardContent className="space-y-5">
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                          <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                            <Mail className="h-4 w-4 text-sky-400" />
+                            Email
+                          </div>
+                          <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                            <div>
+                              <p className="text-lg font-semibold text-white" data-testid="text-emails-sent">
+                                {(stats as any)?.emailMetrics?.totalSent?.toLocaleString() || "0"}
+                              </p>
+                              <p className="text-[11px] text-blue-100/60">Sent</p>
+                            </div>
+                            <div>
+                              <p className="text-lg font-semibold text-emerald-400" data-testid="text-email-open-rate">
+                                {(stats as any)?.emailMetrics?.openRate || 0}%
+                              </p>
+                              <p className="text-[11px] text-blue-100/60">Open rate</p>
+                            </div>
+                            <div>
+                              <p className="text-lg font-semibold text-amber-400" data-testid="text-email-bounced">
+                                {(stats as any)?.emailMetrics?.bounced?.toLocaleString() || "0"}
+                              </p>
+                              <p className="text-[11px] text-blue-100/60">Bounced</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                          <div className="flex items-center gap-2 text-sm font-semibold text-white">
+                            <MessageSquare className="h-4 w-4 text-emerald-400" />
+                            SMS
+                          </div>
+                          <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                            <div>
+                              <p className="text-lg font-semibold text-white" data-testid="text-sms-sent">
+                                {(stats as any)?.smsMetrics?.totalSent?.toLocaleString() || "0"}
+                              </p>
+                              <p className="text-[11px] text-blue-100/60">Sent</p>
+                            </div>
+                            <div>
+                              <p className="text-lg font-semibold text-emerald-400" data-testid="text-sms-delivery-rate">
+                                {(stats as any)?.smsMetrics?.clickRate || 0}%
+                              </p>
+                              <p className="text-[11px] text-blue-100/60">Delivered</p>
+                            </div>
+                            <div>
+                              <p className="text-lg font-semibold text-rose-400" data-testid="text-sms-failed">
+                                {(stats as any)?.smsMetrics?.failed?.toLocaleString() || "0"}
+                              </p>
+                              <p className="text-[11px] text-blue-100/60">Failed</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <ResponsiveContainer width="100%" height={220}>
+                        <BarChart
+                          layout="vertical"
+                          data={[
+                            { name: 'Email sent', value: (stats as any)?.emailMetrics?.totalSent || 0, fill: '#38bdf8' },
+                            { name: 'Email opened', value: (stats as any)?.emailMetrics?.opened || 0, fill: '#10b981' },
+                            { name: 'SMS sent', value: (stats as any)?.smsMetrics?.totalSent || 0, fill: '#a78bfa' },
+                            { name: 'SMS delivered', value: (stats as any)?.smsMetrics?.delivered || 0, fill: '#34d399' },
+                          ]}
+                          margin={{ left: 12 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="#ffffff20" horizontal={false} />
+                          <XAxis type="number" stroke="#94a3b8" allowDecimals={false} />
+                          <YAxis type="category" dataKey="name" stroke="#94a3b8" width={100} tick={{ fontSize: 12 }} />
+                          <Tooltip
                             contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
                             labelStyle={{ color: '#e2e8f0' }}
                           />
-                          <Legend wrapperStyle={{ color: '#cbd5e1' }} />
-                          <Line type="monotone" dataKey="Sent" stroke="#8b5cf6" strokeWidth={2} dot={{ r: 4 }} />
-                          <Line type="monotone" dataKey="Opened" stroke="#10b981" strokeWidth={2} dot={{ r: 4 }} />
-                          <Line type="monotone" dataKey="Open Rate" stroke="#f59e0b" strokeWidth={2} dot={{ r: 4 }} />
-                        </LineChart>
+                          <Bar dataKey="value" radius={[0, 8, 8, 0]}>
+                            {[
+                              (stats as any)?.emailMetrics?.totalSent || 0,
+                              (stats as any)?.emailMetrics?.opened || 0,
+                              (stats as any)?.smsMetrics?.totalSent || 0,
+                              (stats as any)?.smsMetrics?.delivered || 0,
+                            ].map((_, index) => (
+                              <Cell key={index} fill={['#38bdf8', '#10b981', '#a78bfa', '#34d399'][index]} />
+                            ))}
+                          </Bar>
+                        </BarChart>
                       </ResponsiveContainer>
-                      <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-                        <div>
-                          <p className="text-xs text-blue-100/70">Email Sent</p>
-                          <p className="text-sm font-semibold text-purple-400" data-testid="text-emails-sent">
-                            {(stats as any)?.emailMetrics?.totalSent?.toLocaleString() || "0"}
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-blue-100/70">Open Rate</p>
-                          <p className="text-sm font-semibold text-emerald-400" data-testid="text-email-open-rate">
-                            {(stats as any)?.emailMetrics?.openRate || 0}%
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-blue-100/70">Bounced</p>
-                          <p className="text-sm font-semibold text-amber-400" data-testid="text-email-bounced">
-                            {(stats as any)?.emailMetrics?.bounced?.toLocaleString() || "0"}
-                          </p>
-                        </div>
-                      </div>
                     </CardContent>
                   </Card>
                 </div>
@@ -443,13 +488,70 @@ export default function AdminDashboard() {
           )}
         </section>
 
-        <section>
-          <AccountsTable
-            accounts={(accounts as any) || []}
-            isLoading={accountsLoading}
-            onView={handleView}
-            onContact={handleContact}
-          />
+        <section className="overflow-hidden rounded-3xl border border-white/10 bg-white/10 shadow-lg shadow-blue-900/20 backdrop-blur">
+          <div className="flex flex-col gap-2 border-b border-white/10 px-6 py-6 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-xl font-semibold text-white">Recent accounts</h3>
+              <p className="mt-1 text-sm text-blue-100/70">Your 5 most recently added or updated accounts</p>
+            </div>
+            <Link href={accountsHref}>
+              <a className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-blue-100 transition hover:bg-white/20" data-testid="link-view-all-accounts">
+                View all accounts
+                <ArrowRight className="h-4 w-4" />
+              </a>
+            </Link>
+          </div>
+
+          {accountsLoading ? (
+            <div className="space-y-3 p-6">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="h-14 animate-pulse rounded-2xl bg-white/5" />
+              ))}
+            </div>
+          ) : recentAccounts.length === 0 ? (
+            <div className="px-6 py-16 text-center text-blue-100/80">
+              <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full border border-white/20 bg-white/10">
+                <i className="fas fa-inbox text-2xl"></i>
+              </div>
+              <h3 className="text-lg font-semibold text-white">No accounts found</h3>
+              <p className="mt-2 text-sm text-blue-100/70">Import account data to get started.</p>
+            </div>
+          ) : (
+            <ul className="divide-y divide-white/10">
+              {recentAccounts.map((account: any) => (
+                <li key={account.id} className="flex items-center gap-4 px-6 py-4 transition hover:bg-white/5">
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/10 text-xs font-semibold text-blue-100">
+                    {`${account.consumer?.firstName?.[0] || ''}${account.consumer?.lastName?.[0] || ''}`.toUpperCase() || "?"}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-white">
+                      {account.consumer?.firstName} {account.consumer?.lastName}
+                    </p>
+                    <p className="truncate text-xs text-blue-100/60">{account.creditor || "Unknown creditor"}</p>
+                  </div>
+                  <div className="hidden text-right sm:block">
+                    <p className="text-sm font-semibold text-white">{formatCurrency(account.balanceCents)}</p>
+                    <span
+                      className={`mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${getStatusColor(
+                        account.status
+                      )}`}
+                    >
+                      {account.status || "Unknown"}
+                    </span>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="rounded-lg border border-white/10 bg-white/10 px-3 text-xs font-semibold text-blue-100 hover:bg-white/20"
+                    onClick={() => handleView(account)}
+                    data-testid={`button-view-recent-${account.id}`}
+                  >
+                    View
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       </div>
 
