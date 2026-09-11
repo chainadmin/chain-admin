@@ -740,11 +740,48 @@ test('DMP imports place accounts in the folder matching their status', async () 
   const result = await importDmpAccounts(fakeStorage, 'tenant-1', [
     { filenumber: 'existing-file', status: 'NEWBIZ' },
     { filenumber: 'new-file', status: 'new-biz' },
-  ], 'fallback-folder');
+  ]);
 
   assert.deepEqual(result, { imported: 1, updated: 1, skipped: 0, errors: [] });
   assert.equal(updates[0].values.folderId, 'newbiz-folder');
   assert.equal(createdAccounts[0].folderId, 'newbiz-folder');
+});
+
+test('DMP imports create missing status folders unless a different folder was selected', async () => {
+  const createdFolders: any[] = [];
+  const createdAccounts: any[] = [];
+  const fakeStorage = {
+    getAccountsByTenant: async () => [],
+    getFoldersByTenant: async () => [],
+    createFolder: async (values: any) => {
+      createdFolders.push(values);
+      return { ...values, id: `folder-${createdFolders.length}` };
+    },
+    updateAccount: async () => undefined,
+    getConsumerByEmailAndTenant: async () => null,
+    getConsumerByPhoneAndTenant: async () => null,
+    findConsumersByNameAndTenant: async () => [],
+    createConsumer: async () => ({ id: 'consumer-1' }),
+    createAccount: async (values: any) => createdAccounts.push(values),
+  };
+
+  await importDmpAccounts(fakeStorage, 'tenant-1', [
+    { filenumber: 'new-1', status: 'NewBiz' },
+    { filenumber: 'new-2', status: 'new-biz' },
+  ]);
+
+  assert.equal(createdFolders.length, 1);
+  assert.equal(createdFolders[0].name, 'NewBiz');
+  assert.deepEqual(createdAccounts.map(account => account.folderId), ['folder-1', 'folder-1']);
+
+  createdFolders.length = 0;
+  createdAccounts.length = 0;
+  await importDmpAccounts(fakeStorage, 'tenant-1', [
+    { filenumber: 'new-3', status: 'Legal' },
+  ], 'selected-folder');
+
+  assert.equal(createdFolders.length, 0);
+  assert.equal(createdAccounts[0].folderId, 'selected-folder');
 });
 
 test('DMP imports never update an account based only on a colliding Chain account number', async () => {
