@@ -2744,7 +2744,7 @@ export default function Settings() {
                     <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-4">
                       <h3 className="text-base font-medium text-white">Sync Accounts from DMP</h3>
                       <p className="text-sm text-blue-100/70">
-                        Pull the latest current balances and consumer details, including date of birth, from Debt Manager Pro. DMP should send DOB as <code>dateOfBirth</code> in YYYY-MM-DD format.
+                        Pull current balances, consumer details, payment history, and pending payments from Debt Manager Pro. DMP should send DOB as <code>dateOfBirth</code> in YYYY-MM-DD format.
                       </p>
                       <Button
                         type="button"
@@ -2753,7 +2753,7 @@ export default function Settings() {
                           try {
                             toast({
                               title: "Syncing...",
-                              description: "Fetching current balances and consumer details from DMP...",
+                              description: "Fetching accounts, payment history, and pending payments from DMP...",
                             });
                             const response = await apiRequest("POST", "/api/dmp/import-accounts", {});
                             const result = await response.json();
