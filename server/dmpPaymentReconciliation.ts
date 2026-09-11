@@ -69,3 +69,25 @@ export function findMatchingDmpPayment(
         !inactivePaymentStatus.test(payment.status),
     ) ?? null;
 }
+
+/**
+ * Earliest DMP-side payment on or after `today` that is still pending/
+ * scheduled (not declined/cancelled/reversed). Once DMP owns an arrangement
+ * it is the source of truth for when the next installment actually runs, so
+ * Chain's mirrored `nextPaymentDate` should track this value rather than the
+ * date computed when the arrangement was first created.
+ */
+export function nextPendingDmpPaymentDate(
+  payments: any[] | null | undefined,
+  today: string,
+): string | null {
+  if (!Array.isArray(payments)) return null;
+
+  const upcomingDates = payments
+    .map(normalizeDmpPayment)
+    .filter(payment => payment.date !== null && payment.date >= today && !inactivePaymentStatus.test(payment.status))
+    .map(payment => payment.date as string);
+
+  if (!upcomingDates.length) return null;
+  return upcomingDates.sort()[0];
+}
