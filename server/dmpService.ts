@@ -53,6 +53,7 @@ interface DmpAccount {
   dateOfBirth?: string;
   ssnLast4?: string;
   consumerEmail?: string;
+  consumerPhone?: string;
   address?: string;
   city?: string;
   state?: string;
@@ -362,6 +363,28 @@ function normalizeDmpAccount(account: Record<string, unknown>, filenumber: strin
     dateOfBirth: dmpString(account, 'dateOfBirth', 'date_of_birth', 'birthDate', 'dob', 'debtor_dob'),
     ssnLast4: dmpString(account, 'ssnLast4'),
     consumerEmail: dmpString(account, 'email', 'consumerEmail'),
+    // Current DMP deployments are inconsistent here: portfolio exports use
+    // snake_case while the v2 account response commonly uses camelCase.
+    // Canonicalize every known primary-phone alias before the import mapper
+    // runs so phone data is not silently dropped from otherwise complete rows.
+    consumerPhone: dmpString(
+      account,
+      'consumerPhone',
+      'phoneNumber',
+      'phone_number',
+      'phoneCell',
+      'phone_cell',
+      'cellPhone',
+      'mobilePhone',
+      'mobile',
+      'phoneHome',
+      'phone_home',
+      'homePhone',
+      'phoneWork',
+      'phone_work',
+      'workPhone',
+      'phone',
+    ),
     address: dmpString(account, 'address', 'debtor_address'),
     city: dmpString(account, 'city', 'debtor_city'),
     state: dmpString(account, 'state', 'debtor_state'),
@@ -1156,7 +1179,7 @@ export class DebtManagerProService {
       state: acc.state || acc.debtor_state,
       zipCode: acc.zipCode || acc.debtor_zip,
       consumerEmail: acc.consumerEmail || acc.email,
-      consumerPhone: acc.phone_cell || acc.phone_home || acc.phone_work,
+      consumerPhone: acc.consumerPhone || acc.phone_cell || acc.phone_home || acc.phone_work,
       // DMP returns integer cents. Persist the provider value directly.
       balance: acc.balance !== undefined ? Math.max(0, Math.round(acc.balance)) : 0,
       originalBalance: acc.originalBalance !== undefined

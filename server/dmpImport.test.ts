@@ -810,6 +810,7 @@ test('maps the confirmed camelCase DMP response into complete consumer and accou
         dateOfBirth: '1990-01-01',
         ssnLast4: '1234',
         email: 'test@example.com',
+        phoneNumber: '+12125550123',
         address: '1 Main St',
         city: 'Town',
         state: 'NY',
@@ -850,7 +851,7 @@ test('maps the confirmed camelCase DMP response into complete consumer and accou
       firstName: 'Test',
       lastName: 'Person',
       email: 'test@example.com',
-      phone: null,
+      phone: '+12125550123',
       address: '1 Main St',
       city: 'Town',
       state: 'NY',
@@ -878,6 +879,36 @@ test('maps the confirmed camelCase DMP response into complete consumer and accou
         dmpAssignedCollectorId: 'collector-1',
       },
     });
+  } finally {
+    storage.getTenantSettings = originalSettings;
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('normalizes legacy DMP phone fields into the Chain consumer phone', async () => {
+  const originalSettings = storage.getTenantSettings;
+  const originalFetch = globalThis.fetch;
+  storage.getTenantSettings = (async () => ({
+    dmpEnabled: true,
+    dmpApiUrl: 'https://dmp.example',
+    dmpUsername: 'user',
+    dmpPassword: 'password',
+  })) as typeof storage.getTenantSettings;
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    if (String(input).endsWith('/api/v2/login')) {
+      return new Response(JSON.stringify({ token: 'test-token' }), { status: 200 });
+    }
+    return new Response(JSON.stringify({ data: [{
+      fileNumber: 'file-phone',
+      phone_cell: '+17165550123',
+    }] }), { status: 200 });
+  }) as typeof fetch;
+
+  try {
+    const [account] = await new DebtManagerProService().getAccounts('tenant-1', {
+      portfolioId: 'portfolio-phone',
+    });
+    assert.equal(account.consumerPhone, '+17165550123');
   } finally {
     storage.getTenantSettings = originalSettings;
     globalThis.fetch = originalFetch;
