@@ -18,21 +18,36 @@ function normalizeDate(value: unknown): string | null {
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
 }
 
-export function normalizeDmpPayment(payment: any): NormalizedDmpPayment {
-  const amount = Number(
-    payment?.paymentamount ?? payment?.payment_amount ?? payment?.amount ?? 0,
-  );
+function normalizeDmpAmountCents(payment: any): number {
+  // DMP's own write contract (insert_payments_external/insertPaymentArrangement)
+  // takes a dollar string under paymentamount/payment_amount. Its read
+  // contract (getpayments) returns the same value already in integer cents
+  // under `amount`, since that's how it's stored. These are not the same
+  // unit and must not share one "multiply by 100" rule, or a real cents
+  // value is inflated 100x.
+  const dollarAmount = payment?.paymentamount ?? payment?.payment_amount;
+  if (dollarAmount !== undefined && dollarAmount !== null) {
+    const parsed = Number(dollarAmount);
+    return Number.isFinite(parsed) ? Math.round(parsed * 100) : 0;
+  }
+  const centsAmount = Number(payment?.amount ?? 0);
+  return Number.isFinite(centsAmount) ? Math.round(centsAmount) : 0;
+}
 
+export function normalizeDmpPayment(payment: any): NormalizedDmpPayment {
   return {
+    // DMP's getpayments response uses the camelCase key `paymentDate` - check
+    // it first since it's the confirmed real key; the other spellings are
+    // kept for tolerance against other DMP installs/response variants.
     date: normalizeDate(
-      payment?.paymentdate ??
+      payment?.paymentDate ??
+        payment?.paymentdate ??
         payment?.payment_date ??
         payment?.date ??
         payment?.scheduleddate ??
         payment?.scheduled_date,
     ),
-    // DMP payment amounts are dollars in both its read and write APIs.
-    amountCents: Number.isFinite(amount) ? Math.round(amount * 100) : 0,
+    amountCents: normalizeDmpAmountCents(payment),
     status: String(
       payment?.paymentstatus ?? payment?.payment_status ?? payment?.status ?? "",
     ).trim(),
@@ -90,4 +105,80 @@ export function nextPendingDmpPaymentDate(
 
   if (!upcomingDates.length) return null;
   return upcomingDates.sort()[0];
+}
+
+export interface DmpArrangementSummary {
+  arrangementId: string;
+  amountCents: number;
+  nextPaymentDate: string;
+  remainingPayments: number;
+  startDate: string;
+  frequency: "weekly" | "biweekly" | "monthly";
+}
+
+function daysBetween(a: string, b: string): number {
+  return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
+}
+
+function inferFrequency(sortedPendingDates: string[]): DmpArrangementSummary["frequency"] {
+  if (sortedPendingDates.length < 2) return "monthly";
+  const gap = daysBetween(sortedPendingDates[0], sortedPendingDates[1]);
+  if (gap >= 6 && gap <= 8) return "weekly";
+  if (gap >= 13 && gap <= 15) return "biweekly";
+  return "monthly";
+}
+
+/**
+ * Finds a payment arrangement a DMP collector created directly in DMP (via
+ * its own /api/debtors/:id/payment-arrangements feature) and summarizes it
+ * the way Chain needs to mirror it locally. DMP-native rows in one
+ * arrangement share an `arrangementId`; rows Chain itself pushed to DMP do
+ * not carry one (Chain already has its own local record for those), so this
+ * only ever surfaces arrangements Chain does not already know about.
+ *
+ * When more than one arrangementId still has pending installments, the one
+ * with the most remaining payments is treated as the active arrangement.
+ */
+export function deriveDmpArrangement(
+  payments: any[] | null | undefined,
+  today: string,
+): DmpArrangementSummary | null {
+  if (!Array.isArray(payments)) return null;
+
+  const groups = new Map<string, { normalized: NormalizedDmpPayment }[]>();
+  for (const raw of payments) {
+    const arrangementId = raw?.arrangementId ?? raw?.arrangementid ?? raw?.arrangement_id;
+    if (typeof arrangementId !== "string" || !arrangementId.trim()) continue;
+    const normalized = normalizeDmpPayment(raw);
+    const bucket = groups.get(arrangementId) ?? [];
+    bucket.push({ normalized });
+    groups.set(arrangementId, bucket);
+  }
+
+  let best: DmpArrangementSummary | null = null;
+  for (const [arrangementId, rows] of Array.from(groups.entries())) {
+    const allDated = rows.map((r: { normalized: NormalizedDmpPayment }) => r.normalized).filter(p => p.date !== null) as (NormalizedDmpPayment & { date: string })[];
+    if (!allDated.length) continue;
+
+    const pending = allDated
+      .filter(p => p.date >= today && !inactivePaymentStatus.test(p.status))
+      .sort((a, b) => a.date.localeCompare(b.date));
+    if (!pending.length) continue;
+
+    const startDate = allDated.map(p => p.date).sort()[0];
+    const summary: DmpArrangementSummary = {
+      arrangementId,
+      amountCents: pending[0].amountCents,
+      nextPaymentDate: pending[0].date,
+      remainingPayments: pending.length,
+      startDate,
+      frequency: inferFrequency(pending.map(p => p.date)),
+    };
+
+    if (!best || summary.remainingPayments > best.remainingPayments) {
+      best = summary;
+    }
+  }
+
+  return best;
 }

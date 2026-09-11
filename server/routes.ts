@@ -2337,6 +2337,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 newStatus: dmpStatus,
               });
             }
+
+            // A payment arrangement a DMP collector set up directly in DMP
+            // never reaches Chain any other way - Chain's own import only
+            // pulls balance/status/history, not arrangements. Pull it here so
+            // a consumer viewing their portal sees it, instead of only what
+            // Chain itself created. Skip if Chain already has its own active
+            // arrangement for this account (from Chain or SMAX) so this never
+            // overwrites or duplicates one Chain is already tracking.
+            const existingActiveSchedules = await storage.getActivePaymentSchedulesByConsumerAndAccount(
+              consumer.id, account.id, tenant.id,
+            );
+            const hasNonDmpActiveSchedule = existingActiveSchedules.some(s => s.source !== 'dmp');
+            if (!hasNonDmpActiveSchedule) {
+              const { deriveDmpArrangement } = await import('./dmpPaymentReconciliation');
+              const dmpPayments = await dmpService.getPayments(tenant.id, dmpFilenumber);
+              const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+              const dmpArrangement = deriveDmpArrangement(dmpPayments, today);
+              if (dmpArrangement) {
+                await storage.syncDmpArrangementToChain(tenant.id, consumer.id, account.id, dmpArrangement);
+              }
+            }
           } catch (dmpError) {
             console.error('⚠️ DMP sync error for:', dmpFilenumber, dmpError);
             // Non-blocking - continue with stored data if DMP fails.
