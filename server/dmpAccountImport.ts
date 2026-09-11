@@ -11,6 +11,51 @@ type ImportStorage = {
 
 type DmpPaymentSyncStorage = Pick<ImportStorage, 'getAccountsByTenant' | 'updateAccount'>;
 
+function phoneFromDmpRecord(value: unknown): string | undefined {
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+
+  const record = value as Record<string, unknown>;
+  for (const key of ['phoneNumber', 'phone_number', 'phone', 'number']) {
+    const phone = record[key];
+    if ((typeof phone === 'string' || typeof phone === 'number') && String(phone).trim()) {
+      return String(phone).trim();
+    }
+  }
+  return undefined;
+}
+
+/** Fill account-list rows that omit phone data from DMP's dedicated phone endpoint. */
+export async function hydrateDmpAccountPhones(
+  accounts: any[],
+  getPhones: (filenumber: string) => Promise<any[] | null>,
+  concurrency = 10,
+): Promise<any[]> {
+  const hydrated = [...accounts];
+  let nextIndex = 0;
+
+  const worker = async () => {
+    while (nextIndex < hydrated.length) {
+      const index = nextIndex++;
+      const account = hydrated[index];
+      if (account?.consumerPhone || !account?.filenumber) continue;
+
+      try {
+        const phones = await getPhones(String(account.filenumber));
+        if (!Array.isArray(phones)) continue;
+        const phone = phones.map(phoneFromDmpRecord).find(Boolean);
+        if (phone) hydrated[index] = { ...account, consumerPhone: phone };
+      } catch {
+        // A phone lookup must not prevent the rest of a manual account sync.
+      }
+    }
+  };
+
+  const workerCount = Math.min(Math.max(1, concurrency), hydrated.length);
+  await Promise.all(Array.from({ length: workerCount }, worker));
+  return hydrated;
+}
+
 export interface DmpPaymentSyncResults {
   accountsSynced: number;
   historyPayments: number;

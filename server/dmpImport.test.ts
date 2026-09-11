@@ -11,11 +11,30 @@ import {
 import {
   canDeleteAllDmpAccounts,
   DMP_DELETE_CONFIRMATION,
+  hydrateDmpAccountPhones,
   importDmpAccounts,
   syncDmpAccountPayments,
 } from './dmpAccountImport';
 import { applyDmpBalanceRepair, planDmpBalanceRepair } from './dmpBalanceRepair';
 import { storage } from './storage';
+
+test('manual DMP sync hydrates missing account phones from the dedicated phone endpoint', async () => {
+  const requested: string[] = [];
+  const accounts = await hydrateDmpAccountPhones([
+    { filenumber: 'file-1' },
+    { filenumber: 'file-2', consumerPhone: '+12125550002' },
+    { filenumber: 'file-3' },
+  ], async filenumber => {
+    requested.push(filenumber);
+    if (filenumber === 'file-1') return [{ phone_number: '+12125550001' }];
+    return [];
+  });
+
+  assert.deepEqual(requested.sort(), ['file-1', 'file-3']);
+  assert.equal(accounts[0].consumerPhone, '+12125550001');
+  assert.equal(accounts[1].consumerPhone, '+12125550002');
+  assert.equal(accounts[2].consumerPhone, undefined);
+});
 
 test('builds a DMP note for a Postmark email-open event', () => {
   assert.deepEqual(buildDmpEmailOpenNote(' file-1 ', ' person@example.com '), {
@@ -847,6 +866,7 @@ test('maps the confirmed camelCase DMP response into complete consumer and accou
         dateOfBirth: '1990-01-01',
         ssnLast4: '1234',
         email: 'test@example.com',
+        phoneNumber: '+12125550123',
         address: '1 Main St',
         city: 'Town',
         state: 'NY',
@@ -887,7 +907,7 @@ test('maps the confirmed camelCase DMP response into complete consumer and accou
       firstName: 'Test',
       lastName: 'Person',
       email: 'test@example.com',
-      phone: null,
+      phone: '+12125550123',
       address: '1 Main St',
       city: 'Town',
       state: 'NY',

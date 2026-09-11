@@ -53,6 +53,7 @@ interface DmpAccount {
   dateOfBirth?: string;
   ssnLast4?: string;
   consumerEmail?: string;
+  consumerPhone?: string;
   address?: string;
   city?: string;
   state?: string;
@@ -348,6 +349,30 @@ function dmpNumber(account: Record<string, unknown>, ...keys: string[]): number 
   return undefined;
 }
 
+function dmpPhone(account: Record<string, unknown>): string | undefined {
+  // The v2 account response uses phoneNumber, while older DMP installations
+  // expose a typed home/work/cell field. Normalize both contracts here so the
+  // importer does not need to know which provider version supplied the row.
+  const phoneKeys = [
+    'consumerPhone',
+    'phoneNumber',
+    'phone',
+    'cellPhone',
+    'mobilePhone',
+    'homePhone',
+    'workPhone',
+    'phoneCell',
+    'phoneHome',
+    'phoneWork',
+    'phone_cell',
+    'phone_home',
+    'phone_work',
+    'phone_number',
+  ];
+
+  return dmpString(account, ...phoneKeys);
+}
+
 function normalizeDmpAccount(account: Record<string, unknown>, filenumber: string): DmpAccount {
   return {
     ...account,
@@ -362,6 +387,7 @@ function normalizeDmpAccount(account: Record<string, unknown>, filenumber: strin
     dateOfBirth: dmpString(account, 'dateOfBirth', 'date_of_birth', 'birthDate', 'dob', 'debtor_dob'),
     ssnLast4: dmpString(account, 'ssnLast4'),
     consumerEmail: dmpString(account, 'email', 'consumerEmail'),
+    consumerPhone: dmpPhone(account),
     address: dmpString(account, 'address', 'debtor_address'),
     city: dmpString(account, 'city', 'debtor_city'),
     state: dmpString(account, 'state', 'debtor_state'),
@@ -1179,7 +1205,7 @@ export class DebtManagerProService {
       state: acc.state || acc.debtor_state,
       zipCode: acc.zipCode || acc.debtor_zip,
       consumerEmail: acc.consumerEmail || acc.email,
-      consumerPhone: acc.phone_cell || acc.phone_home || acc.phone_work,
+      consumerPhone: acc.consumerPhone || acc.phone_cell || acc.phone_home || acc.phone_work,
       // DMP returns integer cents. Persist the provider value directly.
       balance: acc.balance !== undefined ? Math.max(0, Math.round(acc.balance)) : 0,
       originalBalance: acc.originalBalance !== undefined
