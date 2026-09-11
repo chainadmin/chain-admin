@@ -2500,6 +2500,16 @@ export async function runMigrations() {
           updated_at TIMESTAMP NOT NULL DEFAULT NOW()
         )
       `);
+      // Keep installations created by the SQL migration aligned with the API.
+      // The original constraint used "failed" while Global Admin submits
+      // "rejected", causing an otherwise valid configuration save to fail.
+      await client.query(`ALTER TABLE tenant_sms_configurations DROP CONSTRAINT IF EXISTS tenant_sms_approval_status`);
+      await client.query(`UPDATE tenant_sms_configurations SET approval_status = 'rejected' WHERE approval_status = 'failed'`);
+      await client.query(`
+        ALTER TABLE tenant_sms_configurations ADD CONSTRAINT tenant_sms_approval_status CHECK (
+          approval_status IN ('not_configured', 'pending', 'approved', 'active', 'rejected', 'suspended')
+        )
+      `);
       await client.query(`
         INSERT INTO tenant_sms_configurations
           (tenant_id, account_sid, phone_number, business_identifier, campaign_identifier, approval_status, enabled)
