@@ -137,6 +137,34 @@ export class EmailService {
         });
       }
 
+      // DMP owns the communication history for DMP-linked accounts. Keep its
+      // record complete for one-off and automation messages too (campaigns are
+      // handled by sendBulkEmails below). The DMP API expects the actual
+      // recipient, subject, and full rendered body, not a shortened note.
+      const isInternalNotification = typeof options.metadata?.type === 'string'
+        && options.metadata.type.includes('notification');
+      if (options.tenantId && options.metadata?.filenumber && !isInternalNotification) {
+        try {
+          const settings = await storage.getTenantSettings(options.tenantId);
+          if ((settings as any)?.dmpEnabled) {
+            const { dmpService } = await import('./dmpService');
+            await dmpService.sendEmail(options.tenantId, {
+              filenumber: String(options.metadata.filenumber),
+              email_address: options.to,
+              subject: options.subject,
+              body: options.html || textBody,
+              direction: 'outbound',
+              status: 'sent',
+            });
+            console.log(`📝 DMP sendEmail logged for email to account ${options.metadata.filenumber}`);
+          }
+        } catch (dmpError) {
+          // Provider delivery has already succeeded, so an integration outage
+          // must not incorrectly report the email as failed to the sender.
+          console.error('Error logging email to DMP (non-blocking):', dmpError);
+        }
+      }
+
       return {
         messageId: result.MessageID,
         success: true,

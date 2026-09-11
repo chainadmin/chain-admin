@@ -74,7 +74,7 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { resolveArrangementTierForWrite } from "./arrangementTierValidation";
-import { and, eq, sql, desc, gt, gte, inArray, lte, isNull, or } from "drizzle-orm";
+import { and, eq, ne, sql, desc, gt, gte, inArray, lte, isNotNull, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 import multer from "multer";
 import path from "path";
@@ -4787,9 +4787,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       let resolvedConsumerId = consumerId;
+      let dmpFilenumber: string | undefined;
       if (accountId) {
         const [account] = await db
-          .select({ consumerId: accountsTable.consumerId })
+          .select({ consumerId: accountsTable.consumerId, filenumber: accountsTable.filenumber })
           .from(accountsTable)
           .where(and(eq(accountsTable.id, accountId), eq(accountsTable.tenantId, tenantId)))
           .limit(1);
@@ -4800,6 +4801,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json({ message: "Account does not belong to the selected person" });
         }
         resolvedConsumerId = account.consumerId;
+        dmpFilenumber = account.filenumber || undefined;
       }
       if (resolvedConsumerId) {
         const [consumer] = await db
@@ -4812,6 +4814,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         if (consumer.email && consumer.email.trim().toLowerCase() !== to.toLowerCase()) {
           return res.status(400).json({ message: "Recipient email does not match the selected person" });
+        }
+        if (!dmpFilenumber) {
+          const [linkedAccount] = await db
+            .select({ filenumber: accountsTable.filenumber })
+            .from(accountsTable)
+            .where(and(
+              eq(accountsTable.consumerId, resolvedConsumerId),
+              eq(accountsTable.tenantId, tenantId),
+              isNotNull(accountsTable.filenumber),
+              ne(accountsTable.filenumber, ''),
+            ))
+            .limit(1);
+          dmpFilenumber = linkedAccount?.filenumber || undefined;
         }
       }
 
@@ -4900,6 +4915,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ...(resolvedConsumerId ? { consumerId: resolvedConsumerId } : {}),
           ...(accountId ? { accountId } : {}),
           ...(templateId ? { templateId } : {}),
+          ...(dmpFilenumber ? { filenumber: dmpFilenumber } : {}),
         },
         tenantId: tenantId, // Track email usage by tenant
         consumerId: resolvedConsumerId,
@@ -17743,28 +17759,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
                       automationId: automation.id,
                       automationName: automation.name,
                       consumerId: consumer.id,
+                      ...(consumerAccount?.filenumber ? { filenumber: consumerAccount.filenumber } : {}),
                     },
                   });
                   
                   sentCount++;
                   console.log(`✉️ Sent email to ${consumer.email}`);
 
-                  if ((tenantSettings as any)?.dmpEnabled && consumerAccount?.filenumber) {
-                    try {
-                      const { dmpService } = await import('./dmpService');
-                      await dmpService.sendEmail(automation.tenantId, {
-                        filenumber: consumerAccount.filenumber,
-                        email_address: consumer.email || '',
-                        subject,
-                        body: html,
-                        direction: 'outbound',
-                        status: 'sent',
-                      }).catch(e => console.error('[DMP] automation sendEmail failed:', e));
-                    } catch (dmpAutoError) {
-                      console.error('[DMP] Automation email logging failed:', dmpAutoError);
-                    }
-                  }
-                  
                 } else if (automation.type === 'sms') {
                   // SMS automations now create real campaigns for visibility and tracking
                   // This is handled at the automation level, not per-consumer
@@ -17920,21 +17921,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
                     campaignSentCount++;
                     sentCount++;
 
-                    if ((tenantSettings as any)?.dmpEnabled && consumerAccount?.filenumber) {
-                      try {
-                        const { dmpService } = await import('./dmpService');
-                        await dmpService.sendText(automation.tenantId, {
-                          filenumber: consumerAccount.filenumber,
-                          phone_number: phone,
-                          message,
-                          direction: 'outbound',
-                          status: 'sent',
-                        }).catch(e => console.error('[DMP] automation sendText failed:', e));
-                      } catch (dmpAutoSmsError) {
-                        console.error('[DMP] Automation SMS logging failed:', dmpAutoSmsError);
-                      }
-                    }
-                    
                     // Update campaign progress periodically
                     if (campaignSentCount % 10 === 0) {
                       await storage.updateSmsCampaign(campaign.id, {
