@@ -160,7 +160,7 @@ import { computeALaCarteBill, computeSubscriptionBill, generateInvoiceNumber } f
 import { generateInvoicePdf } from "./invoicePdf";
 import { INVOICE_BRANDS, resolveInvoiceRecipient, sanitizeDeliveryError } from "./invoiceBranding";
 import { canActivateUser } from "@shared/enterpriseCapacity";
-import { findMatchingDmpPayment, isPostedDmpPayment, normalizeDmpPayment } from "./dmpPaymentReconciliation";
+import { findMatchingDmpPayment, isPostedDmpPayment, normalizeDmpPayment, nextPendingDmpPaymentDate } from "./dmpPaymentReconciliation";
 
 import {
   listConsumers,
@@ -2336,6 +2336,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 newBalance: balanceCents,
                 newStatus: dmpStatus,
               });
+            }
+
+            // A payment arrangement a DMP collector set up directly in DMP
+            // never reaches Chain any other way - Chain's own import only
+            // pulls balance/status/history, not arrangements. Pull it here so
+            // a consumer viewing their portal sees it, instead of only what
+            // Chain itself created. Skip if Chain already has its own active
+            // arrangement for this account (from Chain or SMAX) so this never
+            // overwrites or duplicates one Chain is already tracking.
+            const existingActiveSchedules = await storage.getActivePaymentSchedulesByConsumerAndAccount(
+              consumer.id, account.id, tenant.id,
+            );
+            const hasNonDmpActiveSchedule = existingActiveSchedules.some(s => s.source !== 'dmp');
+            if (!hasNonDmpActiveSchedule) {
+              const { deriveDmpArrangement } = await import('./dmpPaymentReconciliation');
+              const dmpPayments = await dmpService.getPayments(tenant.id, dmpFilenumber);
+              const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+              const dmpArrangement = deriveDmpArrangement(dmpPayments, today);
+              if (dmpArrangement) {
+                await storage.syncDmpArrangementToChain(tenant.id, consumer.id, account.id, dmpArrangement);
+              }
             }
           } catch (dmpError) {
             console.error('⚠️ DMP sync error for:', dmpFilenumber, dmpError);
@@ -16862,6 +16883,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         console.log(`📋 Found ${todaySchedules.length} active schedules due today or overdue for tenant ${tenant.name}`);
 
+        // Schedules with processor='dmp' are intentionally excluded above -
+        // DMP owns charging those, not Chain. But Chain still displays their
+        // nextPaymentDate, so refresh it from DMP's own pending installment
+        // whenever it looks due/overdue by Chain's stale copy; otherwise the
+        // date freezes at whatever was computed when the arrangement was
+        // first handed off and never reflects what DMP actually ran.
+        if ((settings as any)?.dmpEnabled) {
+          try {
+            const dmpOwnedDueSchedules = await db
+              .select()
+              .from(paymentSchedulesTable)
+              .where(
+                and(
+                  eq(paymentSchedulesTable.tenantId, tenant.id),
+                  eq(paymentSchedulesTable.status, 'active'),
+                  eq(paymentSchedulesTable.processor, 'dmp'),
+                  lte(paymentSchedulesTable.nextPaymentDate, today),
+                )
+              );
+            for (const dmpSchedule of dmpOwnedDueSchedules) {
+              try {
+                const dmpScheduleAccount = await storage.getAccount(dmpSchedule.accountId);
+                if (!dmpScheduleAccount?.filenumber) continue;
+                const dmpPayments = await dmpService.getPayments(tenant.id, dmpScheduleAccount.filenumber);
+                const dmpNextDate = nextPendingDmpPaymentDate(dmpPayments, today);
+                if (dmpNextDate && dmpNextDate !== dmpSchedule.nextPaymentDate) {
+                  await storage.updatePaymentSchedule(dmpSchedule.id, tenant.id, { nextPaymentDate: dmpNextDate });
+                  console.log(`🔄 Synced DMP-owned schedule ${dmpSchedule.id} next payment date to ${dmpNextDate}`);
+                }
+              } catch (dmpScheduleSyncError) {
+                console.error(`⚠️ Failed to refresh DMP-owned schedule ${dmpSchedule.id} due date:`, dmpScheduleSyncError);
+              }
+            }
+          } catch (dmpDueSyncError) {
+            console.error(`⚠️ Failed to look up DMP-owned schedules for tenant ${tenant.name}:`, dmpDueSyncError);
+          }
+        }
+
         if (todaySchedules.length === 0) continue;
 
         for (const schedule of todaySchedules) {
@@ -17154,6 +17213,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   if ((settings as any)?.dmpEnabled) {
                     try {
                       const { dmpService } = await import('./dmpService');
+                      // Record the actual payment, not just an attempt note -
+                      // a note alone never reaches DMP's payments ledger, so
+                      // DMP's own balance and getpayments view would silently
+                      // never learn a Chain-processed charge occurred.
+                      await dmpService.postPayment(tenant.id, {
+                        filenumber: account.filenumber,
+                        amount: paymentAmountCents / 100,
+                        date: new Date(),
+                        type: 'payment',
+                        reference: extractedTransactionId,
+                        status: 'completed',
+                      }).catch(e => console.error('DMP cron payment sync failed:', e));
                       await dmpService.insertAttempt(tenant.id, { filenumber: account.filenumber, attempttype: 'Payment', attemptdate: today, notes: `Scheduled payment of $${(paymentAmountCents / 100).toFixed(2)} processed successfully`, result: 'Success' }).catch(e => console.error('DMP cron attempt log failed:', e));
                     } catch (dmpError) {
                       console.error('❌ Error sending payment attempt to DMP:', dmpError);

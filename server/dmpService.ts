@@ -523,7 +523,16 @@ export class DebtManagerProService {
         return null;
       }
 
-      return await response.json();
+      const parsed = await response.json();
+      // DMP's v2 API wraps every response as { success, data }. Every caller
+      // of this method (getAccount, getPayments, getPhones, getNotes, etc.)
+      // works with the actual payload, not the envelope, so unwrap it here
+      // once rather than in each caller. A response that isn't wrapped this
+      // way is returned as-is.
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && 'data' in parsed) {
+        return (parsed as { data: T }).data;
+      }
+      return parsed;
     } catch (error) {
       console.error(`DMP API request failed: ${method} ${endpoint}`, error);
       return null;
@@ -859,6 +868,15 @@ export class DebtManagerProService {
     const config = await this.getDmpConfig(tenantId);
     if (!config) return false;
 
+    // DMP only accepts a reusable, opaque processor credential for future
+    // card installments (see insert_payments_external). A masked last-4
+    // string is not a valid credential for any processor and is guaranteed
+    // to be rejected, so fail loudly here instead of submitting it.
+    if (!arrangement.cardtoken) {
+      console.error('[DMP] Skipping arrangement sync - no vaulted card token available for DMP to charge');
+      return false;
+    }
+
     const paymentdata: Array<{ paymentamount: string; paymentdate: string }> = [];
     const count = Math.max(1, arrangement.remainingpayments || 1);
     const currentDate = new Date(`${arrangement.nextpaymentdate}T12:00:00Z`);
@@ -872,24 +890,29 @@ export class DebtManagerProService {
       else currentDate.setUTCMonth(currentDate.getUTCMonth() + 1);
     }
 
-    const result = await this.makeRequest<any>(config, 'POST', '/api/v2/insert_payplan_external', {
+    // There is no separate "register a payment plan" endpoint on DMP - only
+    // insert_payments_external exists, and it already supports a full
+    // recurring schedule via `paymentdata`. Each row becomes its own
+    // reserved future installment that DMP's own due-date job then owns.
+    // Root-level paymentamount/paymentdate are intentionally omitted since
+    // they would duplicate paymentdata[0] as an extra item; every other
+    // root field is inherited by each dated row that doesn't set its own.
+    const result = await this.makeRequest<any>(config, 'POST', '/api/v2/insert_payments_external', {
       filenumber: arrangement.filenumber,
-      paymentdate: arrangement.nextpaymentdate,
       payorname: arrangement.payorname || 'Consumer',
-      paymentmethod: 'CREDIT CARD',
-      paymentstatus: 'PENDING',
-      typeofpayment: 'Online',
-      cardtype: arrangement.cardbrand || 'Unknown',
-      cardnumber: arrangement.cardtoken || (arrangement.cardlast4 ? `XXXX-XXXX-XXXX-${arrangement.cardlast4}` : ''),
-      cardexpirationmonth: arrangement.expirymonth || '',
-      cardexpirationyear: arrangement.expiryyear || '',
-      paymentamount: arrangement.paymentamount.toFixed(2),
-      invoice: `CHAIN-ARR-${Date.now()}`,
+      // Must normalize to exactly "card" - DMP's parser only recognizes
+      // "creditcard"/"credit_card"/"cc" as aliases for it, not "credit card".
+      paymentmethod: 'card',
       arrangementtype: arrangement.arrangementtype,
+      cardtype: arrangement.cardbrand || 'Unknown',
+      cardtoken: arrangement.cardtoken,
+      expirymonth: arrangement.expirymonth || '',
+      expiryyear: arrangement.expiryyear || '',
+      invoice: `CHAIN-ARR-${Date.now()}`,
       paymentdata,
     });
 
-    return result?.state === 'SUCCESS' || result?.success === true;
+    return result?.success === true;
   }
 
   async insertAttempt(tenantId: string, attempt: DmpAttemptData): Promise<any | null> {

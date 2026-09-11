@@ -519,6 +519,12 @@ export interface IStorage {
     accountId: string,
     smaxArrangement: any
   ): Promise<PaymentSchedule | null>;
+  syncDmpArrangementToChain(
+    tenantId: string,
+    consumerId: string,
+    accountId: string,
+    dmpArrangement: { arrangementId: string; amountCents: number; nextPaymentDate: string; remainingPayments: number; startDate: string; frequency: string }
+  ): Promise<PaymentSchedule | null>;
   
   // Payment approval operations
   createPaymentApproval(approval: InsertPaymentApproval): Promise<PaymentApproval>;
@@ -3754,7 +3760,93 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async getAllPaymentSchedulesByTenant(tenantId: string): Promise<(PaymentSchedule & { 
+  async syncDmpArrangementToChain(
+    tenantId: string,
+    consumerId: string,
+    accountId: string,
+    dmpArrangement: { arrangementId: string; amountCents: number; nextPaymentDate: string; remainingPayments: number; startDate: string; frequency: string }
+  ): Promise<PaymentSchedule | null> {
+    try {
+      // A DMP-native arrangement (created directly by a DMP collector) has no
+      // Chain payment method behind it - DMP charges it, not Chain. Mirror
+      // the SMAX placeholder pattern so it still displays like any other
+      // arrangement in the consumer portal.
+      const existingPlaceholder = await db
+        .select()
+        .from(paymentMethods)
+        .where(and(
+          eq(paymentMethods.tenantId, tenantId),
+          eq(paymentMethods.consumerId, consumerId),
+          eq(paymentMethods.paymentToken, 'DMP_MANAGED')
+        ));
+
+      let placeholderMethod;
+      if (existingPlaceholder.length > 0) {
+        placeholderMethod = existingPlaceholder[0];
+      } else {
+        [placeholderMethod] = await db.insert(paymentMethods).values({
+          tenantId,
+          consumerId,
+          paymentToken: 'DMP_MANAGED',
+          cardLast4: '****',
+          cardBrand: 'Card',
+          cardholderName: 'DMP Managed Payment',
+          isDefault: false,
+        }).returning();
+      }
+
+      const existingDmpSchedule = await db
+        .select()
+        .from(paymentSchedules)
+        .where(and(
+          eq(paymentSchedules.tenantId, tenantId),
+          eq(paymentSchedules.consumerId, consumerId),
+          eq(paymentSchedules.accountId, accountId),
+          eq(paymentSchedules.source, 'dmp'),
+          eq(paymentSchedules.status, 'active')
+        ));
+
+      if (existingDmpSchedule.length > 0) {
+        const [updated] = await db
+          .update(paymentSchedules)
+          .set({
+            amountCents: dmpArrangement.amountCents,
+            nextPaymentDate: dmpArrangement.nextPaymentDate,
+            remainingPayments: dmpArrangement.remainingPayments,
+            frequency: dmpArrangement.frequency,
+            updatedAt: new Date(),
+          })
+          .where(eq(paymentSchedules.id, existingDmpSchedule[0].id))
+          .returning();
+        return updated;
+      }
+
+      const [syncedSchedule] = await db.insert(paymentSchedules).values({
+        tenantId,
+        consumerId,
+        accountId,
+        paymentMethodId: placeholderMethod.id,
+        arrangementType: 'dmp_imported',
+        amountCents: dmpArrangement.amountCents,
+        frequency: dmpArrangement.frequency,
+        startDate: dmpArrangement.startDate,
+        endDate: null,
+        nextPaymentDate: dmpArrangement.nextPaymentDate,
+        remainingPayments: dmpArrangement.remainingPayments,
+        status: 'active',
+        source: 'dmp',
+        processor: 'dmp',
+      }).returning();
+
+      console.log('✅ DMP-native arrangement synced to Chain:', syncedSchedule.id);
+      return syncedSchedule;
+    } catch (error) {
+      console.error('❌ Error syncing DMP arrangement to Chain:', error);
+      return null;
+    }
+  }
+
+  async getAllPaymentSchedulesByTenant(tenantId: string): Promise<(PaymentSchedule & {
     consumer?: Consumer; 
     account?: Account;
     paymentMethod?: PaymentMethod;
