@@ -93,6 +93,7 @@ import { registerWalletRoutes } from "./walletRoutes";
 import { registerChiamoRoutes } from "./chiamoRoutes";
 import { registerChiamoCredentialRoutes } from "./chiamoCredentialRoutes";
 import { registerChiamoUserRoutes } from "./chiamoUserRoutes";
+import { resolveInboundCallLogStatus } from "./voiceCallLogStatus";
 import { registerSoftphoneSessionRoutes } from "./softphoneSessionRoutes";
 import { registerChiamoNumberRoutes } from "./chiamoNumberRoutes";
 import { resolveChiamoBaseUrl } from "./chiamoOnboarding";
@@ -27672,7 +27673,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const offset = parseInt(req.query.offset as string) || 0;
 
       const callLogs = await voipStorage.getVoipCallLogsByTenant(user.tenantId, limit, offset);
-      res.json(callLogs);
+      const inboundCallSids = callLogs
+        .filter(call => call.direction === 'inbound' && call.callSid)
+        .map(call => call.callSid!);
+      const voicemailRows = inboundCallSids.length
+        ? await db.select({ callSid: voipVoicemails.callSid }).from(voipVoicemails).where(and(
+          eq(voipVoicemails.tenantId, user.tenantId),
+          inArray(voipVoicemails.callSid, inboundCallSids),
+        ))
+        : [];
+      const voicemailCallSids = new Set(voicemailRows.map(row => row.callSid));
+      res.json(callLogs.map(call => call.direction === 'inbound' && call.callSid && voicemailCallSids.has(call.callSid)
+        ? { ...call, status: resolveInboundCallLogStatus(call.status, undefined, true) }
+        : call));
     } catch (error) {
       console.error("Error getting call logs:", error);
       res.status(500).json({ message: "Failed to get call logs" });
@@ -28439,6 +28452,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           updatedAt: new Date(),
         },
       });
+      await voipStorage.updateVoipCallLog(call.id, tenantId, {
+        status: resolveInboundCallLogStatus(call.status, undefined, true),
+        endedAt: call.endedAt || new Date(),
+      });
       res.sendStatus(204);
     } catch {
       // Persistence failures must be retried by the provider. Signature/account
@@ -28490,7 +28507,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const callLog = await voipStorage.getVoipCallLogByCallSid(CallSid, tenantId);
       if (callLog) {
         const updates: any = {
-          status: CallStatus,
+          status: callLog.direction === 'inbound'
+            ? resolveInboundCallLogStatus(callLog.status, CallStatus)
+            : CallStatus,
         };
 
         if (CallStatus === 'in-progress') {
