@@ -11237,7 +11237,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Fetch accounts from DMP
       const dmpFetch = await dmpService.getAccountsWithStats(tenantId, { portfolioId });
-      const dmpAccounts = dmpFetch.accounts;
+      const {
+        hydrateDmpAccountPhones,
+        importDmpAccounts,
+        syncDmpAccountPayments,
+      } = await import('./dmpAccountImport');
+      const dmpAccounts = await hydrateDmpAccountPhones(
+        dmpFetch.accounts,
+        filenumber => dmpService.getPhones(tenantId, filenumber),
+      );
       
       if (!dmpAccounts || dmpAccounts.length === 0) {
         return res.json({
@@ -11252,7 +11260,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
 
-      const { importDmpAccounts, syncDmpAccountPayments } = await import('./dmpAccountImport');
       const results = await importDmpAccounts(storage, tenantId, dmpAccounts, folderId, {
         // A manual sync is expected to refresh the complete DMP record, not
         // only its account row. This includes DOB and the other consumer
