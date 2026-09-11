@@ -14,6 +14,7 @@ import { getTerminology, type BusinessType } from "@shared/terminology";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest, downloadAuthenticatedFile } from "@/lib/queryClient";
 import { Upload } from "lucide-react";
+import { formatUsPaymentDate } from "@/lib/payment-dates";
 
 export default function ConsumerPortal() {
   const { tenantSlug, email } = useParams();
@@ -215,11 +216,7 @@ export default function ConsumerPortal() {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
+    return formatUsPaymentDate(dateString, false);
   };
 
   const getCalculatedArrangementSummary = (arrangement: any) => {

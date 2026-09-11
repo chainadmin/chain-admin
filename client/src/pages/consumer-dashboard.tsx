@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Bell, Phone, Mail, MessageSquare, Download, Building2, CreditCard, FileText, AlertCircle, LogOut, User, History, Check, Clock, XCircle } from "lucide-react";
 import { getArrangementSummary, getPlanTypeLabel, formatCurrencyFromCents } from "@/lib/arrangements";
+import { formatUsPaymentDate } from "@/lib/payment-dates";
 
 type AgencyBranding = {
   agencyName: string;
@@ -298,11 +299,7 @@ export default function ConsumerDashboard() {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
+    return formatUsPaymentDate(dateString, false);
   };
 
   const totalBalance = accounts?.reduce((sum: number, account: any) => sum + (account.balanceCents || 0), 0) || 0;
