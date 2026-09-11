@@ -302,6 +302,22 @@ class SmsService {
     metadata?: { automationId?: string; automationName?: string; source?: string; sequenceId?: string; sequenceStepOrder?: number }
   ): Promise<{ success: boolean; messageId?: string; error?: string }> {
     try {
+      // Most interactive sends identify the person rather than a specific
+      // account. Resolve their DMP-linked account so the complete outbound SMS
+      // can still be written back to DMP. Explicit account IDs from campaigns
+      // remain authoritative.
+      if (!accountId && consumerId) {
+        try {
+          const consumerAccounts = await storage.getAccountsByConsumer(consumerId);
+          accountId = consumerAccounts.find(account =>
+            account.tenantId === tenantId && Boolean(account.filenumber?.trim())
+          )?.id;
+        } catch (accountLookupError) {
+          // DMP synchronization is secondary to delivering the SMS.
+          console.error('Error resolving DMP account for SMS (non-blocking):', accountLookupError);
+        }
+      }
+
       // CRITICAL: Final check - verify campaign is still active before sending
       if (campaignId) {
         // Fast in-memory check first
