@@ -21807,6 +21807,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         enabled: z.boolean().optional(),
         testStatus: z.enum(['not_tested','passed','failed']).optional(),
       }).parse(req.body);
+      const tenant = await storage.getTenant(req.params.id);
+      if (!tenant) return res.status(404).json({ message: "Company account not found" });
       const existing = await storage.getTenantSmsConfiguration(req.params.id);
       const { encryptCredential } = await import('./credentialCrypto');
       const updates: any = { ...parsed };
@@ -21818,9 +21820,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       await storage.updateTenantSmsConfiguration(req.params.id, updates);
       smsService.invalidateTenantClient(req.params.id);
       res.json({ message: "SMS configuration updated successfully" });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error updating SMS configuration:', error);
-      res.status(500).json({ message: "Failed to update SMS configuration" });
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ message: error.issues[0]?.message || "Check the SMS account information and try again" });
+      }
+      res.status(500).json({
+        message: error?.message === "Credential encryption is not configured"
+          ? "SMS credentials cannot be saved until credential encryption is configured"
+          : "SMS configuration could not be saved. No changes were made.",
+      });
     }
   });
 

@@ -335,10 +335,10 @@ export default function GlobalAdmin() {
         enabled: false, testStatus: 'not_tested', authSecretConfigured: false,
       });
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
-        title: "Error",
-        description: "Failed to update SMS configuration",
+        title: "SMS setup failed",
+        description: error.message || "Failed to update SMS configuration",
         variant: "destructive"
       });
     }
@@ -1000,10 +1000,23 @@ export default function GlobalAdmin() {
   
   const handleSaveSmsConfig = () => {
     if (!selectedTenantForSms) return;
+
+    const accountSid = smsConfig.accountSid.trim();
+    const authSecret = smsConfig.authSecret.trim();
+    const phoneNumber = smsConfig.phoneNumber.trim();
+    const messagingServiceSid = smsConfig.messagingServiceSid.trim();
+    if (!accountSid || (!authSecret && !smsConfig.authSecretConfigured) || (!phoneNumber && !messagingServiceSid)) {
+      toast({
+        title: "Missing SMS account information",
+        description: "Enter the subaccount SID and auth token, plus either a phone number or Messaging Service SID.",
+        variant: "destructive",
+      });
+      return;
+    }
     
     updateSmsMutation.mutate({
       tenantId: selectedTenantForSms.id,
-      config: smsConfig
+      config: { ...smsConfig, accountSid, authSecret, phoneNumber, messagingServiceSid }
     });
   };
 

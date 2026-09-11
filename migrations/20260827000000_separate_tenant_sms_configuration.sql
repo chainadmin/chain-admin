@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS tenant_sms_configurations (
   config_version INTEGER NOT NULL DEFAULT 1,
   updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
   CONSTRAINT tenant_sms_approval_status CHECK (
-    approval_status IN ('not_configured', 'pending', 'approved', 'active', 'failed', 'suspended')
+    approval_status IN ('not_configured', 'pending', 'approved', 'active', 'rejected', 'suspended')
   ),
   CONSTRAINT tenant_sms_test_status CHECK (
     test_status IN ('not_tested', 'pending', 'passed', 'failed')
