@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Bell, Phone, Mail, MessageSquare, Download, Building2, CreditCard, FileText, AlertCircle, TrendingUp } from "lucide-react";
 import { getArrangementSummary, getPlanTypeLabel, formatCurrencyFromCents, calculateArrangementPayment } from "@/lib/arrangements";
+import { formatUsPaymentDate } from "@/lib/payment-dates";
 
 export default function EnhancedConsumerPortal() {
   const { tenantSlug, email } = useParams();
@@ -274,11 +275,7 @@ export default function EnhancedConsumerPortal() {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
+    return formatUsPaymentDate(dateString, false);
   };
 
   const totalBalance = accounts?.reduce((sum: number, account: any) => sum + (account.balanceCents || 0), 0) || 0;

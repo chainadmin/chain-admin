@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { CreditCard, DollarSign, TrendingUp, Clock, CheckCircle, Calendar, User, Building2, Lock, Trash2, ThumbsUp, ThumbsDown, RefreshCw, History, Check, XCircle, Search, Settings, Edit, Mail, MessageSquare, AlertTriangle, Phone } from "lucide-react";
 import { PaymentSchedulingCalendar } from "@/components/payment-scheduling-calendar";
 import { usePaginatedConsumers } from "@/hooks/use-paginated-consumers";
+import { formatUsPaymentDate, getUsPaymentDateKey, getUsRelativeDateLabel } from "@/lib/payment-dates";
 
 export default function Payments() {
   const { toast } = useToast();
@@ -380,13 +381,7 @@ export default function Payments() {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    return formatUsPaymentDate(dateString);
   };
 
   const getStatusColor = (status: string) => {
@@ -1799,12 +1794,9 @@ export default function Payments() {
             ) : (() => {
               const logs = processingLogs as any[];
               const today = new Date();
-              const todayStr = today.toISOString().split('T')[0];
-              const yesterday = new Date(today);
-              yesterday.setDate(yesterday.getDate() - 1);
-              const yesterdayStr = yesterday.toISOString().split('T')[0];
+              const todayStr = getUsPaymentDateKey(today);
 
-              const todayLogs = logs.filter((l: any) => l.processedAt && new Date(l.processedAt).toISOString().split('T')[0] === todayStr);
+              const todayLogs = logs.filter((l: any) => l.processedAt && getUsPaymentDateKey(l.processedAt) === todayStr);
               const processedToday = todayLogs.filter((l: any) => l.status === 'success').length;
               const failedToday = todayLogs.filter((l: any) => l.status === 'failed').length;
               const skippedToday = todayLogs.filter((l: any) => l.status === 'skipped').length;
@@ -1815,19 +1807,14 @@ export default function Payments() {
 
               const grouped: Record<string, any[]> = {};
               logs.forEach((log: any) => {
-                const dateKey = log.processedAt ? new Date(log.processedAt).toISOString().split('T')[0] : 'unknown';
+                const dateKey = log.processedAt ? getUsPaymentDateKey(log.processedAt) : 'unknown';
                 if (!grouped[dateKey]) grouped[dateKey] = [];
                 grouped[dateKey].push(log);
               });
               const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
 
               const getDateLabel = (dateKey: string) => {
-                if (dateKey === 'unknown') return 'Unknown Date';
-                if (dateKey === todayStr) return 'Today';
-                if (dateKey === yesterdayStr) return 'Yesterday';
-                const parsed = new Date(dateKey + 'T00:00:00');
-                if (isNaN(parsed.getTime())) return 'Unknown Date';
-                return parsed.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                return getUsRelativeDateLabel(dateKey, today);
               };
 
               const getProcessorLabel = (processor: string) => {
