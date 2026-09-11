@@ -715,6 +715,38 @@ test('updates an existing account while preserving import payment fields', async
   }]);
 });
 
+test('DMP imports place accounts in the folder matching their status', async () => {
+  const updates: any[] = [];
+  const createdAccounts: any[] = [];
+  const fakeStorage = {
+    getAccountsByTenant: async () => [{
+      id: 'existing-account',
+      filenumber: 'existing-file',
+      status: 'active',
+      creditor: 'Existing creditor',
+    }],
+    getFoldersByTenant: async () => [
+      { id: 'newbiz-folder', name: 'New Biz' },
+      { id: 'active-folder', name: 'Active' },
+    ],
+    updateAccount: async (id: string, values: any) => updates.push({ id, values }),
+    getConsumerByEmailAndTenant: async () => null,
+    getConsumerByPhoneAndTenant: async () => null,
+    findConsumersByNameAndTenant: async () => [],
+    createConsumer: async () => ({ id: 'consumer-1' }),
+    createAccount: async (values: any) => createdAccounts.push(values),
+  };
+
+  const result = await importDmpAccounts(fakeStorage, 'tenant-1', [
+    { filenumber: 'existing-file', status: 'NEWBIZ' },
+    { filenumber: 'new-file', status: 'new-biz' },
+  ], 'fallback-folder');
+
+  assert.deepEqual(result, { imported: 1, updated: 1, skipped: 0, errors: [] });
+  assert.equal(updates[0].values.folderId, 'newbiz-folder');
+  assert.equal(createdAccounts[0].folderId, 'newbiz-folder');
+});
+
 test('DMP imports never update an account based only on a colliding Chain account number', async () => {
   const createdAccounts: any[] = [];
   const updatedAccounts: any[] = [];

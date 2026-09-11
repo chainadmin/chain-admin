@@ -1,5 +1,6 @@
 type ImportStorage = {
   getAccountsByTenant(tenantId: string): Promise<any[]>;
+  getFoldersByTenant?(tenantId: string): Promise<any[]>;
   updateAccount(id: string, updates: any): Promise<any>;
   updateConsumer?(id: string, updates: any): Promise<any>;
   getConsumerByEmailAndTenant(email: string, tenantId: string): Promise<any>;
@@ -8,6 +9,12 @@ type ImportStorage = {
   createConsumer(consumer: any): Promise<any>;
   createAccount(account: any): Promise<any>;
 };
+
+function normalizeFolderStatus(value: unknown): string {
+  return typeof value === 'string'
+    ? value.trim().toLocaleLowerCase().replace(/[^a-z0-9]+/g, '')
+    : '';
+}
 
 type DmpPaymentSyncStorage = Pick<ImportStorage, 'getAccountsByTenant' | 'updateAccount'>;
 
@@ -121,6 +128,16 @@ export async function importDmpAccounts(
   };
   const existingAccounts = await storage.getAccountsByTenant(tenantId);
   const createMissing = options.createMissing ?? true;
+  const tenantFolders = storage.getFoldersByTenant
+    ? await storage.getFoldersByTenant(tenantId)
+    : [];
+  const foldersByStatus = new Map<string, string>();
+  for (const folder of tenantFolders) {
+    const normalizedName = normalizeFolderStatus(folder?.name);
+    if (normalizedName && typeof folder?.id === 'string' && !foldersByStatus.has(normalizedName)) {
+      foldersByStatus.set(normalizedName, folder.id);
+    }
+  }
 
   for (const dmpAccount of dmpAccounts) {
     try {
@@ -136,6 +153,7 @@ export async function importDmpAccounts(
       // A DMP file number is the provider-owned identity. Chain account
       // numbers can collide and must never be used to select an update target.
       const existing = existingAccounts.find(account => account.filenumber === filenumber);
+      const statusFolderId = foldersByStatus.get(normalizeFolderStatus(dmpAccount.status));
 
       if (existing) {
         await storage.updateAccount(existing.id, {
@@ -144,6 +162,7 @@ export async function importDmpAccounts(
           originalBalanceCents: dmpAccount.originalBalance ?? existing.originalBalanceCents ?? dmpAccount.balance ?? 0,
           status: dmpAccount.status || existing.status,
           creditor: dmpAccount.creditorName || existing.creditor,
+          ...(statusFolderId ? { folderId: statusFolderId } : {}),
           additionalData: {
             ...(existing.additionalData || {}),
             dmpSource: 'dmp',
@@ -252,7 +271,7 @@ export async function importDmpAccounts(
         originalBalanceCents: dmpAccount.originalBalance ?? dmpAccount.balance ?? 0,
         creditor: dmpAccount.creditorName || 'Unknown Creditor',
         status: dmpAccount.status || 'active',
-        folderId: folderId || null,
+        folderId: statusFolderId || folderId || null,
         additionalData: {
           dmpSource: 'dmp',
           dmpClientName: dmpAccount.clientName || null,
