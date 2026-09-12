@@ -25,6 +25,34 @@ export const chiamoServiceConfigurations = pgTable('chiamo_service_configuration
   readinessStatus: text('readiness_status').default('NOT_READY').notNull(),
   providerNotes: text('provider_notes'), internalNotes: text('internal_notes'), invitationSentAt: timestamp('invitation_sent_at'), loginConfirmedAt: timestamp('login_confirmed_at'), updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
+/**
+ * Company-requested, Global-Admin-approved add-on that unlocks the automatic
+ * Local Presence caller-ID bucket list (see localPresenceCallerIdEnabled on
+ * voipPhoneNumbers). Approval adds a recurring monthly charge to the
+ * tenant's chiamoSubscriptions.customCharges; the company must explicitly
+ * agree to that charge (agreedAt/agreedByName) before the request can be
+ * submitted for review.
+ */
+export const CALLER_ID_BUCKET_ADDON_CHARGE_NAME = 'Local Presence Caller ID Bucket List';
+export const CALLER_ID_BUCKET_ADDON_DEFAULT_PRICE_CENTS = 4000;
+export const chiamoCallerIdBucketAddons = pgTable('chiamo_caller_id_bucket_addons', {
+  tenantId: uuid('tenant_id').primaryKey().references(() => tenants.id, { onDelete: 'cascade' }),
+  status: text('status', { enum: ['REQUESTED', 'APPROVED', 'DENIED', 'CANCELLED'] }).notNull().default('REQUESTED'),
+  monthlyPriceCents: integer('monthly_price_cents').notNull().default(CALLER_ID_BUCKET_ADDON_DEFAULT_PRICE_CENTS),
+  requestedAt: timestamp('requested_at').defaultNow().notNull(),
+  requestedBy: text('requested_by').notNull(),
+  agreedAt: timestamp('agreed_at').notNull(),
+  agreedByName: text('agreed_by_name').notNull(),
+  approvedAt: timestamp('approved_at'),
+  approvedBy: text('approved_by'),
+  deniedAt: timestamp('denied_at'),
+  deniedBy: text('denied_by'),
+  deniedReason: text('denied_reason'),
+  cancelledAt: timestamp('cancelled_at'),
+  cancelledBy: text('cancelled_by'),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 export const chiamoUsageSettings = pgTable('chiamo_usage_settings', {
   id: integer('id').primaryKey().default(1), elevatedMinutes: integer('elevated_minutes').default(3000).notNull(), highMinutes: integer('high_minutes').default(6000).notNull(), reviewMinutes: integer('review_minutes').default(10000).notNull(), voiceCostPerMinuteMicros: integer('voice_cost_per_minute_micros').default(14000).notNull(), numberCostCents: integer('number_cost_cents').default(115).notNull(), recordingCostPerMinuteMicros: integer('recording_cost_per_minute_micros').default(2500).notNull(), updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

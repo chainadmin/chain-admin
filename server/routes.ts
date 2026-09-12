@@ -100,7 +100,14 @@ import { resolveChiamoBaseUrl } from "./chiamoOnboarding";
 import { CHIAMO_SUPPORT_EMAIL } from "@shared/chiamo";
 import { createOutboundCallPreparationHandler, isUnsupportedPrivateSelection } from "./outboundCallPreparation";
 import { resolveNanpAreaCodeState } from "./areaCodeGeography";
-import { chiamoLeads, chiamoServiceConfigurations, chiamoSubscriptions } from "@shared/chiamo-schema";
+import { chiamoLeads, chiamoServiceConfigurations, chiamoSubscriptions, chiamoCallerIdBucketAddons, CALLER_ID_BUCKET_ADDON_DEFAULT_PRICE_CENTS } from "@shared/chiamo-schema";
+import {
+  callerIdBucketFeatureAllowed,
+  CallerIdBucketAddonRequestError,
+  validateCallerIdBucketAddonRequest,
+  withCallerIdBucketAddonCharge,
+  withoutCallerIdBucketAddonCharge,
+} from "./callerIdBucketAddon";
 import { hashPasswordResetToken, isChainActivationReset, passwordResetProduct } from "./passwordResetPolicy";
 import { beginReconnect, classifyRetainedCallback, hashReconnectToken, isDefiniteProviderRejection, isIdempotentCancelState, reconcilePreparedRetention, reconnectTokenSchema } from "./voiceRetainedCallLifecycle";
 import {
@@ -27058,6 +27065,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         settings,
         voicemails,
         communicationsInventory,
+        callerIdBucketAddons,
       ] = await Promise.all([
         db.select({ id: tenants.id, name: tenants.name, twilioAccountSid: tenants.twilioAccountSid, twilioSubaccountStatus: tenants.twilioSubaccountStatus, twilioPhoneNumber: tenants.twilioPhoneNumber }).from(tenants),
         db.select().from(localPresenceRequests).orderBy(desc(localPresenceRequests.requestedAt)),
@@ -27073,6 +27081,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           recording: sql<number>`count(*) filter (where ${voipVoicemails.status} = 'RECORDING')::int`,
         }).from(voipVoicemails).groupBy(voipVoicemails.tenantId),
         getAdminCommunicationsInventory(),
+        db.select().from(chiamoCallerIdBucketAddons).orderBy(desc(chiamoCallerIdBucketAddons.requestedAt)),
       ]);
       const duplicateSids = companies.filter(c => c.twilioAccountSid).filter((c, i, all) => all.findIndex(x => x.twilioAccountSid === c.twilioAccountSid) !== i).map(c => c.twilioAccountSid);
       const providerNumbers = communicationsInventory.provider.accounts.flatMap(account =>
@@ -27106,6 +27115,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ambiguous: companies.filter(c => duplicateSids.includes(c.twilioAccountSid)),
           duplicateSids,
         },
+        callerIdBucketAddons,
       });
     } catch (error) {
       console.error('Failed to load Global Admin communications data:', error);
@@ -27113,6 +27123,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
         message: 'Communications data could not be loaded. Existing provider and company records were not changed.',
         code: 'COMMUNICATIONS_DATA_UNAVAILABLE',
       });
+    }
+  });
+
+  // Local Presence Caller ID Bucket List add-on: Global Admin approve/deny/revoke.
+  // Approval and revocation keep the tenant's chiamoSubscriptions.customCharges
+  // in sync with the $40/mo recurring line item, so billing always reflects
+  // the current approval state.
+  app.post('/api/admin/communications/caller-id-bucket-addon/:tenantId/approve', isPlatformAdmin, async (req, res) => {
+    try {
+      const { tenantId } = req.params;
+      const [addon] = await db.select().from(chiamoCallerIdBucketAddons).where(eq(chiamoCallerIdBucketAddons.tenantId, tenantId)).limit(1);
+      if (!addon) return res.status(404).json({ message: 'No request found for this company' });
+      const [subscription] = await db.select().from(chiamoSubscriptions).where(eq(chiamoSubscriptions.tenantId, tenantId)).limit(1);
+      if (!subscription) return res.status(409).json({ message: 'This company has no Chiamo subscription to bill the add-on against' });
+      const adminId = (req as any).user?.email || (req as any).user?.username || 'global-admin';
+      const now = new Date();
+      await db.update(chiamoSubscriptions).set({
+        customCharges: withCallerIdBucketAddonCharge((subscription.customCharges as any) || [], addon.monthlyPriceCents),
+        updatedAt: now,
+      }).where(eq(chiamoSubscriptions.tenantId, tenantId));
+      const [updated] = await db.update(chiamoCallerIdBucketAddons).set({
+        status: 'APPROVED', approvedAt: now, approvedBy: adminId,
+        deniedAt: null, deniedBy: null, deniedReason: null, cancelledAt: null, cancelledBy: null,
+        updatedAt: now,
+      }).where(eq(chiamoCallerIdBucketAddons.tenantId, tenantId)).returning();
+      res.json(updated);
+    } catch (error) {
+      console.error('Error approving caller ID bucket add-on:', error);
+      res.status(500).json({ message: 'Failed to approve request' });
+    }
+  });
+
+  app.post('/api/admin/communications/caller-id-bucket-addon/:tenantId/deny', isPlatformAdmin, async (req, res) => {
+    try {
+      const { tenantId } = req.params;
+      const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim().slice(0, 2000) : null;
+      const adminId = (req as any).user?.email || (req as any).user?.username || 'global-admin';
+      const now = new Date();
+      const [updated] = await db.update(chiamoCallerIdBucketAddons).set({
+        status: 'DENIED', deniedAt: now, deniedBy: adminId, deniedReason: reason,
+        approvedAt: null, approvedBy: null, cancelledAt: null, cancelledBy: null,
+        updatedAt: now,
+      }).where(eq(chiamoCallerIdBucketAddons.tenantId, tenantId)).returning();
+      if (!updated) return res.status(404).json({ message: 'No request found for this company' });
+      const [subscription] = await db.select().from(chiamoSubscriptions).where(eq(chiamoSubscriptions.tenantId, tenantId)).limit(1);
+      if (subscription) {
+        await db.update(chiamoSubscriptions).set({
+          customCharges: withoutCallerIdBucketAddonCharge((subscription.customCharges as any) || []),
+          updatedAt: now,
+        }).where(eq(chiamoSubscriptions.tenantId, tenantId));
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error('Error denying caller ID bucket add-on:', error);
+      res.status(500).json({ message: 'Failed to deny request' });
+    }
+  });
+
+  app.post('/api/admin/communications/caller-id-bucket-addon/:tenantId/revoke', isPlatformAdmin, async (req, res) => {
+    try {
+      const { tenantId } = req.params;
+      const adminId = (req as any).user?.email || (req as any).user?.username || 'global-admin';
+      const now = new Date();
+      const [updated] = await db.update(chiamoCallerIdBucketAddons).set({
+        status: 'CANCELLED', cancelledAt: now, cancelledBy: adminId, updatedAt: now,
+      }).where(and(eq(chiamoCallerIdBucketAddons.tenantId, tenantId), eq(chiamoCallerIdBucketAddons.status, 'APPROVED'))).returning();
+      if (!updated) return res.status(404).json({ message: 'No approved add-on found for this company' });
+      const [subscription] = await db.select().from(chiamoSubscriptions).where(eq(chiamoSubscriptions.tenantId, tenantId)).limit(1);
+      if (subscription) {
+        await db.update(chiamoSubscriptions).set({
+          customCharges: withoutCallerIdBucketAddonCharge((subscription.customCharges as any) || []),
+          updatedAt: now,
+        }).where(eq(chiamoSubscriptions.tenantId, tenantId));
+      }
+      // Turn off every number's toggle so the bucket list starts clean if this
+      // company is ever re-approved later.
+      await db.update(voipPhoneNumbers).set({ localPresenceCallerIdEnabled: false, updatedAt: now })
+        .where(and(eq(voipPhoneNumbers.tenantId, tenantId), eq(voipPhoneNumbers.localPresenceCallerIdEnabled, true)));
+      res.json(updated);
+    } catch (error) {
+      console.error('Error revoking caller ID bucket add-on:', error);
+      res.status(500).json({ message: 'Failed to revoke add-on' });
     }
   });
 
@@ -27684,6 +27776,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (existing?.numberType !== 'LOCAL_PRESENCE') {
           return res.status(400).json({ message: 'Only a local-area-code number can be added to the caller-ID bucket list' });
         }
+        const [addon] = await db.select({ status: chiamoCallerIdBucketAddons.status })
+          .from(chiamoCallerIdBucketAddons).where(eq(chiamoCallerIdBucketAddons.tenantId, user.tenantId)).limit(1);
+        if (!callerIdBucketFeatureAllowed(addon?.status as any)) {
+          return res.status(403).json({
+            code: 'CALLER_ID_BUCKET_ADDON_NOT_APPROVED',
+            message: 'The Local Presence Caller ID Bucket List add-on must be requested and approved by Global Admin before numbers can be added.',
+          });
+        }
       }
 
       // If setting as primary, unset existing primary
@@ -27706,6 +27806,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating phone number:", error);
       res.status(500).json({ message: "Failed to update phone number" });
+    }
+  });
+
+  // Local Presence Caller ID Bucket List add-on: company-side request/status
+  app.get('/api/voip/caller-id-bucket-addon', authenticateUser, async (req, res) => {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ message: "Unauthorized" });
+    const [addon] = await db.select().from(chiamoCallerIdBucketAddons)
+      .where(eq(chiamoCallerIdBucketAddons.tenantId, user.tenantId)).limit(1);
+    res.json(addon || null);
+  });
+
+  app.post('/api/voip/caller-id-bucket-addon/request', authenticateUser, requireOwner, async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) return res.status(401).json({ message: "Unauthorized" });
+      const [existing] = await db.select({ status: chiamoCallerIdBucketAddons.status })
+        .from(chiamoCallerIdBucketAddons).where(eq(chiamoCallerIdBucketAddons.tenantId, user.tenantId)).limit(1);
+      validateCallerIdBucketAddonRequest({ agreed: req.body?.agreed, currentStatus: existing?.status as any });
+      const requestedBy = (user as any).username || (user as any).email || user.id;
+      const now = new Date();
+      const [saved] = await db.insert(chiamoCallerIdBucketAddons).values({
+        tenantId: user.tenantId,
+        status: 'REQUESTED',
+        monthlyPriceCents: CALLER_ID_BUCKET_ADDON_DEFAULT_PRICE_CENTS,
+        requestedAt: now,
+        requestedBy,
+        agreedAt: now,
+        agreedByName: requestedBy,
+        approvedAt: null, approvedBy: null, deniedAt: null, deniedBy: null, deniedReason: null, cancelledAt: null, cancelledBy: null,
+        updatedAt: now,
+      }).onConflictDoUpdate({
+        target: chiamoCallerIdBucketAddons.tenantId,
+        set: {
+          status: 'REQUESTED', requestedAt: now, requestedBy, agreedAt: now, agreedByName: requestedBy,
+          approvedAt: null, approvedBy: null, deniedAt: null, deniedBy: null, deniedReason: null, cancelledAt: null, cancelledBy: null,
+          updatedAt: now,
+        },
+      }).returning();
+      res.status(201).json(saved);
+    } catch (error) {
+      if (error instanceof CallerIdBucketAddonRequestError) {
+        return res.status(error.status).json({ code: error.code, message: error.message });
+      }
+      console.error("Error requesting caller ID bucket add-on:", error);
+      res.status(500).json({ message: "Failed to submit request" });
     }
   });
 
@@ -28234,7 +28380,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // state when withheld caller ID cannot be provided.
   app.post('/api/voip/call', authenticateUser, createOutboundCallPreparationHandler({
     getCurrentUser,
-    getNumbers: tenantId => voipStorage.getVoipPhoneNumbersByTenant(tenantId) as any,
+    getNumbers: async tenantId => {
+      const numbers = await voipStorage.getVoipPhoneNumbersByTenant(tenantId);
+      // The bucket caller-ID feature only works once Global Admin has
+      // approved the paid add-on for this tenant — a per-number toggle left
+      // on from before a cancellation/denial must never keep working.
+      const [addon] = await db.select({ status: chiamoCallerIdBucketAddons.status })
+        .from(chiamoCallerIdBucketAddons).where(eq(chiamoCallerIdBucketAddons.tenantId, tenantId)).limit(1);
+      if (!callerIdBucketFeatureAllowed(addon?.status as any)) {
+        return numbers.map(number => ({ ...number, localPresenceCallerIdEnabled: false })) as any;
+      }
+      return numbers as any;
+    },
     getPrivacyLine: tenantId => voipStorage.getActivePrivacyLine(tenantId) as any,
     consumerBelongsToTenant: async (consumerId, tenantId) => {
       const [owned] = await db.select({ id: consumers.id }).from(consumers)

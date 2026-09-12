@@ -2924,6 +2924,25 @@ export async function runMigrations() {
     await client.query(`
       ALTER TABLE voip_phone_numbers ADD COLUMN IF NOT EXISTS local_presence_caller_id_enabled BOOLEAN NOT NULL DEFAULT false;
     `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS chiamo_caller_id_bucket_addons (
+        tenant_id UUID PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+        status TEXT NOT NULL DEFAULT 'REQUESTED' CHECK (status IN ('REQUESTED','APPROVED','DENIED','CANCELLED')),
+        monthly_price_cents INTEGER NOT NULL DEFAULT 4000,
+        requested_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        requested_by TEXT NOT NULL,
+        agreed_at TIMESTAMP NOT NULL,
+        agreed_by_name TEXT NOT NULL,
+        approved_at TIMESTAMP,
+        approved_by TEXT,
+        denied_at TIMESTAMP,
+        denied_by TEXT,
+        denied_reason TEXT,
+        cancelled_at TIMESTAMP,
+        cancelled_by TEXT,
+        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
     console.log('✅ Database migrations completed successfully');
   } catch (error: any) {
     if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
