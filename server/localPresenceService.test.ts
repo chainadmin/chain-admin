@@ -36,19 +36,20 @@ test('downgrades require release review and never imply automatic release', () =
 
 const numbers: DialingNumber[] = [
   { id: 'primary', tenantId: 'a', phoneNumber: '+17165550100', areaCode: '716', state: 'NY', numberType: 'PRIMARY', isActive: true, isPrimary: true, status: 'ACTIVE' },
-  { id: 'sf', tenantId: 'a', phoneNumber: '+14155550100', areaCode: '415', state: 'CA', numberType: 'LOCAL_PRESENCE', isActive: true, status: 'ACTIVE' },
-  { id: 'la-overlay', tenantId: 'a', phoneNumber: '+14245550100', areaCode: '424', state: null, numberType: 'LOCAL_PRESENCE', isActive: true, status: 'ACTIVE' },
-  { id: 'rochester', tenantId: 'a', phoneNumber: '+15855550100', areaCode: '585', state: 'NY', numberType: 'LOCAL_PRESENCE', isActive: true, status: 'ACTIVE' },
+  { id: 'sf', tenantId: 'a', phoneNumber: '+14155550100', areaCode: '415', state: 'CA', numberType: 'LOCAL_PRESENCE', isActive: true, status: 'ACTIVE', localPresenceCallerIdEnabled: true },
+  { id: 'la-overlay', tenantId: 'a', phoneNumber: '+14245550100', areaCode: '424', state: null, numberType: 'LOCAL_PRESENCE', isActive: true, status: 'ACTIVE', localPresenceCallerIdEnabled: true },
+  { id: 'rochester', tenantId: 'a', phoneNumber: '+15855550100', areaCode: '585', state: 'NY', numberType: 'LOCAL_PRESENCE', isActive: true, status: 'ACTIVE', localPresenceCallerIdEnabled: true },
   { id: 'direct-la', tenantId: 'a', phoneNumber: '+12135550100', areaCode: '213', state: 'CA', numberType: 'PORTED', isActive: true, status: 'ACTIVE' },
   { id: 'toll-free', tenantId: 'a', phoneNumber: '+18005550100', areaCode: '800', numberType: 'TOLL_FREE', isActive: true, status: 'ACTIVE' },
-  { id: 'inactive-exact', tenantId: 'a', phoneNumber: '+15105550100', areaCode: '510', state: 'CA', numberType: 'LOCAL_PRESENCE', isActive: false, status: 'ACTIVE' },
-  { id: 'wrong-tenant', tenantId: 'b', phoneNumber: '+15105550999', areaCode: '510', state: 'CA', numberType: 'LOCAL_PRESENCE', isActive: true, status: 'ACTIVE' },
+  { id: 'inactive-exact', tenantId: 'a', phoneNumber: '+15105550100', areaCode: '510', state: 'CA', numberType: 'LOCAL_PRESENCE', isActive: false, status: 'ACTIVE', localPresenceCallerIdEnabled: true },
+  { id: 'wrong-tenant', tenantId: 'b', phoneNumber: '+15105550999', areaCode: '510', state: 'CA', numberType: 'LOCAL_PRESENCE', isActive: true, status: 'ACTIVE', localPresenceCallerIdEnabled: true },
+  { id: 'not-opted-in', tenantId: 'a', phoneNumber: '+19195550100', areaCode: '919', state: 'NC', numberType: 'LOCAL_PRESENCE', isActive: true, status: 'ACTIVE', localPresenceCallerIdEnabled: false },
 ];
 
 const states: Record<string, string> = {
   '213': 'CA', '310': 'CA', '415': 'CA', '424': 'CA', '510': 'CA',
   '212': 'NY', '585': 'NY', '716': 'NY',
-  '305': 'FL',
+  '305': 'FL', '919': 'NC',
 };
 const resolveState = (areaCode: string) => states[areaCode];
 
@@ -114,6 +115,21 @@ test('an ordinary call with no caller-ID pick automatically uses a matching buck
   const byState = selectDialingNumber({ tenantId: 'a', dialString: '2125551212', numbers, areaCodeToState: resolveState });
   assert.equal(byState.callerId, '+15855550100');
   assert.equal(byState.selectionReason, 'LOCAL_PRESENCE_STATE');
+});
+
+test('a LOCAL_PRESENCE number never participates in bucket matching until its owner opts it into the bucket list', () => {
+  // Exact area-code match exists ('not-opted-in' owns 919), but it was never
+  // selected into the bucket list, so it must never be used automatically...
+  const automatic = selectDialingNumber({ tenantId: 'a', dialString: '9195551212', numbers, areaCodeToState: resolveState });
+  assert.notEqual(automatic.callerId, '+19195550100');
+  assert.equal(automatic.selectionReason, 'PRIMARY_FALLBACK');
+
+  // ...nor when explicitly requested via the Local Presence dial prefix: an
+  // un-opted-in number must not silently reveal itself as if it were bucket
+  // inventory, so this fails closed to the anonymous placeholder instead.
+  const explicit = selectDialingNumber({ tenantId: 'a', dialString: '819195551212', numbers, areaCodeToState: resolveState });
+  assert.equal(explicit.callerId, 'anonymous');
+  assert.equal(explicit.selectionReason, 'PRIVATE_FALLBACK');
 });
 
 test('an ordinary call with no bucket match and no caller-ID pick falls back to primary, not the anonymous placeholder', () => {

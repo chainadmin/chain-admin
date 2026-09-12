@@ -40,6 +40,13 @@ export type DialingNumber = {
   isActive: boolean | null;
   isPrimary?: boolean | null;
   status?: string | null;
+  /**
+   * Explicit owner opt-in. Owning a LOCAL_PRESENCE number is not by itself
+   * enough to make it a caller-ID bucket — the owner must have deliberately
+   * selected it into their bucket list before it participates in geographic
+   * caller-ID matching (automatic or explicitly requested).
+   */
+  localPresenceCallerIdEnabled?: boolean | null;
 };
 
 export type AreaCodeToStateResolver = (areaCode: string) => string | null | undefined;
@@ -125,10 +132,13 @@ export function selectDialingNumber(input: SelectDialingNumberInput): DialingDec
   const destinationState = input.areaCodeToState
     ? normalizedState(input.areaCodeToState(destinationAreaCode))
     : null;
-  // Only bucket inventory participates in geographic matching. In particular,
-  // a ported/direct or primary DID with the same area code does not
-  // masquerade as Local Presence inventory.
-  const buckets = ownedActive.filter(number => number.numberType === 'LOCAL_PRESENCE');
+  // Only bucket inventory participates in geographic matching: a LOCAL_PRESENCE
+  // number the owner has explicitly enabled for this. A ported/direct or
+  // primary DID with the same area code never masquerades as bucket
+  // inventory, and neither does a LOCAL_PRESENCE number the owner never opted
+  // into a bucket list.
+  const buckets = ownedActive.filter(number =>
+    number.numberType === 'LOCAL_PRESENCE' && number.localPresenceCallerIdEnabled === true);
   const hasExplicitSelection = input.selectedNumberId != null || input.selectedPhoneNumber != null;
 
   if (input.exactSelectedNumberId) {

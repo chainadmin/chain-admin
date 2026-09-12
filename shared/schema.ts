@@ -1349,6 +1349,11 @@ export const voipPhoneNumbers = pgTable("voip_phone_numbers", {
   capabilities: jsonb("capabilities").default(sql`'{"voice": true, "sms": false}'::jsonb`), // What this number can do
   isActive: boolean("is_active").default(true),
   isPrimary: boolean("is_primary").default(false), // Default outbound number when no area code match
+  // Explicit opt-in: a LOCAL_PRESENCE number only participates in automatic
+  // outbound caller-ID bucket matching (by area code, then by state) once the
+  // owner has deliberately selected it into their "bucket list" here. Simply
+  // owning an additional local number does not enable this on its own.
+  localPresenceCallerIdEnabled: boolean("local_presence_caller_id_enabled").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

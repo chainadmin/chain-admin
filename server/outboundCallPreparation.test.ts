@@ -146,7 +146,7 @@ test('missing normal company inventory is a clear conflict', async () => {
 test('an ordinary call with no caller-ID pick automatically shows a bucket number for that area, no special dial prefix needed', async () => {
   const nyBucket = {
     ...primary, id: 'ny-bucket', phoneNumber: '+15855550100', isPrimary: false,
-    numberType: 'LOCAL_PRESENCE' as const, areaCode: '585',
+    numberType: 'LOCAL_PRESENCE' as const, areaCode: '585', localPresenceCallerIdEnabled: true,
   };
   const boundary = makeBoundary([primary, nyBucket]);
   const response = await boundary.request({ toNumber: '5855551212' });
@@ -154,6 +154,19 @@ test('an ordinary call with no caller-ID pick automatically shows a bucket numbe
   assert.equal(response.status, 200);
   assert.equal(response.payload.fromNumber, nyBucket.phoneNumber);
   assert.equal(response.payload.selectionReason, 'LOCAL_PRESENCE_AREA_CODE');
+});
+
+test('a LOCAL_PRESENCE number the owner never added to their bucket list is never used automatically', async () => {
+  const notOptedIn = {
+    ...primary, id: 'not-opted-in', phoneNumber: '+15855550100', isPrimary: false,
+    numberType: 'LOCAL_PRESENCE' as const, areaCode: '585', localPresenceCallerIdEnabled: false,
+  };
+  const boundary = makeBoundary([primary, notOptedIn]);
+  const response = await boundary.request({ toNumber: '5855551212' });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.payload.fromNumber, primary.phoneNumber);
+  assert.equal(response.payload.selectionReason, 'PRIMARY_FALLBACK');
 });
 
 test('an ordinary call with no bucket match for the area falls back to primary, not the anonymous placeholder', async () => {

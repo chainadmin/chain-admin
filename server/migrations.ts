@@ -2921,6 +2921,9 @@ export async function runMigrations() {
       ALTER TABLE voip_tenant_settings ADD COLUMN IF NOT EXISTS inbound_voicemail_greeting_text TEXT;
       ALTER TABLE voip_tenant_settings ADD COLUMN IF NOT EXISTS inbound_voicemail_greeting_audio_url TEXT;
     `);
+    await client.query(`
+      ALTER TABLE voip_phone_numbers ADD COLUMN IF NOT EXISTS local_presence_caller_id_enabled BOOLEAN NOT NULL DEFAULT false;
+    `);
     console.log('✅ Database migrations completed successfully');
   } catch (error: any) {
     if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {

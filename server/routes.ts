@@ -27666,7 +27666,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { id } = req.params;
-      const { friendlyName, isPrimary, isActive, routingBucketId } = req.body;
+      const { friendlyName, isPrimary, isActive, routingBucketId, localPresenceCallerIdEnabled } = req.body;
       if (routingBucketId !== undefined && routingBucketId !== null && !(await voipStorage.getRoutingBucket(routingBucketId, user.tenantId))) {
         return res.status(400).json({ message: 'Routing bucket does not belong to this company' });
       }
@@ -27677,6 +27677,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
             code: 'PRIVACY_LINE_ROUTING_CONFLICT',
             message: 'The dedicated Privacy line cannot use ordinary routing buckets',
           });
+        }
+      }
+      if (localPresenceCallerIdEnabled === true) {
+        const existing = await voipStorage.getVoipPhoneNumberById(id, user.tenantId);
+        if (existing?.numberType !== 'LOCAL_PRESENCE') {
+          return res.status(400).json({ message: 'Only a local-area-code number can be added to the caller-ID bucket list' });
         }
       }
 
@@ -27693,6 +27699,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isPrimary,
         isActive,
         ...(routingBucketId !== undefined ? { routingBucketId } : {}),
+        ...(localPresenceCallerIdEnabled !== undefined ? { localPresenceCallerIdEnabled } : {}),
       });
 
       res.json(updated);
