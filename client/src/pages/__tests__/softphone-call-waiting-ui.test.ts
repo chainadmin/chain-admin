@@ -70,6 +70,10 @@ function renderWaiting(count: number, overrides: Record<string, unknown> = {}): 
     formatDuration: (value: number) => String(value),
     statusClass: () => "",
     onLogout() {},
+    ringVolume: 0.5,
+    onRingVolumeChange() {},
+    ringMuted: false,
+    onToggleRingMuted() {},
     ...overrides,
   }));
 }

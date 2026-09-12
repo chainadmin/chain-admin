@@ -54,12 +54,15 @@ export function buildVoicemailCompleteTwiML(): string {
 }
 
 export function buildInboundTwiML(route: InboundRoute): string {
-  // Direct voicemail deliberately bypasses the tenant-wide greeting.
+  // Direct voicemail deliberately bypasses the tenant-wide (pre-routing)
+  // greeting — route.greeting here is expected to already be the caller's
+  // dedicated voicemail greeting (privacy-line or main-line) when mode is
+  // VOICEMAIL, not the general inbound greeting.
   if (route.mode === 'VOICEMAIL') return buildVoicemailTwiML({
     bucketId: route.bucketId,
     callbackBase: route.callbackBase,
     privacy: route.privacy,
-    greeting: route.privacy ? route.greeting : undefined,
+    greeting: route.greeting,
   });
   const response = new twilio.twiml.VoiceResponse();
   if (route.greeting.enabled) {

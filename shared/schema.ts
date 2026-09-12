@@ -1359,6 +1359,13 @@ export const voipTenantSettings = pgTable("voip_tenant_settings", {
   inboundGreetingType: text("inbound_greeting_type", { enum: ['TEXT', 'AUDIO'] }),
   inboundGreetingText: text("inbound_greeting_text"),
   inboundGreetingAudioUrl: text("inbound_greeting_audio_url"),
+  // Played instead of the generic "Please leave a message after the tone."
+  // fallback when a main-line call reaches voicemail (direct-to-voicemail
+  // bucket, or no one answered). Distinct from inboundGreeting* above, which
+  // only plays before routing/ringing and is skipped for voicemail.
+  inboundVoicemailGreetingType: text("inbound_voicemail_greeting_type", { enum: ['TEXT', 'AUDIO'] }),
+  inboundVoicemailGreetingText: text("inbound_voicemail_greeting_text"),
+  inboundVoicemailGreetingAudioUrl: text("inbound_voicemail_greeting_audio_url"),
   privacyLinePhoneNumberId: uuid("privacy_line_phone_number_id").references(() => voipPhoneNumbers.id, { onDelete: "set null" }),
   privacyVoicemailGreetingType: text("privacy_voicemail_greeting_type", { enum: ['TEXT', 'AUDIO'] }),
   privacyVoicemailGreetingText: text("privacy_voicemail_greeting_text"),

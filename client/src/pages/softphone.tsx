@@ -38,6 +38,14 @@ import { buildSoftphoneDeviceOptions, canStartSoftphoneOutboundCall, scheduleSof
 import { completeOutboundAttempt, SoftphoneOutboundCallCoordinator, type AbortableAttempt } from "@/lib/softphone-outbound-call";
 import { ConnectPhoneWorkspace } from "@/components/softphone/ConnectPhoneWorkspace";
 import { privacyLineNumber, type PrivacyLineResponse } from "@/components/voip/privacy-line";
+import {
+  clampRingVolume,
+  readStoredRingMuted,
+  readStoredRingVolume,
+  RingtonePlayer,
+  writeStoredRingMuted,
+  writeStoredRingVolume,
+} from "@/lib/softphone-ringtone";
 
 interface VoipCallLog {
   id: string;
@@ -138,6 +146,8 @@ export default function SoftphonePage() {
   const [waitingCalls, setWaitingCalls] = useState<WaitingCall[]>([]);
   const [handoffCall, setHandoffCall] = useState<ProviderCall | null>(null);
   const [isCallTransitionPending, setIsCallTransitionPending] = useState(false);
+  const [ringVolume, setRingVolumeState] = useState(() => readStoredRingVolume(typeof window === "undefined" ? null : window.localStorage));
+  const [ringMuted, setRingMutedState] = useState(() => readStoredRingMuted(typeof window === "undefined" ? null : window.localStorage));
 
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
   const deviceRef = useRef<Device | null>(null);
@@ -147,6 +157,35 @@ export default function SoftphonePage() {
   const lifecycleRef = useRef(new SoftphoneCallController());
   const retentionLockRef = useRef(false);
   const dialLockRef = useRef(false);
+  const ringtoneRef = useRef<RingtonePlayer | null>(null);
+  if (!ringtoneRef.current) ringtoneRef.current = new RingtonePlayer();
+
+  const setRingVolume = (value: number) => {
+    const clamped = clampRingVolume(value);
+    setRingVolumeState(clamped);
+    writeStoredRingVolume(window.localStorage, clamped);
+  };
+  const toggleRingMuted = () => {
+    setRingMutedState((previous) => {
+      const next = !previous;
+      writeStoredRingMuted(window.localStorage, next);
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    ringtoneRef.current?.setVolume(ringVolume);
+  }, [ringVolume]);
+
+  useEffect(() => {
+    // Ring for a waiting call whether it's the only call or arrives while another
+    // call is already active (call waiting) — mirrors allowIncomingWhileBusy above.
+    const shouldRing = waitingCalls.length > 0 && !ringMuted;
+    if (shouldRing) ringtoneRef.current?.start();
+    else ringtoneRef.current?.stop();
+  }, [waitingCalls.length, ringMuted]);
+
+  useEffect(() => () => ringtoneRef.current?.stop(), []);
   const outboundRef = useRef(new SoftphoneOutboundCallCoordinator());
 
   const setStableStatus = (message: string) => setInlineStatus((previous) => dedupeStatus(previous, message));
@@ -525,6 +564,10 @@ export default function SoftphonePage() {
       }
       lifecycleRef.current.receiveIncoming(call as unknown as ProviderCall);
     });
+
+    // Replaced by our own volume-controlled ringtone (see ringtoneRef); the SDK's
+    // built-in incoming sound otherwise plays at fixed, un-adjustable volume.
+    device.audio?.incoming(false);
 
     deviceRef.current = device;
     deviceTokenRef.current = voiceToken.token;
@@ -1018,6 +1061,10 @@ export default function SoftphonePage() {
     formatDuration={formatDuration}
     statusClass={getStatusColor}
     onLogout={handleLogout}
+    ringVolume={ringVolume}
+    onRingVolumeChange={setRingVolume}
+    ringMuted={ringMuted}
+    onToggleRingMuted={toggleRingMuted}
   />;
   /* Legacy authenticated rendering retired in favor of ConnectPhoneWorkspace.
           <div className="flex items-center gap-3">

@@ -19,7 +19,9 @@ async function withVoiceClaim<T>(
     if (claimAttemptedAt) {
       const [service] = await tx.select().from(chiamoServiceConfigurations)
         .where(eq(chiamoServiceConfigurations.tenantId, tenantId)).for("update").limit(1);
-      if (!tenant.chiamoConnectEnabled || tenant.chainCoreEnabled
+      // Chiamo must own this tenant's voice provisioning, but Chain core may also
+      // be enabled at the same time for "dual" customers — see lockChiamoOnlyTenant.
+      if (!tenant.chiamoConnectEnabled
         || service?.voiceProviderStatus !== "IN_PROGRESS"
         || service.voiceProviderAttemptedAt?.getTime() !== claimAttemptedAt.getTime()
         || Date.now() + TWILIO_PROVIDER_TIMEOUT_MS >= claimAttemptedAt.getTime() + VOICE_ONBOARDING_CLAIM_MS) {

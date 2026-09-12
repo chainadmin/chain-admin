@@ -126,6 +126,7 @@ interface VoipCallLog {
   duration: number | null;
   startedAt: string | null;
   createdAt: string;
+  isPrivacyInbound?: boolean;
 }
 
 const formatDuration = (seconds: number) => {
@@ -215,7 +216,9 @@ export default function PhonesPage() {
     const inbound = callsInPeriod.filter((call) => call.direction === 'inbound');
     const outbound = callsInPeriod.filter((call) => call.direction === 'outbound');
     const completed = callsInPeriod.filter((call) => call.status === 'completed');
-    const missed = inbound.filter((call) => ['busy', 'no-answer', 'failed', 'canceled'].includes(call.status || ''));
+    // A privacy-line call that goes unanswered isn't a "missed call" on the
+    // business line — it has its own separate voicemail flow.
+    const missed = inbound.filter((call) => !call.isPrivacyInbound && ['busy', 'no-answer', 'failed', 'canceled'].includes(call.status || ''));
     const totalDuration = completed.reduce((total, call) => total + (call.duration || 0), 0);
 
     const dailyMap = new Map<string, { label: string; inbound: number; outbound: number }>();

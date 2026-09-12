@@ -28,12 +28,20 @@ export type PhoneEntitlementStatus = "ACTIVE" | "SUSPENDED" | "CANCELLED";
 // both database and transaction expose this query surface.
 type DbSession = any;
 
-/** Product ownership is checked under the same lock as every Chiamo mutation. */
+/**
+ * Product ownership is checked under the same lock as every Chiamo mutation.
+ * This only requires Chiamo itself to be enabled for the tenant — a tenant may
+ * also have Chain core enabled at the same time ("dual" customers). Financial
+ * double-billing is prevented separately and unconditionally by the
+ * `billingOwner` exclusivity enforced in setChainPhoneEntitlement/
+ * canUseLegacyChainPhoneControls, so this lock does not need to (and must not)
+ * require Chain core to be off.
+ */
 export async function lockChiamoOnlyTenant(tx: DbSession, tenantId: string) {
   const [tenant] = await tx.select().from(tenants)
     .where(eq(tenants.id, tenantId)).for("update").limit(1);
-  if (!tenant || tenant.chiamoConnectEnabled !== true || tenant.chainCoreEnabled !== false) {
-    throw Object.assign(new Error("This operation requires a Chiamo-only customer."), {
+  if (!tenant || tenant.chiamoConnectEnabled !== true) {
+    throw Object.assign(new Error("This operation requires a Chiamo customer."), {
       status: 409, code: "CHIAMO_CUSTOMER_REQUIRED",
     });
   }

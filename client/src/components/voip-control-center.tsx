@@ -14,16 +14,16 @@ type VoiceNumber = { id: string; phoneNumber: string; friendlyName?: string; buc
 type TeamMember = { id: string; firstName?: string | null; lastName?: string | null; username?: string; email: string; isActive?: boolean; voipAccess?: boolean };
 type Media = { key: string; name: string; previewUrl: string };
 type MediaCatalog = { defaultKey: string; tracks: Media[] };
-type VoiceSettings = { inboundGreetingEnabled: boolean; inboundGreetingType: "TEXT" | "AUDIO" | null; inboundGreetingText?: string | null; inboundGreetingAudioUrl?: string | null; inboundGreetingPreviewUrl?: string | null; holdMusicKey: string; parkMusicKey: string };
+type VoiceSettings = { inboundGreetingEnabled: boolean; inboundGreetingType: "TEXT" | "AUDIO" | null; inboundGreetingText?: string | null; inboundGreetingAudioUrl?: string | null; inboundGreetingPreviewUrl?: string | null; inboundVoicemailGreetingType?: "TEXT" | "AUDIO" | null; inboundVoicemailGreetingText?: string | null; inboundVoicemailGreetingAudioUrl?: string | null; inboundVoicemailGreetingPreviewUrl?: string | null; holdMusicKey: string; parkMusicKey: string };
 type VoiceMail = { id: string; fromNumber: string; toNumber: string; createdAt: string; duration: number; isRead: boolean; routingBucketId?: string | null; isPrivacy?: boolean; phoneNumberId?: string | null };
 
 const key = (path: string) => [path];
 const displayUser = (u: TeamMember) => [u.firstName, u.lastName].filter(Boolean).join(" ") || u.username || u.email;
 const duration = (seconds?: number) => seconds ? `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}` : "—";
 
-export function VoipControlCenter({ tone = "chain" }: { tone?: "chain" | "chiamo" }) {
+export function VoipControlCenter({ tone = "chain", initialSection = "routing" }: { tone?: "chain" | "chiamo"; initialSection?: "routing" | "experience" | "voicemail" }) {
   const qc = useQueryClient();
-  const [section, setSection] = useState<"routing" | "experience" | "voicemail">("routing");
+  const [section, setSection] = useState<"routing" | "experience" | "voicemail">(initialSection);
   const [editing, setEditing] = useState<Bucket | null>(null);
   const [creating, setCreating] = useState(false);
   const settings = useQuery<VoiceSettings>({ queryKey: key("/api/voip/settings") });
@@ -40,12 +40,13 @@ export function VoipControlCenter({ tone = "chain" }: { tone?: "chain" | "chiamo
   const deleteMail = useMutation({ mutationFn: (id: string) => apiRequest("DELETE", `/api/voip/voicemail/${id}`), onSuccess: () => qc.invalidateQueries({ queryKey: key("/api/voip/voicemail") }) });
   const accent = tone === "chain" ? "bg-sky-500 hover:bg-sky-600" : "bg-emerald-600 hover:bg-emerald-700";
   const mediaList = useMemo(() => media.data?.tracks || [], [media.data]);
+  const unreadMail = useMemo(() => (mail.data || []).filter(m => !m.isRead).length, [mail.data]);
   const preview = (item?: Media) => { if (item?.previewUrl) new Audio(item.previewUrl).play(); };
   if ([settings, buckets, numbers, users, media, mail].some(q => q.isLoading)) return <div className="grid gap-4 md:grid-cols-3">{[1,2,3].map(i => <div key={i} className="h-32 animate-pulse rounded-2xl bg-slate-200/70" />)}</div>;
   if (buckets.isError || settings.isError) return <div className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-rose-900">Voice controls could not load. <Button variant="link" onClick={() => { buckets.refetch(); settings.refetch(); }}>Try again</Button></div>;
   return <div className="space-y-5">
     <div className="flex flex-wrap items-end justify-between gap-4"><div><p className={`text-xs font-black tracking-[.18em] ${tone === "chain" ? "text-sky-300" : "text-emerald-700"}`}>CALL CONTROL CENTER</p><h2 className={tone === "chain" ? "text-2xl font-bold text-white" : "text-2xl font-black"}>Every inbound path, visible.</h2><p className={tone === "chain" ? "mt-1 text-sm text-blue-100/60" : "mt-1 text-sm text-slate-500"}>Configure how callers are greeted, routed, and recovered when nobody answers.</p></div></div>
-    <div className={`flex w-full gap-1 rounded-xl p-1 ${tone === "chain" ? "bg-white/10" : "bg-slate-100"}`}>{([["routing","Routing"],["experience","Caller experience"],["voicemail","Voicemail inbox"]] as const).map(([id,label]) => <button key={id} onClick={() => setSection(id)} className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${section === id ? tone === "chain" ? "bg-sky-500 text-white" : "bg-white text-emerald-800 shadow-sm" : tone === "chain" ? "text-blue-100/70" : "text-slate-500"}`}>{label}</button>)}</div>
+    <div className={`flex w-full gap-1 rounded-xl p-1 ${tone === "chain" ? "bg-white/10" : "bg-slate-100"}`}>{([["routing","Routing"],["experience","Caller experience"],["voicemail","Voicemail inbox"]] as const).map(([id,label]) => <button key={id} onClick={() => setSection(id)} className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition ${section === id ? tone === "chain" ? "bg-sky-500 text-white" : "bg-white text-emerald-800 shadow-sm" : tone === "chain" ? "text-blue-100/70" : "text-slate-500"}`}>{label}{id === "voicemail" && unreadMail > 0 && <span className={`ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-bold ${section === id ? "bg-rose-600 text-white" : "bg-rose-500 text-white"}`}>{unreadMail}</span>}</button>)}</div>
     {section === "routing" && <Routing buckets={buckets.data || []} users={(users.data || []).filter(user => user.isActive !== false && user.voipAccess === true)} numbers={numbers.data || []} accent={accent} dark={tone === "chain"} assign={assign.mutate} remove={deleteBucket.mutate} editing={editing} setEditing={setEditing} creating={creating} setCreating={setCreating} />}
     {section === "experience" && <Experience settings={settings.data!} media={mediaList} accent={accent} dark={tone === "chain"} saving={saveSettings.isPending} save={saveSettings.mutate} preview={preview} />}
     {section === "voicemail" && <Inbox mail={mail.data || []} dark={tone === "chain"} update={updateMail.mutate} remove={deleteMail.mutate} />}
@@ -61,7 +62,79 @@ function Routing({ buckets, users, numbers, accent, dark, assign, remove, editin
 
 function BucketForm({ bucket, users, accent, onClose }: { bucket: Bucket | null; users: TeamMember[]; accent:string; onClose:()=>void }) { const qc=useQueryClient(); const [name,setName]=useState(bucket?.name || ""); const [mode,setMode]=useState<Bucket["mode"]>(bucket?.mode || "RING_TEAM"); const [members,setMembers]=useState<string[]>(bucket?.agentCredentialIds || []); const [ringTimeoutSeconds,setRingTimeoutSeconds]=useState(bucket?.ringTimeoutSeconds || 30); const mutation=useMutation({mutationFn:()=>apiRequest(bucket?"PATCH":"POST",bucket?`/api/voip/buckets/${bucket.id}`:"/api/voip/buckets",{name,mode,agentCredentialIds:mode==="RING_TEAM"?members:[],ringTimeoutSeconds,isActive:true}),onSuccess:()=>{qc.invalidateQueries({queryKey:key("/api/voip/buckets")});onClose();}}); return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4"><form onSubmit={e=>{e.preventDefault();mutation.mutate();}} className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl"><h3 className="text-xl font-bold">{bucket?"Edit":"New"} routing bucket</h3><Label className="mt-5 block">Bucket name<Input className="mt-2" value={name} onChange={e=>setName(e.target.value)} required placeholder="Customer care"/></Label><Label className="mt-4 block">Caller destination<select className="mt-2 h-10 w-full rounded-md border px-3" value={mode} onChange={e=>setMode(e.target.value as Bucket["mode"])}><option value="RING_TEAM">Ring a team</option><option value="VOICEMAIL">Direct to voicemail</option></select></Label>{mode==="RING_TEAM"&&<><div className="mt-5"><p className="text-sm font-semibold">Members who ring</p><div className="mt-2 max-h-36 space-y-2 overflow-auto rounded-lg border p-3">{users.map(u=><label className="flex items-center gap-2 text-sm" key={u.id}><input type="checkbox" checked={members.includes(u.id)} onChange={e=>setMembers(x=>e.target.checked?[...x,u.id]:x.filter(id=>id!==u.id))}/>{displayUser(u)}</label>)}</div></div><Label className="mt-4 block">Ring timeout (seconds)<Input className="mt-2" type="number" min={10} max={60} value={ringTimeoutSeconds} onChange={e=>setRingTimeoutSeconds(Number(e.target.value))}/></Label><p className="mt-2 text-xs text-slate-500">Unanswered team calls continue to voicemail after the ring timeout.</p></>}<div className="mt-6 flex justify-end gap-2"><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button className={accent} disabled={mutation.isPending}>{mutation.isPending?<Loader2 className="h-4 w-4 animate-spin"/>:"Save bucket"}</Button></div></form></div> }
 
-function Experience({settings,media,accent,dark,saving,save,preview}:{settings:VoiceSettings;media:Media[];accent:string;dark:boolean;saving:boolean;save:(x:VoiceSettings)=>void;preview:(x?:Media)=>void}){const [draft,setDraft]=useState(settings);const [uploadedPreviewUrl,setUploadedPreviewUrl]=useState(settings.inboundGreetingPreviewUrl||"");const [speechError,setSpeechError]=useState("");const panel=dark?"border-white/10 bg-white/5 text-white":"border-slate-200 bg-white";const choose=(field:"holdMusicKey"|"parkMusicKey",key:string)=>setDraft(d=>({...d,[field]:key}));const previewText=()=>{setSpeechError("");if(!draft.inboundGreetingText?.trim())return setSpeechError("Enter greeting text before previewing.");if(!("speechSynthesis" in window))return setSpeechError("Spoken preview is not supported in this browser.");window.speechSynthesis.cancel();window.speechSynthesis.speak(new SpeechSynthesisUtterance(draft.inboundGreetingText));}; return <div className="space-y-5"><PrivacyLineSettings dark={dark} accent={accent}/><section className={`rounded-2xl border p-5 ${panel}`}><div className="flex flex-wrap items-center justify-between gap-4"><div><h3 className="font-bold">Company inbound greeting</h3><p className={dark?"mt-1 max-w-2xl text-sm text-blue-100/60":"mt-1 max-w-2xl text-sm text-slate-500"}>Plays for office and primary calls, plus RING_TEAM bucket calls only. It does not play for direct voicemail buckets.</p></div><Switch checked={draft.inboundGreetingEnabled} onCheckedChange={v=>setDraft(d=>({...d,inboundGreetingEnabled:v,inboundGreetingType:v?(d.inboundGreetingType||"TEXT"):null}))}/></div>{draft.inboundGreetingEnabled&&<div className="mt-5"><div className="flex gap-2"><Button type="button" variant={draft.inboundGreetingType!=="AUDIO"?"default":"outline"} onClick={()=>setDraft(d=>({...d,inboundGreetingType:"TEXT"}))}>Typed greeting</Button><Button type="button" variant={draft.inboundGreetingType==="AUDIO"?"default":"outline"} onClick={()=>setDraft(d=>({...d,inboundGreetingType:"AUDIO"}))}>Recorded or uploaded audio</Button></div>{draft.inboundGreetingType==="AUDIO"?<GreetingAudioInput dark={dark} audioUrl={draft.inboundGreetingAudioUrl} previewUrl={uploadedPreviewUrl} onUploaded={(upload)=>{setUploadedPreviewUrl(upload.previewUrl);setDraft(d=>({...d,inboundGreetingType:"AUDIO",inboundGreetingAudioUrl:upload.audioUrl,inboundGreetingPreviewUrl:upload.previewUrl}));}}/>:<Label className="mt-4 block">Greeting text<textarea value={draft.inboundGreetingText||""} onChange={e=>setDraft(d=>({...d,inboundGreetingText:e.target.value}))} className="mt-2 min-h-24 w-full rounded-md border bg-transparent p-3" placeholder="Thank you for calling. Please stay on the line." /><Button type="button" className="mt-3" size="sm" variant="outline" onClick={previewText}><Play className="mr-2 h-3.5 w-3.5"/>Preview spoken greeting</Button>{speechError&&<span className="ml-3 text-xs text-rose-500">{speechError}</span>}</Label>}</div>}<Button className={`mt-5 ${accent}`} disabled={saving} onClick={()=>save(draft)}><Save className="mr-2 h-4 w-4"/>Save caller experience</Button></section><section className={`rounded-2xl border p-5 ${panel}`}><h3 className="font-bold">Approved audio catalog</h3><p className={dark?"mt-1 text-sm text-blue-100/60":"mt-1 text-sm text-slate-500"}>Use distinct selections for callers on hold and callers parked by your team.</p><div className="mt-5 grid gap-4 md:grid-cols-2">{([["holdMusicKey","Music on hold"],["parkMusicKey","Park music"]] as const).map(([field,title])=><div className={`rounded-xl border p-4 ${dark?"border-white/10":"border-slate-100"}`} key={field}><p className="font-semibold">{title}</p><select className={`mt-3 h-10 w-full rounded-md border px-2 ${dark?"border-white/20 bg-slate-900":"bg-white"}`} value={draft[field]} onChange={e=>choose(field,e.target.value)}>{media.map(m=><option key={m.key} value={m.key}>{m.name}</option>)}</select><Button className="mt-3" size="sm" variant="outline" onClick={()=>preview(media.find(m=>m.key===draft[field]))}><Play className="mr-2 h-3.5 w-3.5"/>Preview</Button></div>)}</div></section></div>}
+function Experience({ settings, media, accent, dark, saving, save, preview }: { settings: VoiceSettings; media: Media[]; accent: string; dark: boolean; saving: boolean; save: (x: VoiceSettings) => void; preview: (x?: Media) => void }) {
+  const [draft, setDraft] = useState(settings);
+  const [uploadedPreviewUrl, setUploadedPreviewUrl] = useState(settings.inboundGreetingPreviewUrl || "");
+  const [uploadedVoicemailPreviewUrl, setUploadedVoicemailPreviewUrl] = useState(settings.inboundVoicemailGreetingPreviewUrl || "");
+  const [speechError, setSpeechError] = useState("");
+  const [voicemailSpeechError, setVoicemailSpeechError] = useState("");
+  const panel = dark ? "border-white/10 bg-white/5 text-white" : "border-slate-200 bg-white";
+  const choose = (field: "holdMusicKey" | "parkMusicKey", key: string) => setDraft(d => ({ ...d, [field]: key }));
+  const previewText = () => {
+    setSpeechError("");
+    if (!draft.inboundGreetingText?.trim()) return setSpeechError("Enter greeting text before previewing.");
+    if (!("speechSynthesis" in window)) return setSpeechError("Spoken preview is not supported in this browser.");
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(new SpeechSynthesisUtterance(draft.inboundGreetingText));
+  };
+  const previewVoicemailText = () => {
+    setVoicemailSpeechError("");
+    if (!draft.inboundVoicemailGreetingText?.trim()) return setVoicemailSpeechError("Enter greeting text before previewing.");
+    if (!("speechSynthesis" in window)) return setVoicemailSpeechError("Spoken preview is not supported in this browser.");
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(new SpeechSynthesisUtterance(draft.inboundVoicemailGreetingText));
+  };
+  return <div className="space-y-5">
+    <PrivacyLineSettings dark={dark} accent={accent} />
+    <section className={`rounded-2xl border p-5 ${panel}`}>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div><h3 className="font-bold">Company inbound greeting</h3><p className={dark ? "mt-1 max-w-2xl text-sm text-blue-100/60" : "mt-1 max-w-2xl text-sm text-slate-500"}>Plays for office and primary calls, plus RING_TEAM bucket calls only. It does not play for direct voicemail buckets.</p></div>
+        <Switch checked={draft.inboundGreetingEnabled} onCheckedChange={v => setDraft(d => ({ ...d, inboundGreetingEnabled: v, inboundGreetingType: v ? (d.inboundGreetingType || "TEXT") : null }))} />
+      </div>
+      {draft.inboundGreetingEnabled && <div className="mt-5">
+        <div className="flex gap-2">
+          <Button type="button" variant={draft.inboundGreetingType !== "AUDIO" ? "default" : "outline"} onClick={() => setDraft(d => ({ ...d, inboundGreetingType: "TEXT" }))}>Typed greeting</Button>
+          <Button type="button" variant={draft.inboundGreetingType === "AUDIO" ? "default" : "outline"} onClick={() => setDraft(d => ({ ...d, inboundGreetingType: "AUDIO" }))}>Recorded or uploaded audio</Button>
+        </div>
+        {draft.inboundGreetingType === "AUDIO"
+          ? <GreetingAudioInput dark={dark} audioUrl={draft.inboundGreetingAudioUrl} previewUrl={uploadedPreviewUrl} onUploaded={(upload) => { setUploadedPreviewUrl(upload.previewUrl); setDraft(d => ({ ...d, inboundGreetingType: "AUDIO", inboundGreetingAudioUrl: upload.audioUrl, inboundGreetingPreviewUrl: upload.previewUrl })); }} />
+          : <Label className="mt-4 block">Greeting text
+              <textarea value={draft.inboundGreetingText || ""} onChange={e => setDraft(d => ({ ...d, inboundGreetingText: e.target.value }))} className="mt-2 min-h-24 w-full rounded-md border bg-transparent p-3" placeholder="Thank you for calling. Please stay on the line." />
+              <Button type="button" className="mt-3" size="sm" variant="outline" onClick={previewText}><Play className="mr-2 h-3.5 w-3.5" />Preview spoken greeting</Button>
+              {speechError && <span className="ml-3 text-xs text-rose-500">{speechError}</span>}
+            </Label>}
+      </div>}
+      <Button className={`mt-5 ${accent}`} disabled={saving} onClick={() => save(draft)}><Save className="mr-2 h-4 w-4" />Save caller experience</Button>
+    </section>
+    <section className={`rounded-2xl border p-5 ${panel}`}>
+      <div><h3 className="font-bold">Voicemail greeting</h3><p className={dark ? "mt-1 max-w-2xl text-sm text-blue-100/60" : "mt-1 max-w-2xl text-sm text-slate-500"}>Plays right before the beep whenever a caller reaches your business voicemail — a direct-to-voicemail bucket, or nobody answered in time. Leave this off to use the default "Please leave a message after the tone."</p></div>
+      <div className="mt-5 flex gap-2">
+        <Button type="button" variant={draft.inboundVoicemailGreetingType !== "AUDIO" ? "default" : "outline"} onClick={() => setDraft(d => ({ ...d, inboundVoicemailGreetingType: "TEXT" }))}>Typed greeting</Button>
+        <Button type="button" variant={draft.inboundVoicemailGreetingType === "AUDIO" ? "default" : "outline"} onClick={() => setDraft(d => ({ ...d, inboundVoicemailGreetingType: "AUDIO" }))}>Recorded or uploaded audio</Button>
+        {draft.inboundVoicemailGreetingType && <Button type="button" variant="ghost" onClick={() => setDraft(d => ({ ...d, inboundVoicemailGreetingType: null, inboundVoicemailGreetingText: null, inboundVoicemailGreetingAudioUrl: null }))}>Use default</Button>}
+      </div>
+      {draft.inboundVoicemailGreetingType === "AUDIO"
+        ? <div className="mt-4"><GreetingAudioInput dark={dark} audioUrl={draft.inboundVoicemailGreetingAudioUrl} previewUrl={uploadedVoicemailPreviewUrl} onUploaded={(upload) => { setUploadedVoicemailPreviewUrl(upload.previewUrl); setDraft(d => ({ ...d, inboundVoicemailGreetingType: "AUDIO", inboundVoicemailGreetingAudioUrl: upload.audioUrl, inboundVoicemailGreetingPreviewUrl: upload.previewUrl })); }} /></div>
+        : draft.inboundVoicemailGreetingType === "TEXT" && <Label className="mt-4 block">Voicemail greeting text
+            <textarea value={draft.inboundVoicemailGreetingText || ""} onChange={e => setDraft(d => ({ ...d, inboundVoicemailGreetingText: e.target.value }))} className="mt-2 min-h-24 w-full rounded-md border bg-transparent p-3" placeholder="You've reached our office. Please leave a detailed message and we'll call you back." />
+            <Button type="button" className="mt-3" size="sm" variant="outline" onClick={previewVoicemailText}><Play className="mr-2 h-3.5 w-3.5" />Preview spoken greeting</Button>
+            {voicemailSpeechError && <span className="ml-3 text-xs text-rose-500">{voicemailSpeechError}</span>}
+          </Label>}
+      <Button className={`mt-5 ${accent}`} disabled={saving} onClick={() => save(draft)}><Save className="mr-2 h-4 w-4" />Save voicemail greeting</Button>
+    </section>
+    <section className={`rounded-2xl border p-5 ${panel}`}>
+      <h3 className="font-bold">Approved audio catalog</h3>
+      <p className={dark ? "mt-1 text-sm text-blue-100/60" : "mt-1 text-sm text-slate-500"}>Use distinct selections for callers on hold and callers parked by your team.</p>
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
+        {(["holdMusicKey", "parkMusicKey"] as const).map((field) => <div className={`rounded-xl border p-4 ${dark ? "border-white/10" : "border-slate-100"}`} key={field}>
+          <p className="font-semibold">{field === "holdMusicKey" ? "Music on hold" : "Park music"}</p>
+          <select className={`mt-3 h-10 w-full rounded-md border px-2 ${dark ? "border-white/20 bg-slate-900" : "bg-white"}`} value={draft[field]} onChange={e => choose(field, e.target.value)}>{media.map(m => <option key={m.key} value={m.key}>{m.name}</option>)}</select>
+          <Button className="mt-3" size="sm" variant="outline" onClick={() => preview(media.find(m => m.key === draft[field]))}><Play className="mr-2 h-3.5 w-3.5" />Preview</Button>
+        </div>)}
+      </div>
+    </section>
+  </div>;
+}
 
 function VoicemailPlayer({message,onHeard}:{message:VoiceMail;onHeard:()=>void}) {
   const [url,setUrl]=useState("");

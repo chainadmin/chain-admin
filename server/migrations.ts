@@ -2916,6 +2916,11 @@ export async function runMigrations() {
         ('NATIONAL_PLUS', 'National Plus', 'Configured enhanced national local-number coverage', 0, '[]'::jsonb, 'DRAFT')
       ON CONFLICT (code) DO NOTHING
     `);
+    await client.query(`
+      ALTER TABLE voip_tenant_settings ADD COLUMN IF NOT EXISTS inbound_voicemail_greeting_type TEXT;
+      ALTER TABLE voip_tenant_settings ADD COLUMN IF NOT EXISTS inbound_voicemail_greeting_text TEXT;
+      ALTER TABLE voip_tenant_settings ADD COLUMN IF NOT EXISTS inbound_voicemail_greeting_audio_url TEXT;
+    `);
     console.log('✅ Database migrations completed successfully');
   } catch (error: any) {
     if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {

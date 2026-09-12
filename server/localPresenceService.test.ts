@@ -106,6 +106,22 @@ test('ordinary dialing honors an active selected direct or toll-free number', ()
   assert.equal(tollFree.callerId, '+18005550100');
 });
 
+test('an ordinary call with no caller-ID pick automatically uses a matching bucket number, no dial prefix required', () => {
+  const exact = selectDialingNumber({ tenantId: 'a', dialString: '4155551212', numbers, areaCodeToState: resolveState });
+  assert.equal(exact.callerId, '+14155550100');
+  assert.equal(exact.selectionReason, 'LOCAL_PRESENCE_AREA_CODE');
+
+  const byState = selectDialingNumber({ tenantId: 'a', dialString: '2125551212', numbers, areaCodeToState: resolveState });
+  assert.equal(byState.callerId, '+15855550100');
+  assert.equal(byState.selectionReason, 'LOCAL_PRESENCE_STATE');
+});
+
+test('an ordinary call with no bucket match and no caller-ID pick falls back to primary, not the anonymous placeholder', () => {
+  const decision = selectDialingNumber({ tenantId: 'a', dialString: '3055551212', numbers, areaCodeToState: resolveState });
+  assert.equal(decision.callerId, '+17165550100');
+  assert.equal(decision.selectionReason, 'PRIMARY_FALLBACK');
+});
+
 test('ordinary dialing rejects unavailable, bucket, and non-owned selections and uses primary', () => {
   for (const selectedNumberId of ['inactive-exact', 'sf', 'wrong-tenant', 'missing']) {
     const decision = selectDialingNumber({ tenantId: 'a', dialString: '2125551212', numbers, selectedNumberId });

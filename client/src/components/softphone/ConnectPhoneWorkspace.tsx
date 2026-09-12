@@ -64,6 +64,10 @@ interface Props {
   formatDuration: (seconds: number) => string;
   statusClass: (status: string) => string;
   onLogout: () => void;
+  ringVolume: number;
+  onRingVolumeChange: (value: number) => void;
+  ringMuted: boolean;
+  onToggleRingMuted: () => void;
 }
 
 const keys = [["1", ""], ["2", "ABC"], ["3", "DEF"], ["4", "GHI"], ["5", "JKL"], ["6", "MNO"], ["7", "PQRS"], ["8", "TUV"], ["9", "WXYZ"], ["*", ""], ["0", "+"], ["#", ""]] as const;
@@ -115,6 +119,22 @@ export function ConnectPhoneWorkspace(props: Props) {
           </div>
           <div className="flex items-center gap-2">
             <span className={`hidden h-2 w-2 rounded-full sm:block ${phoneStatus === "Ready" ? "bg-[#15957f]" : phoneStatus === "Offline" ? "bg-[#b64d5f]" : "bg-[#cf8a2d]"}`} />
+            <div className="hidden items-center gap-1.5 rounded-lg border border-[#c7ded7] bg-white px-2 sm:flex" title="Ring volume">
+              <button type="button" onClick={props.onToggleRingMuted} aria-label={props.ringMuted ? "Unmute ringtone" : "Mute ringtone"} aria-pressed={props.ringMuted} className="grid h-9 w-6 shrink-0 place-items-center text-[#45675f] hover:text-[#17453f]">
+                {props.ringMuted || props.ringVolume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
+              </button>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                value={Math.round(props.ringVolume * 100)}
+                onChange={(e) => props.onRingVolumeChange(Number(e.target.value) / 100)}
+                disabled={props.ringMuted}
+                aria-label="Ring volume"
+                className="h-9 w-20 accent-[#0b806d] disabled:opacity-40"
+              />
+            </div>
             <select value={props.agentStatus} onChange={(e) => props.setAgentStatus(e.target.value as Props["agentStatus"])} aria-label="Agent availability" className="h-9 max-w-[112px] rounded-lg border border-[#c7ded7] bg-white px-2 text-xs font-semibold text-[#17453f] outline-none focus:ring-2 focus:ring-[#0b806d]/35"><option value="available">Available</option><option value="busy">Busy</option><option value="away">Away</option></select>
             <button type="button" onClick={props.onLogout} className="grid h-9 w-9 place-items-center rounded-lg border border-[#c7ded7] bg-white text-[#45675f] transition hover:bg-[#e3f1ed]" aria-label="Sign out"><LogOut size={16} /></button>
           </div>

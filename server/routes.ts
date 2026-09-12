@@ -99,6 +99,7 @@ import { registerChiamoNumberRoutes } from "./chiamoNumberRoutes";
 import { resolveChiamoBaseUrl } from "./chiamoOnboarding";
 import { CHIAMO_SUPPORT_EMAIL } from "@shared/chiamo";
 import { createOutboundCallPreparationHandler, isUnsupportedPrivateSelection } from "./outboundCallPreparation";
+import { resolveNanpAreaCodeState } from "./areaCodeGeography";
 import { chiamoLeads, chiamoServiceConfigurations, chiamoSubscriptions } from "@shared/chiamo-schema";
 import { hashPasswordResetToken, isChainActivationReset, passwordResetProduct } from "./passwordResetPolicy";
 import { beginReconnect, classifyRetainedCallback, hashReconnectToken, isDefiniteProviderRejection, isIdempotentCancelState, reconcilePreparedRetention, reconnectTokenSchema } from "./voiceRetainedCallLifecycle";
@@ -26662,6 +26663,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     inboundGreetingType: z.enum(['TEXT', 'AUDIO']).nullable(),
     inboundGreetingText: z.string().trim().min(1).max(1000).nullable().optional(),
     inboundGreetingAudioUrl: z.string().min(1).nullable().optional(),
+    inboundVoicemailGreetingType: z.enum(['TEXT', 'AUDIO']).nullable().optional(),
+    inboundVoicemailGreetingText: z.string().trim().min(1).max(1000).nullable().optional(),
+    inboundVoicemailGreetingAudioUrl: z.string().min(1).nullable().optional(),
     holdMusicKey: z.string(),
     parkMusicKey: z.string(),
   }).superRefine((value, ctx) => {
@@ -26673,6 +26677,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     if (value.inboundGreetingEnabled && value.inboundGreetingType === 'AUDIO' && !value.inboundGreetingAudioUrl) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['inboundGreetingAudioUrl'], message: 'An uploaded audio greeting is required' });
+    }
+    if (value.inboundVoicemailGreetingType === 'TEXT' && !value.inboundVoicemailGreetingText) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['inboundVoicemailGreetingText'], message: 'Text is required for a text voicemail greeting' });
+    }
+    if (value.inboundVoicemailGreetingType === 'AUDIO' && !value.inboundVoicemailGreetingAudioUrl) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['inboundVoicemailGreetingAudioUrl'], message: 'An uploaded audio voicemail greeting is required' });
     }
   });
 
@@ -26687,9 +26697,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       inboundGreetingPreviewUrl: current.inboundGreetingAudioUrl
         ? createGreetingPlaybackUrl(process.env.JWT_SECRET!, voiceWebhookBaseUrl(), current.inboundGreetingAudioUrl)
         : null,
+      inboundVoicemailGreetingPreviewUrl: current.inboundVoicemailGreetingAudioUrl
+        ? createGreetingPlaybackUrl(process.env.JWT_SECRET!, voiceWebhookBaseUrl(), current.inboundVoicemailGreetingAudioUrl)
+        : null,
     } : {
       tenantId: user.tenantId, inboundGreetingEnabled: false, inboundGreetingType: null,
       inboundGreetingText: null, inboundGreetingAudioUrl: null,
+      inboundVoicemailGreetingType: null, inboundVoicemailGreetingText: null, inboundVoicemailGreetingAudioUrl: null,
       holdMusicKey: 'art-gallery-museum', parkMusicKey: 'art-gallery-museum',
     });
   });
@@ -26711,6 +26725,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       } catch {
         return res.status(400).json({ message: 'Greeting audio must be an uploaded company audio file' });
+      }
+    }
+    if (parsed.data.inboundVoicemailGreetingAudioUrl) {
+      try {
+        const { parseGreetingAudioReference } = await import('./voiceMediaTokens');
+        if (!parseGreetingAudioReference(parsed.data.inboundVoicemailGreetingAudioUrl, user.tenantId)) {
+          throw new Error('Invalid voicemail greeting audio');
+        }
+      } catch {
+        return res.status(400).json({ message: 'Voicemail greeting audio must be an uploaded company audio file' });
       }
     }
     const [saved] = await db.insert(voipTenantSettings).values({ tenantId: user.tenantId, ...parsed.data })
@@ -28220,7 +28244,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .from(localPresencePackages).where(eq(localPresencePackages.status, 'ACTIVE'));
       const areaStates = new Map<string, string>();
       for (const pkg of packages) for (const geo of pkg.geographies || []) areaStates.set(geo.areaCode, geo.state);
-      return areaCode => areaStates.get(areaCode);
+      // A curated Local Presence package always wins when present; otherwise
+      // fall back to the static NANP table so any individually purchased
+      // bucket number (not just approved bulk packages) still covers its
+      // whole state automatically.
+      return areaCode => areaStates.get(areaCode) ?? resolveNanpAreaCodeState(areaCode);
     },
     createCallLog: values => voipStorage.createVoipCallLog(values),
     signSelectionToken: async payload => {
@@ -28432,19 +28460,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { createGreetingPlaybackUrl } = await import('./voiceMediaTokens');
       const { buildInboundTwiML } = await import('./voiceInboundRouting');
       const callbackBase = voiceWebhookBaseUrl();
+      const isVoicemailMode = isPrivacy || bucket?.mode === 'VOICEMAIL';
+      // Privacy line, main-line direct-to-voicemail, and ring-team-with-answer
+      // each play a different greeting; direct voicemail never plays the
+      // general pre-routing inbound greeting (see buildInboundTwiML).
+      const greetingType = isPrivacy ? settings?.privacyVoicemailGreetingType || null
+        : isVoicemailMode ? settings?.inboundVoicemailGreetingType || null
+        : settings?.inboundGreetingType || null;
+      const greetingText = isPrivacy ? settings?.privacyVoicemailGreetingText
+        : isVoicemailMode ? settings?.inboundVoicemailGreetingText
+        : settings?.inboundGreetingText;
+      const greetingAudioUrl = isPrivacy ? settings?.privacyVoicemailGreetingAudioUrl
+        : isVoicemailMode ? settings?.inboundVoicemailGreetingAudioUrl
+        : settings?.inboundGreetingAudioUrl;
       const twiml = buildInboundTwiML({
         tenantId,
         callSid: CallSid,
         bucketId: isPrivacy ? null : bucket?.id,
-        mode: isPrivacy || bucket?.mode === 'VOICEMAIL' ? 'VOICEMAIL' : 'RING_TEAM',
+        mode: isVoicemailMode ? 'VOICEMAIL' : 'RING_TEAM',
         agentIds: isPrivacy ? [] : voipAgents.map(agent => agent.id),
         timeoutSeconds: bucket?.ringTimeoutSeconds || 30,
         greeting: {
-          enabled: isPrivacy ? Boolean(settings?.privacyVoicemailGreetingType) : settings?.inboundGreetingEnabled === true,
-          type: isPrivacy ? settings?.privacyVoicemailGreetingType || null : settings?.inboundGreetingType || null,
-          text: isPrivacy ? settings?.privacyVoicemailGreetingText : settings?.inboundGreetingText,
-          audioUrl: (isPrivacy ? settings?.privacyVoicemailGreetingAudioUrl : settings?.inboundGreetingAudioUrl)
-            ? createGreetingPlaybackUrl(process.env.JWT_SECRET!, callbackBase, (isPrivacy ? settings?.privacyVoicemailGreetingAudioUrl : settings?.inboundGreetingAudioUrl)!)
+          enabled: isPrivacy || isVoicemailMode ? Boolean(greetingType) : settings?.inboundGreetingEnabled === true,
+          type: greetingType,
+          text: greetingText,
+          audioUrl: greetingAudioUrl
+            ? createGreetingPlaybackUrl(process.env.JWT_SECRET!, callbackBase, greetingAudioUrl)
             : null,
         },
         callbackBase,
@@ -28467,8 +28508,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ? await voipStorage.getRoutingBucket(req.query.bucketId, tenantId)
         : undefined;
       const { voiceWebhookBaseUrl } = await import('./companyTwilioService');
+      const { createGreetingPlaybackUrl } = await import('./voiceMediaTokens');
       const { buildVoicemailTwiML } = await import('./voiceInboundRouting');
-      res.type('text/xml').send(buildVoicemailTwiML({ bucketId: requestedBucket?.id, callbackBase: voiceWebhookBaseUrl() }));
+      const settings = await voipStorage.getVoiceSettings(tenantId);
+      const callbackBase = voiceWebhookBaseUrl();
+      res.type('text/xml').send(buildVoicemailTwiML({
+        bucketId: requestedBucket?.id,
+        callbackBase,
+        greeting: {
+          enabled: Boolean(settings?.inboundVoicemailGreetingType),
+          type: settings?.inboundVoicemailGreetingType || null,
+          text: settings?.inboundVoicemailGreetingText,
+          audioUrl: settings?.inboundVoicemailGreetingAudioUrl
+            ? createGreetingPlaybackUrl(process.env.JWT_SECRET!, callbackBase, settings.inboundVoicemailGreetingAudioUrl)
+            : null,
+        },
+      }));
     } catch {
       res.type('text/xml').status(200).send('<Response><Hangup/></Response>');
     }
@@ -28557,8 +28612,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           ? await voipStorage.getRoutingBucket(req.query.bucketId, tenantId)
           : undefined;
         const { voiceWebhookBaseUrl } = await import('./companyTwilioService');
+        const { createGreetingPlaybackUrl } = await import('./voiceMediaTokens');
         const { buildVoicemailTwiML } = await import('./voiceInboundRouting');
-        return res.send(buildVoicemailTwiML({ bucketId: requestedBucket?.id, callbackBase: voiceWebhookBaseUrl() }));
+        const settings = await voipStorage.getVoiceSettings(tenantId);
+        const callbackBase = voiceWebhookBaseUrl();
+        return res.send(buildVoicemailTwiML({
+          bucketId: requestedBucket?.id,
+          callbackBase,
+          greeting: {
+            enabled: Boolean(settings?.inboundVoicemailGreetingType),
+            type: settings?.inboundVoicemailGreetingType || null,
+            text: settings?.inboundVoicemailGreetingText,
+            audioUrl: settings?.inboundVoicemailGreetingAudioUrl
+              ? createGreetingPlaybackUrl(process.env.JWT_SECRET!, callbackBase, settings.inboundVoicemailGreetingAudioUrl)
+              : null,
+          },
+        }));
       }
       res.send('<Response/>');
     } catch (error) {

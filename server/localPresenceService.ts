@@ -95,6 +95,25 @@ function findPrimary(numbers: DialingNumber[]): DialingNumber | undefined {
  * tenant ownership is still enforced here so an accidentally broad query can
  * never select another tenant's caller ID.
  */
+function matchLocalPresenceBucket(
+  buckets: DialingNumber[],
+  destinationAreaCode: string,
+  destinationState: string | null,
+  areaCodeToState: AreaCodeToStateResolver | undefined,
+): { selected: DialingNumber; selectionReason: 'LOCAL_PRESENCE_AREA_CODE' | 'LOCAL_PRESENCE_STATE' } | null {
+  const exact = buckets.find(number => number.areaCode === destinationAreaCode);
+  if (exact) return { selected: exact, selectionReason: 'LOCAL_PRESENCE_AREA_CODE' };
+
+  if (areaCodeToState && destinationState) {
+    const sameState = buckets.find(number => {
+      const numberState = normalizedState(number.state) || normalizedState(areaCodeToState(number.areaCode));
+      return numberState === destinationState;
+    });
+    if (sameState) return { selected: sameState, selectionReason: 'LOCAL_PRESENCE_STATE' };
+  }
+  return null;
+}
+
 export function selectDialingNumber(input: SelectDialingNumberInput): DialingDecision {
   const parsed = parseDialString(input.dialString);
   const destinationAreaCode = extractAreaCode(parsed.destination);
@@ -106,30 +125,21 @@ export function selectDialingNumber(input: SelectDialingNumberInput): DialingDec
   const destinationState = input.areaCodeToState
     ? normalizedState(input.areaCodeToState(destinationAreaCode))
     : null;
+  // Only bucket inventory participates in geographic matching. In particular,
+  // a ported/direct or primary DID with the same area code does not
+  // masquerade as Local Presence inventory.
+  const buckets = ownedActive.filter(number => number.numberType === 'LOCAL_PRESENCE');
+  const hasExplicitSelection = input.selectedNumberId != null || input.selectedPhoneNumber != null;
 
   if (input.exactSelectedNumberId) {
     selected = ownedActive.find(number => number.id === input.exactSelectedNumberId);
     selectionReason = 'SERVER_SELECTED';
   } else if (parsed.localPresenceRequested) {
-    // Only bucket inventory participates in geographic matching. In
-    // particular, a ported/direct or primary DID with the same area code does
-    // not masquerade as Local Presence inventory.
-    const buckets = ownedActive.filter(number => number.numberType === 'LOCAL_PRESENCE');
-    selected = buckets.find(number => number.areaCode === destinationAreaCode);
-    selectionReason = 'LOCAL_PRESENCE_AREA_CODE';
-
-    if (!selected && input.areaCodeToState) {
-      if (destinationState) {
-        selected = buckets.find(number => {
-          const numberState = normalizedState(number.state)
-            || normalizedState(input.areaCodeToState!(number.areaCode));
-          return numberState === destinationState;
-        });
-        selectionReason = 'LOCAL_PRESENCE_STATE';
-      }
-    }
-
-    if (!selected) {
+    const match = matchLocalPresenceBucket(buckets, destinationAreaCode, destinationState, input.areaCodeToState);
+    if (match) {
+      selected = match.selected;
+      selectionReason = match.selectionReason;
+    } else {
       // Signal that no safe geographic company DID exists. Outbound
       // preparation must fail closed rather than disclose another number.
       selected = {
@@ -138,6 +148,16 @@ export function selectDialingNumber(input: SelectDialingNumberInput): DialingDec
       };
       selectionReason = 'PRIVATE_FALLBACK';
     }
+  } else if (!hasExplicitSelection) {
+    // The common case: no explicit caller-ID pick and no "fail closed" privacy
+    // request. A company that owns bucket DIDs for the destination's area
+    // automatically shows a matching local number, without requiring any
+    // special dial prefix. Falling back to primary here (rather than the
+    // anonymous PRIVATE_FALLBACK placeholder) is safe because nothing was
+    // ever promised to be geographically local for this call.
+    const match = matchLocalPresenceBucket(buckets, destinationAreaCode, destinationState, input.areaCodeToState);
+    selected = match?.selected ?? primary;
+    selectionReason = match?.selectionReason ?? 'PRIMARY_FALLBACK';
   } else {
     const directNumbers = ownedActive.filter(number => number.numberType !== 'LOCAL_PRESENCE');
     selected = directNumbers.find(number =>
