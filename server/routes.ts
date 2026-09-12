@@ -97,7 +97,7 @@ import { resolveInboundCallLogStatus } from "./voiceCallLogStatus";
 import { registerSoftphoneSessionRoutes } from "./softphoneSessionRoutes";
 import { registerChiamoNumberRoutes } from "./chiamoNumberRoutes";
 import { resolveChiamoBaseUrl } from "./chiamoOnboarding";
-import { CHIAMO_SUPPORT_EMAIL } from "@shared/chiamo";
+import { CHIAMO_SUPPORT_EMAIL, chiamoPlans } from "@shared/chiamo";
 import { createOutboundCallPreparationHandler, isUnsupportedPrivateSelection } from "./outboundCallPreparation";
 import { chiamoLeads, chiamoServiceConfigurations, chiamoSubscriptions } from "@shared/chiamo-schema";
 import { hashPasswordResetToken, isChainActivationReset, passwordResetProduct } from "./passwordResetPolicy";
@@ -1613,6 +1613,64 @@ async function buildAgreementVariables(
     enabledAddons: enabledAddons,
     billingStartDate,
     contactEmail: CHAIN_CONTACT_EMAIL,
+    contactPhone: CHAIN_CONTACT_PHONE,
+    sentBy: 'Platform Administrator',
+    sentAt: new Date().toISOString(),
+  };
+}
+
+// Build agreement variables for the Chiamo VoIP service agreement, using the
+// tenant's actual Chiamo plan/subscription data instead of Chain Core messaging plans.
+async function buildChiamoAgreementVariables(
+  tenant: any,
+  tenantId: string,
+): Promise<Record<string, any>> {
+  const [chiamoSubscription] = await db
+    .select()
+    .from(chiamoSubscriptions)
+    .where(eq(chiamoSubscriptions.tenantId, tenantId))
+    .limit(1);
+
+  const planId = chiamoSubscription?.planId || 'starter';
+  const plan = chiamoPlans.find((item) => item.id === planId);
+  const planName = plan?.name || (planId === 'enterprise' ? 'Enterprise' : 'Starter');
+
+  const basePriceCents = chiamoSubscription?.customBasePriceCents ?? plan?.monthlyPriceCents ?? 0;
+  const includedUsers = chiamoSubscription?.includedUsers ?? plan?.includedUsers ?? 0;
+  const includedNumbers = plan?.includedNumbers ?? 0;
+  const additionalUserPriceCents = chiamoSubscription?.additionalUserPriceCents ?? plan?.additionalUserPriceCents ?? 0;
+  const additionalNumberPriceCents = chiamoSubscription?.additionalNumberPriceCents ?? 0;
+  const smsAddonEnabled = chiamoSubscription?.smsAddonEnabled || false;
+
+  const customCharges: Array<{ name: string; cents: number }> = chiamoSubscription?.customCharges || [];
+  const discounts: Array<{ name: string; cents: number }> = chiamoSubscription?.discounts || [];
+  const customChargesTotalCents = customCharges.reduce((sum, c) => sum + (c.cents || 0), 0);
+  const discountsTotalCents = discounts.reduce((sum, d) => sum + (d.cents || 0), 0);
+  const totalMonthlyCents = Math.max(0, basePriceCents + customChargesTotalCents - discountsTotalCents);
+
+  const billingStartDate = chiamoSubscription?.startDate
+    ? new Date(chiamoSubscription.startDate).toLocaleDateString()
+    : new Date().toLocaleDateString();
+
+  const featuresList = (plan?.features || []).join(', ') || 'Business phone service';
+
+  return {
+    companyName: tenant.name,
+    moduleName: 'Chiamo Business Phone',
+    moduleDescription: 'Cloud-based VoIP business phone service including calling, voicemail, and call routing.',
+    pricingTier: planName,
+    monthlyPrice: formatCurrency(basePriceCents),
+    totalMonthlyPrice: formatCurrency(totalMonthlyCents),
+    includedUsers,
+    includedNumbers,
+    additionalUserPrice: formatCurrency(additionalUserPriceCents),
+    additionalNumberPrice: formatCurrency(additionalNumberPriceCents),
+    smsAddonEnabled: smsAddonEnabled ? 'Yes' : 'No',
+    featuresList,
+    addonsTotal: customChargesTotalCents > 0 ? formatCurrency(customChargesTotalCents) : '$0',
+    addonsList: customCharges.length > 0 ? customCharges.map((c) => `${c.name} (${formatCurrency(c.cents)})`).join(', ') : 'None',
+    billingStartDate,
+    contactEmail: CHIAMO_SUPPORT_EMAIL || CHAIN_CONTACT_EMAIL,
     contactPhone: CHAIN_CONTACT_PHONE,
     sentBy: 'Platform Administrator',
     sentAt: new Date().toISOString(),
@@ -23366,6 +23424,69 @@ export async function registerRoutes(app: Express): Promise<Server> {
 </div>`;
   }
 
+  // Generate the full Chiamo VoIP service agreement content for the signing page
+  function generateChiamoContractDocument(metadata: Record<string, any>): string {
+    return `
+<div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 30px; color: #333;">
+  <div style="text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #2563eb;">
+    <h1 style="color: #1e40af; margin: 0; font-size: 28px;">Chiamo</h1>
+    <p style="color: #64748b; margin: 5px 0 0;">Business Phone Service Agreement</p>
+  </div>
+
+  <div style="background: linear-gradient(135deg, #eff6ff 0%, #f0f9ff 100%); padding: 20px; border-radius: 10px; margin-bottom: 25px; border-left: 4px solid #2563eb;">
+    <h3 style="margin: 0 0 10px; color: #1e40af;">Your Subscription Details</h3>
+    <table style="width: 100%; border-collapse: collapse;">
+      <tr><td style="padding: 8px 0; color: #64748b;">Company:</td><td style="padding: 8px 0; font-weight: 600;">${metadata.companyName || ''}</td></tr>
+      <tr><td style="padding: 8px 0; color: #64748b;">Plan:</td><td style="padding: 8px 0; font-weight: 600;">${metadata.pricingTier || ''}</td></tr>
+      <tr><td style="padding: 8px 0; color: #64748b;">Included Users:</td><td style="padding: 8px 0;">${metadata.includedUsers ?? ''}</td></tr>
+      <tr><td style="padding: 8px 0; color: #64748b;">Included Numbers:</td><td style="padding: 8px 0;">${metadata.includedNumbers ?? ''}</td></tr>
+      <tr><td style="padding: 8px 0; color: #64748b;">Additional User Rate:</td><td style="padding: 8px 0;">${metadata.additionalUserPrice || ''} / user / mo</td></tr>
+      <tr><td style="padding: 8px 0; color: #64748b;">Additional Number Rate:</td><td style="padding: 8px 0;">${metadata.additionalNumberPrice || ''} / number / mo</td></tr>
+      <tr><td style="padding: 8px 0; color: #64748b;">SMS Add-on:</td><td style="padding: 8px 0;">${metadata.smsAddonEnabled || 'No'}</td></tr>
+      <tr><td style="padding: 8px 0; color: #64748b;">Base Monthly Rate:</td><td style="padding: 8px 0; font-weight: 600;">${metadata.monthlyPrice || ''}</td></tr>
+      <tr><td style="padding: 8px 0; color: #64748b;">Additional Charges:</td><td style="padding: 8px 0;">${metadata.addonsList || 'None'}</td></tr>
+      <tr style="border-top: 1px solid #cbd5e1;"><td style="padding: 12px 0; color: #1e40af; font-weight: 600;">Total Monthly:</td><td style="padding: 12px 0; font-weight: 700; font-size: 18px; color: #059669;">${metadata.totalMonthlyPrice || ''}</td></tr>
+      <tr><td style="padding: 8px 0; color: #64748b;">Billing Start:</td><td style="padding: 8px 0;">${metadata.billingStartDate || ''}</td></tr>
+    </table>
+    <p style="font-size: 12px; color: #f59e0b; margin: 15px 0 0; font-style: italic;">* Amount subject to change based on additional users, numbers, or usage beyond plan limits.</p>
+  </div>
+
+  <h2 style="color: #1e40af; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;">Business Phone Service Agreement</h2>
+  <p><strong>Parties:</strong> Chain Software Group, provider of the Chiamo business phone service ("Provider") and the subscribing business ("Customer").</p>
+  <p><strong>Scope:</strong> Cloud-based VoIP business phone service, including included plan features: ${metadata.featuresList || 'business calling, voicemail, and call routing'}.</p>
+
+  <h3 style="color: #334155;">Key Terms</h3>
+  <ul style="line-height: 1.8;">
+    <li><strong>Term & Renewal:</strong> This agreement is month-to-month and auto-renews each month unless either party gives 30 days' written notice to cancel.</li>
+    <li><strong>Number Porting & Ownership:</strong> Customer may request porting of existing numbers into or out of the Service; porting timelines depend on the losing/gaining carrier. Numbers assigned to Customer remain available for use only while the Service is active and paid.</li>
+    <li><strong>911/E911 & Emergency Calling:</strong> Customer is responsible for keeping registered service addresses current for E911 routing. VoIP emergency calling may behave differently than traditional phone lines (e.g., during power/internet outages).</li>
+    <li><strong>Acceptable Use & Compliance:</strong> Customer agrees to comply with applicable law (e.g., TCPA, state telemarketing/calling laws) and carrier acceptable-use policies for voice and, where enabled, SMS traffic.</li>
+    <li><strong>Call Recording:</strong> Where call recording is enabled, Customer is solely responsible for complying with applicable one-party/two-party consent recording laws.</li>
+    <li><strong>Service Availability:</strong> Voice service depends on Customer's internet connectivity and third-party carrier networks; delivery and call quality are not guaranteed.</li>
+    <li><strong>Security:</strong> Chain implements administrative, technical, and physical safeguards appropriate to the risk. Customer must secure its credentials and restrict access to authorized personnel.</li>
+    <li><strong>Confidentiality; IP:</strong> Each party will protect the other's Confidential Information. Chain retains all rights to the Service and underlying IP.</li>
+    <li><strong>Warranties; Disclaimers:</strong> The Service is provided "AS IS." Chain disclaims implied warranties.</li>
+    <li><strong>Indemnity:</strong> Customer will indemnify Chain for claims arising from Customer's use of the Service or unlawful calling/messaging practices. Chain will indemnify Customer for third-party IP claims alleging the Service infringes IP rights.</li>
+    <li><strong>Liability Cap:</strong> Each party's aggregate liability is capped at the fees paid in the 12 months preceding the claim; no indirect or consequential damages.</li>
+    <li><strong>Termination:</strong> Either party may terminate for material breach uncured within 30 days. Upon termination, phone numbers may be released or ported out per Customer's timely request.</li>
+    <li><strong>Governing Law; Venue:</strong> New York law; exclusive venue Erie County, NY.</li>
+  </ul>
+
+  <h3 style="color: #334155;">Billing</h3>
+  <p>Monthly in advance for the base plan and included users/numbers; additional users, numbers, and any enabled SMS usage are billed per the rates above. Invoices due net 15 days. Late balances may accrue interest at 1.5%/mo and may trigger suspension.</p>
+
+  <div style="background: #fef3c7; padding: 15px; border-radius: 8px; margin: 25px 0; border-left: 4px solid #f59e0b;">
+    <p style="margin: 0; font-size: 13px;"><strong>Contact Information:</strong><br>
+    Email: ${metadata.contactEmail || ''}<br>
+    Phone: ${metadata.contactPhone || ''}</p>
+  </div>
+
+  <div style="text-align: center; margin-top: 30px; padding: 20px; background: #f8fafc; border-radius: 10px;">
+    <p style="margin: 0 0 15px; color: #64748b;">By clicking "I Agree" below, you acknowledge that you have read and agree to the terms of this Agreement.</p>
+  </div>
+</div>`;
+  }
+
   // Send agreement to tenant
   app.post('/api/admin/tenants/:tenantId/send-agreement', isPlatformAdmin, async (req: any, res) => {
     try {
@@ -23391,12 +23512,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const baseUrl = ensureBaseUrl(process.env.REPLIT_DOMAINS);
-      
+
+      // Chiamo agreements use Chiamo plan/subscription data and VoIP-specific contract
+      // terms; every other template uses the Chain Core SaaS agreement data/content.
+      const isChiamoAgreement = templateSlug === 'chiamo_service_agreement';
+
       // Build complete agreement metadata from tenant and subscription data
-      const agreementMetadata = await buildAgreementVariables(tenant, tenantId, storage, baseUrl);
+      const agreementMetadata = isChiamoAgreement
+        ? await buildChiamoAgreementVariables(tenant, tenantId)
+        : await buildAgreementVariables(tenant, tenantId, storage, baseUrl);
 
       // Generate the full contract document content for the signing page
-      const documentContent = generateContractDocument(agreementMetadata);
+      const documentContent = isChiamoAgreement
+        ? generateChiamoContractDocument(agreementMetadata)
+        : generateContractDocument(agreementMetadata);
 
       // Create agreement with complete metadata and document content
       const agreement = await storage.createTenantAgreement({
@@ -23473,7 +23602,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let content = agreement.documentContent;
       if (!content && agreement.agreementMetadata) {
         // Regenerate the full contract from stored metadata
-        content = generateContractDocument(agreement.agreementMetadata as Record<string, any>);
+        content = agreement.agreementType === 'chiamo_service_agreement'
+          ? generateChiamoContractDocument(agreement.agreementMetadata as Record<string, any>)
+          : generateContractDocument(agreement.agreementMetadata as Record<string, any>);
       }
       if (!content) {
         content = '<p>Contract content unavailable. Please contact support.</p>';
@@ -26119,7 +26250,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let content = agreement.documentContent;
       if (!content && agreement.agreementMetadata) {
         // Regenerate the full contract from stored metadata
-        content = generateContractDocument(agreement.agreementMetadata as Record<string, any>);
+        content = agreement.agreementType === 'chiamo_service_agreement'
+          ? generateChiamoContractDocument(agreement.agreementMetadata as Record<string, any>)
+          : generateContractDocument(agreement.agreementMetadata as Record<string, any>);
       }
       if (!content) {
         // Last resort fallback - should not happen for properly created agreements

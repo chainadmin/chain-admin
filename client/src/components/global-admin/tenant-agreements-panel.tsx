@@ -133,7 +133,7 @@ export function TenantAgreementsPanel({ tenants, isLoadingTenants, toast, isPlat
           <FileText className="h-5 w-5 mr-2" />
           Tenant Agreements
         </h2>
-        <p className="text-blue-100/70 text-sm mt-1">Send software proposals and payment authorization forms to tenants</p>
+        <p className="text-blue-100/70 text-sm mt-1">Send Chain software proposals, Chiamo phone service agreements, and payment authorization forms to tenants for signature</p>
       </div>
       
       <div className="p-6 space-y-6">

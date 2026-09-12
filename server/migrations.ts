@@ -1513,12 +1513,61 @@ export async function runMigrations() {
       ];
       
       await client.query(
-        `INSERT INTO global_document_templates (slug, name, title, content, description, available_variables, interactive_fields, is_active) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) 
+        `INSERT INTO global_document_templates (slug, name, title, content, description, available_variables, interactive_fields, is_active)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          ON CONFLICT (slug) DO UPDATE SET content = EXCLUDED.content, available_variables = EXCLUDED.available_variables, interactive_fields = EXCLUDED.interactive_fields`,
         ['payment_authorization', 'Payment Authorization Form', 'Chain Software Group - Payment Authorization', paymentAuthHtml, 'Payment authorization with terms, last 4 digits collection, and contact notice', paymentAuthVars, JSON.stringify(paymentAuthFields), true]
       );
-      
+
+      // Chiamo Business Phone Service Agreement - email summary with link to view/sign full contract
+      const chiamoServiceAgreementEmailHtml = `
+<div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; color: #333;">
+  <div style="text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 2px solid #2563eb;">
+    <h1 style="color: #1e40af; margin: 0; font-size: 28px;">Chiamo</h1>
+    <p style="color: #64748b; margin: 5px 0 0;">Business Phone Service Agreement</p>
+  </div>
+
+  <p style="font-size: 16px; color: #333;">Dear {{companyName}},</p>
+
+  <p style="font-size: 15px; color: #555; line-height: 1.6;">Thank you for choosing Chiamo! Please review your business phone service subscription details below and click the button to view and accept the full agreement.</p>
+
+  <div style="background: linear-gradient(135deg, #eff6ff 0%, #f0f9ff 100%); padding: 20px; border-radius: 10px; margin: 25px 0; border-left: 4px solid #2563eb;">
+    <h3 style="margin: 0 0 15px; color: #1e40af;">Your Subscription Details</h3>
+    <table style="width: 100%; border-collapse: collapse;">
+      <tr><td style="padding: 8px 0; color: #64748b;">Plan:</td><td style="padding: 8px 0; font-weight: 600;">{{pricingTier}}</td></tr>
+      <tr><td style="padding: 8px 0; color: #64748b;">Included Users:</td><td style="padding: 8px 0;">{{includedUsers}}</td></tr>
+      <tr><td style="padding: 8px 0; color: #64748b;">Included Numbers:</td><td style="padding: 8px 0;">{{includedNumbers}}</td></tr>
+      <tr><td style="padding: 8px 0; color: #64748b;">Base Monthly Rate:</td><td style="padding: 8px 0; font-weight: 600;">{{monthlyPrice}}</td></tr>
+      <tr style="border-top: 1px solid #cbd5e1;"><td style="padding: 12px 0; color: #1e40af; font-weight: 600;">Total Monthly:</td><td style="padding: 12px 0; font-weight: 700; font-size: 18px; color: #059669;">{{totalMonthlyPrice}}</td></tr>
+      <tr><td style="padding: 8px 0; color: #64748b;">Billing Start:</td><td style="padding: 8px 0;">{{billingStartDate}}</td></tr>
+    </table>
+    <p style="font-size: 12px; color: #f59e0b; margin: 15px 0 0; font-style: italic;">* Amount subject to change based on additional users, numbers, or usage beyond plan limits.</p>
+  </div>
+
+  <div style="text-align: center; margin: 30px 0;">
+    <a href="{{agreementLink}}" style="display: inline-block; background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%); color: white; padding: 16px 40px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px; box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4);">View & Accept Agreement</a>
+  </div>
+
+  <p style="font-size: 14px; color: #64748b; text-align: center;">Click the button above to review the full agreement terms and accept.</p>
+
+  <div style="background: #fef3c7; padding: 15px; border-radius: 8px; margin: 25px 0; border-left: 4px solid #f59e0b;">
+    <p style="margin: 0; font-size: 13px;"><strong>Questions?</strong><br>
+    Email: {{contactEmail}}<br>
+    Phone: {{contactPhone}}</p>
+  </div>
+
+  <p style="font-size: 12px; color: #94a3b8; text-align: center; margin-top: 30px;">If the button doesn't work, copy and paste this link into your browser:<br>{{agreementLink}}</p>
+</div>`;
+
+      const chiamoServiceAgreementVars = ['companyName', 'pricingTier', 'includedUsers', 'includedNumbers', 'monthlyPrice', 'totalMonthlyPrice', 'addonsTotal', 'addonsList', 'billingStartDate', 'contactEmail', 'contactPhone', 'agreementLink'];
+
+      await client.query(
+        `INSERT INTO global_document_templates (slug, name, title, content, description, available_variables, is_active)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (slug) DO UPDATE SET content = EXCLUDED.content, available_variables = EXCLUDED.available_variables`,
+        ['chiamo_service_agreement', 'Chiamo Business Phone Agreement', 'Chiamo - Business Phone Service Agreement', chiamoServiceAgreementEmailHtml, 'Email notification with Chiamo subscription summary and link to view full contract', chiamoServiceAgreementVars, true]
+      );
+
       console.log('  ✓ Global document templates seeded');
     } catch (err) {
       console.log('  ⚠ Could not seed templates (may already exist):', err);

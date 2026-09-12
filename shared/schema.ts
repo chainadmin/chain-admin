@@ -732,7 +732,7 @@ export const documentTemplates = pgTable("document_templates", {
 // Used for onboarding documents like software proposals and payment authorization forms
 export const globalDocumentTemplates = pgTable("global_document_templates", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  slug: text("slug").unique().notNull(), // "software_proposal", "payment_authorization"
+  slug: text("slug").unique().notNull(), // "software_proposal", "payment_authorization", "chiamo_service_agreement"
   name: text("name").notNull(),
   title: text("title").notNull(), // Document title template with variables
   content: text("content").notNull(), // HTML content with variable placeholders
@@ -773,7 +773,7 @@ export const tenantAgreements = pgTable("tenant_agreements", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: uuid("tenant_id").references(() => tenants.id, { onDelete: "cascade" }).notNull(),
   globalDocumentId: uuid("global_document_id").references(() => globalDocumentTemplates.id, { onDelete: "cascade" }).notNull(),
-  agreementType: text("agreement_type").notNull(), // 'software_proposal', 'payment_authorization'
+  agreementType: text("agreement_type").notNull(), // 'software_proposal', 'payment_authorization', 'chiamo_service_agreement'
   agreementMetadata: jsonb("agreement_metadata").notNull(), // {companyName, module, pricing, contact, paymentDetails, etc.}
   documentContent: text("document_content"), // Full contract content for signing page (separate from email template)
   title: text("title").notNull(),
