@@ -81,6 +81,86 @@ router.get("/campaigns", async (req: ExternalApiRequest, res) => {
   }
 });
 
+// Single-message contract: DMP's own outbound single-send feature (auto
+// receipts/declines, individual "send text/email" actions) calls these
+// mirroring the naming of its own equivalent endpoints. Unlike
+// /campaigns/send, DMP renders nothing here beyond the message text itself,
+// and expects a real delivery result back for exactly one contact.
+const sendTextSchema = z.object({
+  fileNumber: z.string().optional().default(""),
+  phoneNumber: z.string().min(1),
+  message: z.string().min(1),
+  externalId: z.string().optional(),
+});
+
+const sendEmailC2cSchema = z.object({
+  fileNumber: z.string().optional().default(""),
+  emailAddress: z.string().min(1),
+  subject: z.string().optional().default(""),
+  body: z.string().min(1),
+  externalId: z.string().optional(),
+});
+
+router.post("/send_text", async (req: ExternalApiRequest, res) => {
+  try {
+    const tenantId = req.tenantId!;
+    const parsed = sendTextSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ success: false, error: "phoneNumber and message are required" });
+    }
+    const { phoneNumber, message, fileNumber, externalId } = parsed.data;
+
+    const normalizedPhone = phoneNumber.replace(/\D/g, "");
+    const isBlocked = await storage.isPhoneNumberBlocked(tenantId, normalizedPhone);
+    if (isBlocked) {
+      return res.json({ success: false, error: "Phone number is blocked" });
+    }
+    const consumers = await storage.getConsumersByPhoneNumber(normalizedPhone, tenantId);
+    if (consumers.some((consumer: any) => Boolean(consumer.smsOptedOut))) {
+      return res.json({ success: false, error: "Consumer has opted out of SMS" });
+    }
+
+    const result = await smsService.sendSms(phoneNumber, message, tenantId);
+    if (!result.success) {
+      return res.json({ success: false, error: result.error || "Failed to send SMS" });
+    }
+    return res.json({ success: true, data: { externalId: externalId || null } });
+  } catch (error) {
+    console.error("Error sending text via external API:", error);
+    res.status(500).json({ success: false, error: "Failed to send text" });
+  }
+});
+
+router.post("/send_email_c2c", async (req: ExternalApiRequest, res) => {
+  try {
+    const tenantId = req.tenantId!;
+    const parsed = sendEmailC2cSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ success: false, error: "emailAddress and body are required" });
+    }
+    const { emailAddress, subject, body, fileNumber, externalId } = parsed.data;
+
+    const result = await emailService.sendEmail({
+      to: emailAddress,
+      subject: subject || "",
+      html: body,
+      tenantId,
+      useBroadcastStream: true,
+      metadata: {
+        source: "external_campaign_api",
+        fileNumber: fileNumber || "",
+      },
+    });
+    if (!result.success) {
+      return res.json({ success: false, error: result.error || "Failed to send email" });
+    }
+    return res.json({ success: true, data: { externalId: externalId || null } });
+  } catch (error) {
+    console.error("Error sending email via external API:", error);
+    res.status(500).json({ success: false, error: "Failed to send email" });
+  }
+});
+
 async function sendCampaignWithChainTemplate(
   tenantId: string,
   body: z.infer<typeof sendCampaignSchema>,
