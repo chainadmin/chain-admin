@@ -1375,6 +1375,13 @@ export const voipTenantSettings = pgTable("voip_tenant_settings", {
   privacyVoicemailGreetingType: text("privacy_voicemail_greeting_type", { enum: ['TEXT', 'AUDIO'] }),
   privacyVoicemailGreetingText: text("privacy_voicemail_greeting_text"),
   privacyVoicemailGreetingAudioUrl: text("privacy_voicemail_greeting_audio_url"),
+  // Company-wide switch: when on, EVERY number in the caller-ID bucket list
+  // (localPresenceCallerIdEnabled) skips ringing the team on a callback and
+  // goes straight to voicemail (the main inboundVoicemailGreeting*, not the
+  // dedicated Privacy Line greeting), and is excluded from missed-call
+  // counts the same way a Privacy Line call already is. It is all-or-nothing
+  // across the bucket list, not configurable per number.
+  callerIdBucketRoutesToVoicemail: boolean("caller_id_bucket_routes_to_voicemail").notNull().default(false),
   holdMusicKey: text("hold_music_key").notNull().default("art-gallery-museum"),
   parkMusicKey: text("park_music_key").notNull().default("art-gallery-museum"),
   updatedAt: timestamp("updated_at").defaultNow(),

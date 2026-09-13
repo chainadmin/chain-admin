@@ -108,6 +108,7 @@ import {
   withCallerIdBucketAddonCharge,
   withoutCallerIdBucketAddonCharge,
 } from "./callerIdBucketAddon";
+import { isBucketDirectVoicemail } from "./voiceBucketVoicemailRouting";
 import { hashPasswordResetToken, isChainActivationReset, passwordResetProduct } from "./passwordResetPolicy";
 import { beginReconnect, classifyRetainedCallback, hashReconnectToken, isDefiniteProviderRejection, isIdempotentCancelState, reconcilePreparedRetention, reconnectTokenSchema } from "./voiceRetainedCallLifecycle";
 import {
@@ -26711,8 +26712,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
       tenantId: user.tenantId, inboundGreetingEnabled: false, inboundGreetingType: null,
       inboundGreetingText: null, inboundGreetingAudioUrl: null,
       inboundVoicemailGreetingType: null, inboundVoicemailGreetingText: null, inboundVoicemailGreetingAudioUrl: null,
+      callerIdBucketRoutesToVoicemail: false,
       holdMusicKey: 'art-gallery-museum', parkMusicKey: 'art-gallery-museum',
     });
+  });
+
+  // Company-wide switch: every number in the caller-ID bucket list skips
+  // ringing on a callback and goes straight to voicemail instead. Separate
+  // from the general settings PUT so the bucket-list UI doesn't need the
+  // full settings form's required fields just to flip this one switch.
+  app.patch('/api/voip/settings/caller-id-bucket-routing', authenticateUser, requireOwner, async (req, res) => {
+    const user = await getCurrentUser(req);
+    if (!user) return res.status(401).json({ message: 'Unauthorized' });
+    const parsed = z.object({ routeToVoicemail: z.boolean() }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: 'routeToVoicemail must be true or false' });
+    const [saved] = await db.insert(voipTenantSettings).values({
+      tenantId: user.tenantId, callerIdBucketRoutesToVoicemail: parsed.data.routeToVoicemail,
+    }).onConflictDoUpdate({
+      target: voipTenantSettings.tenantId,
+      set: { callerIdBucketRoutesToVoicemail: parsed.data.routeToVoicemail, updatedAt: new Date() },
+    }).returning();
+    res.json(saved);
   });
 
   app.put('/api/voip/settings', requireOwner, async (req, res) => {
@@ -28595,8 +28615,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       const settings = await voipStorage.getVoiceSettings(tenantId);
       const isPrivacy = settings?.privacyLinePhoneNumberId === ownedNumber.id;
+      // Company-wide opt-in: every bucket-list number (not just the one
+      // dedicated Privacy line) skips ringing and goes straight to the main
+      // voicemail greeting when this is on. Treated like Privacy for missed-
+      // call and routing purposes, but never uses the Privacy greeting/inbox.
+      const skipsRinging = isPrivacy || isBucketDirectVoicemail({
+        isPrivacyLine: isPrivacy,
+        numberType: ownedNumber.numberType,
+        localPresenceCallerIdEnabled: ownedNumber.localPresenceCallerIdEnabled,
+        bucketRoutesToVoicemailSetting: settings?.callerIdBucketRoutesToVoicemail,
+      });
       const credentials = await storage.getAgencyCredentialsByTenant(tenantId);
-      const configuredBucket = !isPrivacy && ownedNumber.routingBucketId
+      const configuredBucket = !skipsRinging && ownedNumber.routingBucketId
         ? await voipStorage.getRoutingBucket(ownedNumber.routingBucketId, tenantId)
         : undefined;
       const bucket = configuredBucket?.isActive ? configuredBucket : undefined;
@@ -28604,7 +28634,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ? new Set(bucket.agentCredentialIds)
         : null;
       const voipAgents = credentials.filter(c => c.voipAccess === true && c.isActive === true && (!allowedAgentIds || allowedAgentIds.has(c.id)));
-      
+
       // Create call log for this inbound call
       const { formatPhoneE164 } = await import('./twilioVoiceService');
       await voipStorage.createVoipCallLog({
@@ -28616,18 +28646,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         toNumber: formatPhoneE164(To),
         status: 'ringing',
         inboundPhoneNumberId: ownedNumber.id,
-        inboundRoutingBucketId: isPrivacy ? null : bucket?.id || null,
-        isPrivacyInbound: isPrivacy,
+        inboundRoutingBucketId: skipsRinging ? null : bucket?.id || null,
+        isPrivacyInbound: skipsRinging,
       });
 
       const { voiceWebhookBaseUrl } = await import('./companyTwilioService');
       const { createGreetingPlaybackUrl } = await import('./voiceMediaTokens');
       const { buildInboundTwiML } = await import('./voiceInboundRouting');
       const callbackBase = voiceWebhookBaseUrl();
-      const isVoicemailMode = isPrivacy || bucket?.mode === 'VOICEMAIL';
-      // Privacy line, main-line direct-to-voicemail, and ring-team-with-answer
-      // each play a different greeting; direct voicemail never plays the
-      // general pre-routing inbound greeting (see buildInboundTwiML).
+      const isVoicemailMode = skipsRinging || bucket?.mode === 'VOICEMAIL';
+      // Privacy line, main-line direct-to-voicemail (including bucket-list
+      // callbacks), and ring-team-with-answer each play a different greeting;
+      // direct voicemail never plays the general pre-routing inbound greeting
+      // (see buildInboundTwiML). Only the literal Privacy line number uses
+      // the dedicated Privacy greeting/inbox — a bucket-list callback uses
+      // the ordinary main voicemail greeting.
       const greetingType = isPrivacy ? settings?.privacyVoicemailGreetingType || null
         : isVoicemailMode ? settings?.inboundVoicemailGreetingType || null
         : settings?.inboundGreetingType || null;
@@ -28640,9 +28673,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const twiml = buildInboundTwiML({
         tenantId,
         callSid: CallSid,
-        bucketId: isPrivacy ? null : bucket?.id,
+        bucketId: skipsRinging ? null : bucket?.id,
         mode: isVoicemailMode ? 'VOICEMAIL' : 'RING_TEAM',
-        agentIds: isPrivacy ? [] : voipAgents.map(agent => agent.id),
+        agentIds: skipsRinging ? [] : voipAgents.map(agent => agent.id),
         timeoutSeconds: bucket?.ringTimeoutSeconds || 30,
         greeting: {
           enabled: isPrivacy || isVoicemailMode ? Boolean(greetingType) : settings?.inboundGreetingEnabled === true,

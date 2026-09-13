@@ -2925,6 +2925,9 @@ export async function runMigrations() {
       ALTER TABLE voip_phone_numbers ADD COLUMN IF NOT EXISTS local_presence_caller_id_enabled BOOLEAN NOT NULL DEFAULT false;
     `);
     await client.query(`
+      ALTER TABLE voip_tenant_settings ADD COLUMN IF NOT EXISTS caller_id_bucket_routes_to_voicemail BOOLEAN NOT NULL DEFAULT false;
+    `);
+    await client.query(`
       CREATE TABLE IF NOT EXISTS chiamo_caller_id_bucket_addons (
         tenant_id UUID PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
         status TEXT NOT NULL DEFAULT 'REQUESTED' CHECK (status IN ('REQUESTED','APPROVED','DENIED','CANCELLED')),
