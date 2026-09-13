@@ -71,7 +71,7 @@ function Routing({ buckets, users, numbers, accent, dark, assign, remove, editin
     </div>
     {addon?.status === "APPROVED" && <div className="mt-5 space-y-4">
       <label className={`flex items-start justify-between gap-4 rounded-xl border p-4 ${dark ? "border-white/10 bg-slate-950/20" : "border-slate-100 bg-slate-50"}`}>
-        <span><span className="block font-semibold">Route bucket-list callbacks straight to voicemail</span><span className={`mt-1 block text-sm ${dark ? "text-blue-100/60" : "text-slate-500"}`}>When on, a callback to ANY number in your bucket list skips ringing your team and goes straight to your main voicemail greeting — and isn't counted as a missed call. Applies to the whole bucket list, not per number.</span></span>
+        <span><span className="block font-semibold">Route bucket-list callbacks straight to voicemail</span><span className={`mt-1 block text-sm ${dark ? "text-blue-100/60" : "text-slate-500"}`}>When on, a callback to ANY number in your bucket list is treated exactly like your Privacy Line — it skips ringing your team, plays your Privacy Line greeting, goes to the same Privacy Voicemail inbox, and isn't counted as a missed call. Applies to the whole bucket list, not per number. Set the greeting under Privacy Line above.</span></span>
         <Switch checked={routesToVoicemail} disabled={settingRoutesToVoicemail} onCheckedChange={setRoutesToVoicemail} />
       </label>
       <div className="space-y-2">

@@ -28655,19 +28655,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { buildInboundTwiML } = await import('./voiceInboundRouting');
       const callbackBase = voiceWebhookBaseUrl();
       const isVoicemailMode = skipsRinging || bucket?.mode === 'VOICEMAIL';
-      // Privacy line, main-line direct-to-voicemail (including bucket-list
-      // callbacks), and ring-team-with-answer each play a different greeting;
-      // direct voicemail never plays the general pre-routing inbound greeting
-      // (see buildInboundTwiML). Only the literal Privacy line number uses
-      // the dedicated Privacy greeting/inbox — a bucket-list callback uses
-      // the ordinary main voicemail greeting.
-      const greetingType = isPrivacy ? settings?.privacyVoicemailGreetingType || null
+      // Privacy line, bucket-list callbacks routed to voicemail, ordinary
+      // main-line direct-to-voicemail, and ring-team-with-answer each play a
+      // different greeting; direct voicemail never plays the general
+      // pre-routing inbound greeting (see buildInboundTwiML). A bucket-list
+      // callback in this mode is treated exactly like the Privacy line,
+      // including using the dedicated Privacy greeting/inbox.
+      const greetingType = skipsRinging ? settings?.privacyVoicemailGreetingType || null
         : isVoicemailMode ? settings?.inboundVoicemailGreetingType || null
         : settings?.inboundGreetingType || null;
-      const greetingText = isPrivacy ? settings?.privacyVoicemailGreetingText
+      const greetingText = skipsRinging ? settings?.privacyVoicemailGreetingText
         : isVoicemailMode ? settings?.inboundVoicemailGreetingText
         : settings?.inboundGreetingText;
-      const greetingAudioUrl = isPrivacy ? settings?.privacyVoicemailGreetingAudioUrl
+      const greetingAudioUrl = skipsRinging ? settings?.privacyVoicemailGreetingAudioUrl
         : isVoicemailMode ? settings?.inboundVoicemailGreetingAudioUrl
         : settings?.inboundGreetingAudioUrl;
       const twiml = buildInboundTwiML({
@@ -28678,7 +28678,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         agentIds: skipsRinging ? [] : voipAgents.map(agent => agent.id),
         timeoutSeconds: bucket?.ringTimeoutSeconds || 30,
         greeting: {
-          enabled: isPrivacy || isVoicemailMode ? Boolean(greetingType) : settings?.inboundGreetingEnabled === true,
+          enabled: isVoicemailMode ? Boolean(greetingType) : settings?.inboundGreetingEnabled === true,
           type: greetingType,
           text: greetingText,
           audioUrl: greetingAudioUrl
@@ -28686,7 +28686,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             : null,
         },
         callbackBase,
-        privacy: isPrivacy,
+        privacy: skipsRinging,
       });
 
       res.type('text/xml');
