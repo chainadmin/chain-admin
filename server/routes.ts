@@ -17263,7 +17263,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 }
               }
 
-              const nextPayment = calculateNextPaymentDate(new Date(schedule.nextPaymentDate), schedule.frequency || 'monthly');
+              // Parse at noon, not midnight - `new Date("YYYY-MM-DD")` is UTC
+              // midnight, which the Eastern-timezone toLocaleDateString below
+              // would roll back to the previous calendar day, pulling every
+              // later cycle's due date one day earlier than intended.
+              const nextPayment = calculateNextPaymentDate(new Date(`${schedule.nextPaymentDate}T12:00:00`), schedule.frequency || 'monthly');
               const updatedRemainingPayments = schedule.remainingPayments !== null ? schedule.remainingPayments - 1 : null;
               const scheduleStatus = updatedRemainingPayments === 0 ? 'completed' : 'active';
 
