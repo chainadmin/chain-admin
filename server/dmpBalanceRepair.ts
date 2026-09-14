@@ -92,9 +92,13 @@ export async function planDmpBalanceRepair(
     const balanceCents = Number.isFinite(providerAccount.balance)
       ? Math.max(0, Math.round(providerAccount.balance))
       : existing.balanceCents;
+    // When the provider doesn't supply an original balance, the only
+    // fallback is the current balance - never a previously stored
+    // originalBalanceCents, which could itself have been wrong and would
+    // otherwise persist indefinitely.
     const originalBalanceCents = Number.isFinite(providerAccount.originalBalance)
       ? Math.max(0, Math.round(providerAccount.originalBalance))
-      : existing.originalBalanceCents ?? balanceCents;
+      : balanceCents;
     if (
       existing.balanceCents === balanceCents
       && existing.originalBalanceCents === originalBalanceCents

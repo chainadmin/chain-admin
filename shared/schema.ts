@@ -973,6 +973,10 @@ export const tenantSettings = pgTable("tenant_settings", {
   dmpApiUrl: text("dmp_api_url"),
   dmpUsername: text("dmp_username"),
   dmpPassword: text("dmp_password"),
+  // Surfaces the daily auto-sync cron's last outcome, since it otherwise only
+  // ever logs a failure to the server console (see routes.ts's DMP cron block).
+  dmpLastSyncAt: timestamp("dmp_last_sync_at"),
+  dmpLastSyncError: text("dmp_last_sync_error"),
   externalApiKey: text("external_api_key"), // Bearer token used by Debt Manager Pro to call Chain campaign APIs
   campaignIntegrationEnabled: boolean("campaign_integration_enabled").default(false),
   blockedAccountStatuses: text("blocked_account_statuses").array().default(sql`ARRAY['inactive', 'recalled', 'closed']::text[]`), // Account statuses that block communications and payments
