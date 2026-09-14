@@ -1055,7 +1055,7 @@ test('DMP balance repair previews and idempotently applies authoritative cents b
     ],
     applyDmpBalanceRepair: async (tenantId: string, changes: any[]) => {
       updates.push({ tenantId, changes });
-      return changes.length;
+      return { applied: changes.length, staleSkipped: 0 };
     },
   };
   const provider = [
@@ -1076,7 +1076,7 @@ test('DMP balance repair previews and idempotently applies authoritative cents b
   assert.deepEqual(updates, []);
 
   const applied = await applyDmpBalanceRepair(fakeStorage, 'tenant-1', preview);
-  assert.deepEqual(applied, { matched: 2, changed: 1, unchanged: 1, skipped: 2, applied: 1 });
+  assert.deepEqual(applied, { matched: 2, changed: 1, unchanged: 1, skipped: 2, applied: 1, staleSkipped: 0 });
   assert.deepEqual(updates, [{
     tenantId: 'tenant-1',
     changes: [{

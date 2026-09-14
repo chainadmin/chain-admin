@@ -11350,10 +11350,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (
           preview?.purpose !== 'dmp-balance-repair'
           || preview?.tenantId !== tenantId
-          || preview?.digest !== plan.digest
         ) {
-          return res.status(409).json({ message: "DMP balances changed after preview; run a new preview before applying" });
+          return res.status(400).json({ message: "Balance repair preview is missing or expired; run a new preview" });
         }
+        // Deliberately not requiring preview.digest === plan.digest: apply
+        // always applies a freshly-recomputed plan (not the client's preview
+        // data), so an exact match was never needed for correctness - only
+        // for detecting drift. But across hundreds of live accounts, at
+        // least one balance changing between the preview fetch and this
+        // fetch (seconds to minutes apart, given DMP pagination) is close to
+        // guaranteed, so the strict check rejected large repairs essentially
+        // every time with no way to actually finish one.
         result = await applyDmpBalanceRepair(storage, tenantId, plan);
       } else {
         result = {
@@ -11362,6 +11369,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           unchanged: plan.unchanged,
           skipped: plan.skipped,
           applied: 0,
+          staleSkipped: 0,
         };
         previewToken = jwt.sign({
           purpose: 'dmp-balance-repair',
@@ -17383,7 +17391,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const dmpFetch = await dmpService.getAccountsWithStats(tenant.id);
               const dmpAccounts = dmpFetch.accounts;
               if (dmpAccounts && dmpAccounts.length > 0) {
-                const { importDmpAccounts } = await import('./dmpAccountImport');
+                const { importDmpAccounts, syncDmpAccountPayments } = await import('./dmpAccountImport');
                 const results = await importDmpAccounts(
                   storage,
                   tenant.id,
@@ -17398,6 +17406,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   `[DMP Sync] Tenant ${tenant.name}: ${results.updated} updated, `
                   + `${results.imported} created, ${results.skipped} skipped `
                   + `${dmpFetch.rejected} rejected from ${dmpFetch.fetched} DMP rows`,
+                );
+                // Manual "Sync Now" has always refreshed payment history and
+                // pending payments too - the daily cron only ever imported
+                // accounts, so a tenant relying on auto-sync alone never got
+                // this data refreshed at all.
+                const paymentResults = await syncDmpAccountPayments(
+                  storage,
+                  tenant.id,
+                  filenumber => dmpService.getPayments(tenant.id, filenumber),
+                );
+                console.log(
+                  `[DMP Sync] Tenant ${tenant.name}: payments synced for ${paymentResults.accountsSynced} accounts `
+                  + `(${paymentResults.historyPayments} history, ${paymentResults.pendingPayments} pending)`,
                 );
               }
               // A successful run (even one that fetched 0 accounts) clears any
