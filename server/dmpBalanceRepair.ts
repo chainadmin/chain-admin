@@ -5,7 +5,10 @@ type BalanceRepairPlanStorage = {
 };
 
 type BalanceRepairApplyStorage = {
-  applyDmpBalanceRepair(tenantId: string, changes: DmpBalanceRepairChange[]): Promise<number>;
+  applyDmpBalanceRepair(
+    tenantId: string,
+    changes: DmpBalanceRepairChange[],
+  ): Promise<{ applied: number; staleSkipped: number }>;
 };
 
 export const DMP_BALANCE_REPAIR_CONFIRMATION = 'APPLY DMP BALANCE REPAIR';
@@ -16,6 +19,10 @@ export interface DmpBalanceRepairResult {
   unchanged: number;
   skipped: number;
   applied: number;
+  // Accounts whose balance changed (by something else) between this
+  // request's plan and the moment its own update ran - safely left alone
+  // rather than aborting the whole batch. A repeat run picks these up.
+  staleSkipped: number;
 }
 
 export interface DmpBalanceRepairChange {
@@ -72,6 +79,8 @@ export async function planDmpBalanceRepair(
     unchanged: 0,
     skipped: 0,
     applied: 0,
+    // Meaningless before anything is actually applied - always 0 here.
+    staleSkipped: 0,
     changes: [],
     digest: '',
   };
@@ -127,12 +136,13 @@ export async function applyDmpBalanceRepair(
   tenantId: string,
   plan: DmpBalanceRepairPlan,
 ): Promise<DmpBalanceRepairResult> {
-  const applied = await storage.applyDmpBalanceRepair(tenantId, plan.changes);
+  const { applied, staleSkipped } = await storage.applyDmpBalanceRepair(tenantId, plan.changes);
   return {
     matched: plan.matched,
     changed: plan.changed,
     unchanged: plan.unchanged,
     skipped: plan.skipped,
     applied,
+    staleSkipped,
   };
 }

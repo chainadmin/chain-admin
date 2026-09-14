@@ -1785,6 +1785,67 @@ export default function Accounts() {
                 </div>
               )}
 
+              {(() => {
+                const dmpHistory: any[] = Array.isArray(selectedAccount.additionalData?.dmpPaymentHistory)
+                  ? selectedAccount.additionalData.dmpPaymentHistory
+                  : [];
+                const dmpPending: any[] = Array.isArray(selectedAccount.additionalData?.dmpPendingPayments)
+                  ? selectedAccount.additionalData.dmpPendingPayments
+                  : [];
+                const dmpPayments = [...dmpHistory, ...dmpPending];
+                if (dmpPayments.length === 0) return null;
+                const syncedAt = selectedAccount.additionalData?.dmpPaymentsSyncedAt;
+
+                return (
+                  <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div className="mb-3 flex items-center justify-between">
+                      <p className="text-xs uppercase tracking-wide text-blue-100/60">DMP Payment History</p>
+                      {syncedAt && (
+                        <p className="text-xs text-blue-100/40">
+                          Synced {new Date(syncedAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      {dmpPayments
+                        .slice()
+                        .sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime())
+                        .map((payment, index) => {
+                          const isPending = dmpPending.includes(payment);
+                          return (
+                            <div key={payment.transactionId || index} className="flex items-center justify-between rounded-lg border border-white/10 bg-[#0c1630] p-3">
+                              <div className="flex items-center gap-3">
+                                <span className="text-sm text-blue-100/70">
+                                  {payment.date ? new Date(payment.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'No date'}
+                                </span>
+                                <span className="text-sm font-medium text-white">
+                                  {(Number(payment.amountCents || 0) / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}
+                                </span>
+                                {payment.paymentMethod && (
+                                  <span className="text-xs text-blue-100/50">{payment.paymentMethod}</span>
+                                )}
+                              </div>
+                              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                                isPending ? 'bg-yellow-500/20 text-yellow-300' : 'bg-emerald-500/20 text-emerald-300'
+                              }`}>
+                                {isPending ? 'Pending' : (payment.status || 'Posted')}
+                              </span>
+                            </div>
+                          );
+                        })}
+                    </div>
+                    {dmpHistory.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-white/10 flex justify-between text-sm">
+                        <span className="text-blue-100/60">Total Paid (DMP):</span>
+                        <span className="font-semibold text-emerald-300">
+                          {(dmpHistory.reduce((sum, p) => sum + Number(p.amountCents || 0), 0) / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD' })}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
                 <Button
                   variant="ghost"

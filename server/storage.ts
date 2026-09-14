@@ -299,7 +299,7 @@ export interface IStorage {
   getAccountsByConsumer(consumerId: string): Promise<Account[]>;
   createAccount(account: InsertAccount): Promise<Account>;
   updateAccount(id: string, updates: Partial<Account>): Promise<Account>;
-  applyDmpBalanceRepair(tenantId: string, changes: DmpBalanceRepairChange[]): Promise<number>;
+  applyDmpBalanceRepair(tenantId: string, changes: DmpBalanceRepairChange[]): Promise<{ applied: number; staleSkipped: number }>;
   bulkCreateAccounts(accounts: InsertAccount[]): Promise<Account[]>;
   
   // Email template operations
@@ -1561,35 +1561,51 @@ export class DatabaseStorage implements IStorage {
     return updatedAccount;
   }
 
-  async applyDmpBalanceRepair(tenantId: string, changes: DmpBalanceRepairChange[]): Promise<number> {
-    return db.transaction(async (tx) => {
-      let applied = 0;
-      for (const change of changes) {
-        const updated = await tx
-          .update(accounts)
-          .set({
-            balanceCents: change.balanceCents,
-            originalBalanceCents: change.originalBalanceCents,
-          })
-          .where(and(
-            eq(accounts.id, change.accountId),
-            eq(accounts.tenantId, tenantId),
-            eq(accounts.filenumber, change.filenumber),
-            sql`${accounts.additionalData} ->> 'dmpSource' = 'dmp' OR ${accounts.additionalData} ? 'dmpClientName'`,
-            eq(accounts.balanceCents, change.expectedBalanceCents),
-            sql`${accounts.originalBalanceCents} IS NOT DISTINCT FROM ${change.expectedOriginalBalanceCents}`,
-          ))
-          .returning({ id: accounts.id });
-        if (updated.length !== 1) {
-          throw Object.assign(
-            new Error('DMP balance repair preview is stale; run a new preview before applying'),
-            { statusCode: 409 },
-          );
-        }
+  async applyDmpBalanceRepair(
+    tenantId: string,
+    changes: DmpBalanceRepairChange[],
+  ): Promise<{ applied: number; staleSkipped: number }> {
+    // Each account is updated independently (a single UPDATE is already
+    // atomic) rather than wrapping the whole batch in one transaction. A
+    // bulk repair can cover hundreds of live accounts; any one of them
+    // getting its balance changed by something else mid-run (a collector
+    // posting a payment, the sync cron, another repair) used to throw and
+    // roll back every account already fixed in the same transaction. A
+    // row whose expected values no longer match has already been changed
+    // by that other write, so it's safely skipped here rather than
+    // aborting accounts that have nothing to do with it - the next repair
+    // run picks up whatever's still actually wrong.
+    let applied = 0;
+    let staleSkipped = 0;
+    for (const change of changes) {
+      const updated = await db
+        .update(accounts)
+        .set({
+          balanceCents: change.balanceCents,
+          originalBalanceCents: change.originalBalanceCents,
+        })
+        .where(and(
+          eq(accounts.id, change.accountId),
+          eq(accounts.tenantId, tenantId),
+          eq(accounts.filenumber, change.filenumber),
+          // Unparenthesized, this OR would escape the surrounding AND chain
+          // entirely (SQL's AND binds tighter than OR) and make the
+          // balanceCents/originalBalanceCents staleness check below apply
+          // to only half of this condition - silently letting every DMP
+          // account with dmpSource set bypass the staleness check no
+          // matter what its actual stored balance was.
+          sql`(${accounts.additionalData} ->> 'dmpSource' = 'dmp' OR ${accounts.additionalData} ? 'dmpClientName')`,
+          eq(accounts.balanceCents, change.expectedBalanceCents),
+          sql`${accounts.originalBalanceCents} IS NOT DISTINCT FROM ${change.expectedOriginalBalanceCents}`,
+        ))
+        .returning({ id: accounts.id });
+      if (updated.length === 1) {
         applied++;
+      } else {
+        staleSkipped++;
       }
-      return applied;
-    });
+    }
+    return { applied, staleSkipped };
   }
 
   async bulkCreateAccounts(accountsData: InsertAccount[]): Promise<Account[]> {

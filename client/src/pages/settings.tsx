@@ -2830,7 +2830,12 @@ export default function Settings() {
                               previewToken: preview.previewToken,
                             });
                             const result = await applyResponse.json();
-                            toast({ title: "DMP Balances Repaired", description: `${result.applied} account balances updated.` });
+                            toast({
+                              title: "DMP Balances Repaired",
+                              description: result.staleSkipped
+                                ? `${result.applied} account balances updated. ${result.staleSkipped} changed again mid-repair and were left alone - run Repair again to catch those.`
+                                : `${result.applied} account balances updated.`,
+                            });
                           } catch (error: any) {
                             toast({
                               title: "Balance Repair Failed",

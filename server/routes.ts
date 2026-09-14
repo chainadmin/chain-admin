@@ -2266,6 +2266,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
             continue;
           }
 
+          // Wrapped in an IIFE so its early exits (`return`, scoped to this
+          // function) can never skip the independent arrangement-derivation
+          // block below - a bare `continue` here would jump straight to the
+          // next loop iteration and skip that block too.
+          await (async () => {
           try {
             console.log(`🔍 Calling DMP getAccount for: ${dmpFilenumber}`);
             // getDmpConfig inside the service gates on dmpEnabled + apiUrl +
@@ -2275,7 +2280,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
             if (!dmpAccount) {
               console.warn(`⚠️ DMP getAccount returned null for ${dmpFilenumber} - keeping stored values`);
-              continue;
+              return;
             }
 
             const dmpStatus = dmpAccount.status;
@@ -2304,7 +2309,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   newStatus: dmpStatus,
                 });
               }
-              continue;
+              return;
             }
 
             // Clamp to non-negative to prevent invalid negative balances.
@@ -2338,13 +2343,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
               });
             }
 
-            // A payment arrangement a DMP collector set up directly in DMP
-            // never reaches Chain any other way - Chain's own import only
-            // pulls balance/status/history, not arrangements. Pull it here so
-            // a consumer viewing their portal sees it, instead of only what
-            // Chain itself created. Skip if Chain already has its own active
-            // arrangement for this account (from Chain or SMAX) so this never
-            // overwrites or duplicates one Chain is already tracking.
+          } catch (dmpError) {
+            console.error('⚠️ DMP sync error for:', dmpFilenumber, dmpError);
+            // Non-blocking - continue with stored data if DMP fails.
+          }
+          })();
+
+          // A payment arrangement a DMP collector set up directly in DMP
+          // never reaches Chain any other way - Chain's own import only
+          // pulls balance/status/history, not arrangements. Pull it here so
+          // a consumer viewing their portal sees it, instead of only what
+          // Chain itself created. Skip if Chain already has its own active
+          // arrangement for this account (from Chain or SMAX) so this never
+          // overwrites or duplicates one Chain is already tracking.
+          //
+          // Deliberately its own try/catch, independent of the balance sync
+          // above: getAccount and getPayments are two different DMP
+          // endpoints with no reason to depend on each other, but this used
+          // to live inside the same try block and share its early `continue`s
+          // - any getAccount failure (or even just an invalid/blank balance
+          // on an otherwise-healthy response) silently skipped pending
+          // payment derivation too, with no visibility anywhere that it had.
+          try {
             const existingActiveSchedules = await storage.getActivePaymentSchedulesByConsumerAndAccount(
               consumer.id, account.id, tenant.id,
             );
@@ -2358,9 +2378,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 await storage.syncDmpArrangementToChain(tenant.id, consumer.id, account.id, dmpArrangement);
               }
             }
-          } catch (dmpError) {
-            console.error('⚠️ DMP sync error for:', dmpFilenumber, dmpError);
-            // Non-blocking - continue with stored data if DMP fails.
+          } catch (dmpArrangementError) {
+            console.error('⚠️ DMP arrangement derivation error for:', dmpFilenumber, dmpArrangementError);
           }
         }
       }
@@ -11425,10 +11444,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (
           preview?.purpose !== 'dmp-balance-repair'
           || preview?.tenantId !== tenantId
-          || preview?.digest !== plan.digest
         ) {
-          return res.status(409).json({ message: "DMP balances changed after preview; run a new preview before applying" });
+          return res.status(400).json({ message: "Balance repair preview is missing or expired; run a new preview" });
         }
+        // Deliberately not requiring preview.digest === plan.digest: apply
+        // always applies a freshly-recomputed plan (not the client's preview
+        // data), so an exact match was never needed for correctness - only
+        // for detecting drift. But across hundreds of live accounts, at
+        // least one balance changing between the preview fetch and this
+        // fetch (seconds to minutes apart, given DMP pagination) is close to
+        // guaranteed, so the strict check rejected large repairs essentially
+        // every time with no way to actually finish one.
         result = await applyDmpBalanceRepair(storage, tenantId, plan);
       } else {
         result = {
@@ -11437,6 +11463,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           unchanged: plan.unchanged,
           skipped: plan.skipped,
           applied: 0,
+          staleSkipped: 0,
         };
         previewToken = jwt.sign({
           purpose: 'dmp-balance-repair',
@@ -14231,13 +14258,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
           }
 
-          // Validate against minimum payment amount
-          const minAmount = arrangement.oneTimePaymentMin || 0;
+          // Validate against minimum payment amount - but the minimum can
+          // never be more than what's actually owed. A consumer paying off
+          // a $1 remaining balance must not be blocked by a $100 configured
+          // minimum; the effective floor is whichever is smaller.
+          const minAmount = Math.min(arrangement.oneTimePaymentMin || 0, accountBalance);
           if (customPaymentAmountCents < minAmount) {
             console.log('❌ Payment below minimum:', { customPaymentAmountCents, minAmount });
-            return res.status(400).json({ 
+            return res.status(400).json({
               success: false,
-              message: `Minimum payment amount is $${(minAmount / 100).toFixed(2)}` 
+              message: `Minimum payment amount is $${(minAmount / 100).toFixed(2)}`
             });
           }
 
@@ -17458,7 +17488,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const dmpFetch = await dmpService.getAccountsWithStats(tenant.id);
               const dmpAccounts = dmpFetch.accounts;
               if (dmpAccounts && dmpAccounts.length > 0) {
-                const { importDmpAccounts } = await import('./dmpAccountImport');
+                const { importDmpAccounts, syncDmpAccountPayments } = await import('./dmpAccountImport');
                 const results = await importDmpAccounts(
                   storage,
                   tenant.id,
@@ -17473,6 +17503,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   `[DMP Sync] Tenant ${tenant.name}: ${results.updated} updated, `
                   + `${results.imported} created, ${results.skipped} skipped `
                   + `${dmpFetch.rejected} rejected from ${dmpFetch.fetched} DMP rows`,
+                );
+                // Manual "Sync Now" has always refreshed payment history and
+                // pending payments too - the daily cron only ever imported
+                // accounts, so a tenant relying on auto-sync alone never got
+                // this data refreshed at all.
+                const paymentResults = await syncDmpAccountPayments(
+                  storage,
+                  tenant.id,
+                  filenumber => dmpService.getPayments(tenant.id, filenumber),
+                );
+                console.log(
+                  `[DMP Sync] Tenant ${tenant.name}: payments synced for ${paymentResults.accountsSynced} accounts `
+                  + `(${paymentResults.historyPayments} history, ${paymentResults.pendingPayments} pending)`,
                 );
               }
               // A successful run (even one that fetched 0 accounts) clears any
