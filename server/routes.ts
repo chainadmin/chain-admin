@@ -14564,7 +14564,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           } else if (arrangement.planType === 'fixed_monthly' && arrangement.maxTermMonths) {
             const maxPayments = Number(arrangement.maxTermMonths);
-            remainingPayments = maxPayments - 1;
+            const isImmediatePayment = !normalizedFirstPaymentDate || normalizedFirstPaymentDate.getTime() <= today.getTime();
+            remainingPayments = isImmediatePayment ? maxPayments - 1 : maxPayments; // Minus the one we just made, only if it was actually charged
             endDate = new Date(paymentStartDate);
             endDate = advanceDateByFrequency(endDate, arrangementFrequency, Number(arrangement.maxTermMonths));
           } else if (arrangement.planType === 'range') {
@@ -14574,7 +14575,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const balanceAfterImmediate = isImmediatePayment ? Math.max(0, accountBalance - amountCents) : accountBalance;
             const paymentsNeeded = balanceAfterImmediate > 0 ? Math.max(1, Math.ceil(balanceAfterImmediate / amountCents)) : 0;
             remainingPayments = paymentsNeeded;
-            
+
             if (remainingPayments > 0) {
               endDate = new Date(paymentStartDate);
               endDate = advanceDateByFrequency(endDate, arrangementFrequency, Math.max(0, remainingPayments - 1));
@@ -14609,7 +14610,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 frequency: arrangementFrequency,
                 startDate: paymentStartDate.toISOString().split('T')[0],
                 endDate: endDate ? endDate.toISOString().split('T')[0] : null,
-                nextPaymentDate: nextMonth.toISOString().split('T')[0],
+                nextPaymentDate: isImmediateAuthNet ? nextMonth.toISOString().split('T')[0] : paymentStartDate.toISOString().split('T')[0],
                 remainingPayments,
                 totalPayments: totalPaymentsCalc,
                 status: 'active',
@@ -15136,7 +15137,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           } else if (arrangement.planType === 'fixed_monthly' && arrangement.maxTermMonths) {
             const maxPayments = Number(arrangement.maxTermMonths);
-            remainingPayments = maxPayments - 1;
+            const isImmediatePayment = !normalizedFirstPaymentDate || normalizedFirstPaymentDate.getTime() <= today.getTime();
+            remainingPayments = isImmediatePayment ? maxPayments - 1 : maxPayments; // Minus the one we just made, only if it was actually charged
             endDate = new Date(paymentStartDate);
             endDate = advanceDateByFrequency(endDate, arrangementFrequency, Number(arrangement.maxTermMonths));
           } else if (arrangement.planType === 'range') {
@@ -15146,7 +15148,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const balanceAfterImmediate = isImmediatePayment ? Math.max(0, accountBalance - amountCents) : accountBalance;
             const paymentsNeeded = balanceAfterImmediate > 0 ? Math.max(1, Math.ceil(balanceAfterImmediate / amountCents)) : 0;
             remainingPayments = paymentsNeeded;
-            
+
             if (remainingPayments > 0) {
               endDate = new Date(paymentStartDate);
               endDate = advanceDateByFrequency(endDate, arrangementFrequency, Math.max(0, remainingPayments - 1));
@@ -15181,7 +15183,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 frequency: arrangementFrequency,
                 startDate: paymentStartDate.toISOString().split('T')[0],
                 endDate: endDate ? endDate.toISOString().split('T')[0] : null,
-                nextPaymentDate: nextMonth.toISOString().split('T')[0],
+                nextPaymentDate: isImmediateNMI ? nextMonth.toISOString().split('T')[0] : paymentStartDate.toISOString().split('T')[0],
                 remainingPayments,
                 totalPayments: totalPaymentsCalcNMI,
                 status: 'active',
