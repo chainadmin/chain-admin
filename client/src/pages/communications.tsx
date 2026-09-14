@@ -32,6 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -78,6 +79,7 @@ import {
   ListOrdered,
   Eraser,
   Palette,
+  Highlighter,
   Link2,
   Link2Off,
   Loader2,
@@ -435,6 +437,23 @@ export default function Communications() {
 
   // Track which field is currently focused for variable/snippet insertion
   const [activeField, setActiveField] = useState<"subject" | "html">("html");
+
+  // Remembers the last cursor/selection position inside the HTML editor so that
+  // clicking a toolbar button, color swatch, or variable chip (which momentarily
+  // moves browser focus away from the editor) doesn't lose or relocate the cursor.
+  const savedRangeRef = useRef<Range | null>(null);
+  // Tracks html that was just written to state as a *result* of typing in the
+  // editor, so the DOM-sync effect below doesn't fight the browser and reset
+  // (and hide) the cursor on every keystroke.
+  const lastEditorHtmlRef = useRef<string>("");
+  const [composeTab, setComposeTab] = useState<"compose" | "preview">("compose");
+  const [linkPopoverOpen, setLinkPopoverOpen] = useState(false);
+  const [linkUrlDraft, setLinkUrlDraft] = useState("");
+  const [linkTextDraft, setLinkTextDraft] = useState("");
+  const [customTextColor, setCustomTextColor] = useState("#1f2937");
+  const [customHighlightColor, setCustomHighlightColor] = useState("#fef08a");
+  const [testEmailPopoverOpen, setTestEmailPopoverOpen] = useState(false);
+  const [testEmailAddress, setTestEmailAddress] = useState("");
 
   const [emailTemplateForm, setEmailTemplateForm] = useState(createEmptyEmailTemplateForm());
 
@@ -895,27 +914,50 @@ export default function Communications() {
       { label: "Emerald", value: "#059669" },
       { label: "Rose", value: "#be123c" },
       { label: "Amber", value: "#d97706" },
+      { label: "Purple", value: "#7c3aed" },
+      { label: "White", value: "#ffffff" },
     ],
     []
   );
 
-  const syncEditorHtml = () => {
+  const highlightOptions = useMemo(
+    () => [
+      { label: "None", value: "transparent" },
+      { label: "Yellow", value: "#fef08a" },
+      { label: "Green", value: "#bbf7d0" },
+      { label: "Blue", value: "#bfdbfe" },
+      { label: "Pink", value: "#fbcfe8" },
+    ],
+    []
+  );
+
+  // Remembers where the caret/selection was inside the HTML editor. Toolbar
+  // controls (buttons, selects, popovers) all steal focus from the
+  // contentEditable div when clicked; without this, the browser's native
+  // selection is lost and the next formatting command lands in the wrong
+  // place (or the caret appears to "jump" unpredictably).
+  const handleEditorSelectionChange = () => {
     const editor = editorRef.current;
-    if (!editor) return;
-    const html = editor.innerHTML;
-    const textContent = editor.textContent?.replace(/\u00a0/g, " ").trim() ?? "";
-    setEmailTemplateForm((prev) => ({
-      ...prev,
-      html: textContent ? html : "",
-    }));
+    const selection = window.getSelection();
+    if (!editor || !selection || selection.rangeCount === 0) return;
+    if (editor.contains(selection.anchorNode)) {
+      savedRangeRef.current = selection.getRangeAt(0).cloneRange();
+    }
   };
 
-  const insertTextAtCursor = (text: string) => {
+  const restoreEditorSelection = () => {
     const editor = editorRef.current;
     if (!editor) return;
     editor.focus();
     const selection = window.getSelection();
     if (!selection) return;
+
+    const saved = savedRangeRef.current;
+    if (saved && editor.contains(saved.startContainer) && editor.contains(saved.endContainer)) {
+      selection.removeAllRanges();
+      selection.addRange(saved);
+      return;
+    }
 
     if (selection.rangeCount === 0 || !editor.contains(selection.anchorNode)) {
       const range = document.createRange();
@@ -924,6 +966,30 @@ export default function Communications() {
       selection.removeAllRanges();
       selection.addRange(range);
     }
+  };
+
+  const syncEditorHtml = () => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const html = editor.innerHTML;
+    const textContent = editor.textContent?.replace(/\u00a0/g, " ").trim() ?? "";
+    const nextHtml = textContent ? html : "";
+    // Record this as an editor-originated update so the DOM-sync effect
+    // knows not to overwrite the (still-focused, mid-edit) editor.
+    lastEditorHtmlRef.current = nextHtml;
+    handleEditorSelectionChange();
+    setEmailTemplateForm((prev) => ({
+      ...prev,
+      html: nextHtml,
+    }));
+  };
+
+  const insertTextAtCursor = (text: string) => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    restoreEditorSelection();
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
 
     const range = selection.getRangeAt(0);
     range.deleteContents();
@@ -933,23 +999,16 @@ export default function Communications() {
     range.setEndAfter(textNode);
     selection.removeAllRanges();
     selection.addRange(range);
+    handleEditorSelectionChange();
     syncEditorHtml();
   };
 
   const insertHtmlSnippet = (html: string) => {
     const editor = editorRef.current;
     if (!editor) return;
-    editor.focus();
+    restoreEditorSelection();
     const selection = window.getSelection();
-    if (!selection) return;
-
-    if (selection.rangeCount === 0 || !editor.contains(selection.anchorNode)) {
-      const range = document.createRange();
-      range.selectNodeContents(editor);
-      range.collapse(false);
-      selection.removeAllRanges();
-      selection.addRange(range);
-    }
+    if (!selection || selection.rangeCount === 0) return;
 
     const range = selection.getRangeAt(0);
     range.deleteContents();
@@ -968,26 +1027,75 @@ export default function Communications() {
     }
     selection.removeAllRanges();
     selection.addRange(range);
+    handleEditorSelectionChange();
     syncEditorHtml();
   };
 
   const applyEditorCommand = (command: string, value?: string) => {
     const editor = editorRef.current;
     if (!editor) return;
-    editor.focus();
-    if (command === "foreColor") {
+    restoreEditorSelection();
+    if (command === "foreColor" || command === "hiliteColor" || command === "backColor") {
       document.execCommand("styleWithCSS", false, "true");
     }
     document.execCommand(command, false, value);
+    handleEditorSelectionChange();
     setTimeout(syncEditorHtml, 0);
   };
 
-  const handleCreateLink = () => {
-    if (typeof window === "undefined") return;
-    const url = window.prompt("Enter the URL", "https://");
-    if (!url) return;
-    setActiveField("html");
-    applyEditorCommand("createLink", url);
+  const getLinkAtSelection = (): HTMLAnchorElement | null => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return null;
+    let node: Node | null = selection.getRangeAt(0).startContainer;
+    while (node && node !== editorRef.current) {
+      if (node instanceof HTMLAnchorElement) return node;
+      node = node.parentNode;
+    }
+    return null;
+  };
+
+  const handleLinkPopoverOpenChange = (open: boolean) => {
+    if (open) {
+      restoreEditorSelection();
+      const selection = window.getSelection();
+      const existingLink = getLinkAtSelection();
+      setActiveField("html");
+      setLinkUrlDraft(existingLink?.getAttribute("href") || "https://");
+      setLinkTextDraft(existingLink?.textContent || selection?.toString() || "");
+    }
+    setLinkPopoverOpen(open);
+  };
+
+  const escapeHtml = (value: string) =>
+    value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+
+  const handleApplyLink = () => {
+    if (!linkUrlDraft.trim()) return;
+    restoreEditorSelection();
+    const selection = window.getSelection();
+    const existingLink = getLinkAtSelection();
+    const url = linkUrlDraft.trim();
+    const text = linkTextDraft.trim();
+
+    if (existingLink) {
+      existingLink.setAttribute("href", url);
+      if (text) {
+        existingLink.textContent = text;
+      }
+    } else if (selection && selection.rangeCount > 0 && !selection.isCollapsed) {
+      document.execCommand("createLink", false, url);
+    } else if (text) {
+      insertHtmlSnippet(`<a href="${escapeHtml(url)}">${escapeHtml(text)}</a>`);
+    } else {
+      insertHtmlSnippet(`<a href="${escapeHtml(url)}">${escapeHtml(url)}</a>`);
+    }
+
+    setLinkPopoverOpen(false);
+    syncEditorHtml();
   };
 
   const handleRemoveLink = () => {
@@ -1007,9 +1115,18 @@ export default function Communications() {
     const editor = editorRef.current;
     if (!editor) return;
     const nextHtml = emailTemplateForm.html || "";
+    // If this html update was just produced by typing in the editor itself,
+    // the DOM is already correct — overwriting it here would blow away the
+    // live text/selection nodes mid-keystroke and yank the cursor away from
+    // wherever the user was typing. Only sync the DOM when content changed
+    // from outside the editor (loading a template, picking a design, etc).
+    if (nextHtml === lastEditorHtmlRef.current) {
+      return;
+    }
     if (editor.innerHTML !== nextHtml) {
       editor.innerHTML = nextHtml;
     }
+    lastEditorHtmlRef.current = nextHtml;
   }, [emailTemplateForm.html, showTemplateModal]);
 
   useEffect(() => {
@@ -1280,6 +1397,35 @@ export default function Communications() {
 
     return subjectPreview || "No subject";
   };
+  const sendTestTemplateEmailMutation = useMutation({
+    mutationFn: (data: { to: string; subject: string; html: string; accountId?: string }) =>
+      apiRequest("POST", "/api/templates/send-test", data),
+    onSuccess: () => {
+      toast({
+        title: "Test email sent",
+        description: `Check ${testEmailAddress} for the rendered message.`,
+      });
+      setTestEmailPopoverOpen(false);
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Couldn't send test email",
+        description: error?.message || "Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleSendTestEmail = () => {
+    if (!testEmailAddress.trim() || !emailTemplateForm.html) return;
+    sendTestTemplateEmailMutation.mutate({
+      to: testEmailAddress.trim(),
+      subject: emailTemplateForm.subject || "(no subject)",
+      html: emailTemplateForm.html,
+      accountId: accountPreviewSelectedId || undefined,
+    });
+  };
+
   // Email Mutations
   const createEmailTemplateMutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/email-templates", data),
@@ -3321,175 +3467,342 @@ export default function Communications() {
                             />
                           </div>
 
-                          <div className="space-y-3 rounded-xl border border-white/20 bg-white/5 p-4">
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                              <div>
-                                <h4 className="font-medium text-sm flex items-center gap-2 text-blue-100">
-                                  ✏️ Build Your Email
-                                </h4>
-                                <p className="text-xs text-blue-200/70">Draft the full Outlook-style message in one editor.</p>
+                          <div className="rounded-xl border border-white/20 bg-white/5 p-4">
+                            <Tabs value={composeTab} onValueChange={(v) => setComposeTab(v as "compose" | "preview")}>
+                              <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                                <div>
+                                  <h4 className="font-medium text-sm flex items-center gap-2 text-blue-100">
+                                    ✏️ Build Your Email
+                                  </h4>
+                                  <p className="text-xs text-blue-200/70">Draft the full message, then switch to Preview to check it end-to-end.</p>
+                                </div>
+                                <TabsList className="bg-white/10">
+                                  <TabsTrigger value="compose" data-testid="tab-compose">
+                                    <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                                    Compose
+                                  </TabsTrigger>
+                                  <TabsTrigger value="preview" data-testid="tab-preview">
+                                    <Eye className="h-3.5 w-3.5 mr-1.5" />
+                                    Preview
+                                  </TabsTrigger>
+                                </TabsList>
                               </div>
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                {formattingButtons.map(({ Icon, command, label }) => (
+
+                              <TabsContent value="compose" className="mt-0">
+                                <div className="flex flex-wrap items-center gap-1.5 mb-3">
+                                  {formattingButtons.map(({ Icon, command, label }) => (
+                                    <Button
+                                      key={label}
+                                      type="button"
+                                      size="icon"
+                                      variant="outline"
+                                      className="h-8 w-8 border-white/20 bg-white/10 text-blue-100 hover:bg-white/20"
+                                      onMouseDown={(e) => e.preventDefault()}
+                                      onClick={() => {
+                                        setActiveField("html");
+                                        applyEditorCommand(command);
+                                      }}
+                                      title={label}
+                                    >
+                                      <Icon className="h-4 w-4" />
+                                    </Button>
+                                  ))}
                                   <Button
-                                    key={label}
                                     type="button"
                                     size="icon"
                                     variant="outline"
                                     className="h-8 w-8 border-white/20 bg-white/10 text-blue-100 hover:bg-white/20"
+                                    onMouseDown={(e) => e.preventDefault()}
                                     onClick={() => {
                                       setActiveField("html");
-                                      applyEditorCommand(command);
+                                      applyEditorCommand("removeFormat");
                                     }}
-                                    title={label}
+                                    title="Clear formatting"
                                   >
-                                    <Icon className="h-4 w-4" />
+                                    <Eraser className="h-4 w-4" />
                                   </Button>
-                                ))}
-                                <Button
-                                  type="button"
-                                  size="icon"
-                                  variant="outline"
-                                  className="h-8 w-8 border-white/20 bg-white/10 text-blue-100 hover:bg-white/20"
-                                  onClick={() => {
-                                    setActiveField("html");
-                                    applyEditorCommand("removeFormat");
-                                  }}
-                                  title="Clear formatting"
-                                >
-                                  <Eraser className="h-4 w-4" />
-                                </Button>
-                                <Select
-                                  onValueChange={(value) => {
-                                    setActiveField("html");
-                                    applyEditorCommand("formatBlock", value);
-                                  }}
-                                >
-                                  <SelectTrigger className="flex h-8 w-[130px] items-center gap-2 border-white/20 bg-white/10 text-blue-100 text-xs">
-                                    <SelectValue placeholder="Text style" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {blockOptions.map((option) => (
-                                      <SelectItem key={option.value} value={option.value} className="text-sm">
-                                        {option.label}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                                <Select
-                                  onValueChange={(value) => {
-                                    setActiveField("html");
-                                    applyEditorCommand("foreColor", value);
-                                  }}
-                                >
-                                  <SelectTrigger className="flex h-8 w-[140px] items-center gap-2 border-white/20 bg-white/10 text-blue-100 text-xs">
-                                    <Palette className="h-3.5 w-3.5" />
-                                    <SelectValue placeholder="Text color" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {colorOptions.map((option) => (
-                                      <SelectItem key={option.value} value={option.value} className="flex items-center gap-2">
-                                        <span
-                                          className="h-4 w-4 rounded-full border"
-                                          style={{ backgroundColor: option.value }}
-                                        ></span>
-                                        {option.label}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                                <Button
-                                  type="button"
-                                  size="icon"
-                                  variant="outline"
-                                  className="h-8 w-8 border-white/20 bg-white/10 text-blue-100 hover:bg-white/20"
-                                  onClick={handleCreateLink}
-                                  title="Insert link"
-                                >
-                                  <Link2 className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="icon"
-                                  variant="outline"
-                                  className="h-8 w-8 border-white/20 bg-white/10 text-blue-100 hover:bg-white/20"
-                                  onClick={handleRemoveLink}
-                                  title="Remove link"
-                                >
-                                  <Link2Off className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </div>
+                                  <Select
+                                    onValueChange={(value) => {
+                                      setActiveField("html");
+                                      applyEditorCommand("formatBlock", value);
+                                    }}
+                                  >
+                                    <SelectTrigger className="flex h-8 w-[130px] items-center gap-2 border-white/20 bg-white/10 text-blue-100 text-xs">
+                                      <SelectValue placeholder="Text style" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {blockOptions.map((option) => (
+                                        <SelectItem key={option.value} value={option.value} className="text-sm">
+                                          {option.label}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
 
-                            <div className="rounded-lg border border-white/20 bg-white shadow-sm">
-                              <div className="relative">
-                                {!getPlainText(emailTemplateForm.html) && (
-                                  <div className="pointer-events-none absolute inset-0 flex h-full w-full items-start justify-start p-5 text-sm text-blue-400">
-                                    <p>
-                                      Start typing your full email here. Use variables from the right to personalize content, or drop in
-                                      quick layout blocks like the account table and payment button.
-                                    </p>
+                                  <div className="flex items-center gap-1 rounded-md border border-white/20 bg-white/10 pl-1 pr-1.5">
+                                    <Select
+                                      onValueChange={(value) => {
+                                        setActiveField("html");
+                                        applyEditorCommand("foreColor", value);
+                                      }}
+                                    >
+                                      <SelectTrigger className="flex h-8 w-[120px] items-center gap-2 border-0 bg-transparent text-blue-100 text-xs focus:ring-0">
+                                        <Palette className="h-3.5 w-3.5" />
+                                        <SelectValue placeholder="Text color" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {colorOptions.map((option) => (
+                                          <SelectItem key={option.value} value={option.value} className="flex items-center gap-2">
+                                            <span
+                                              className="h-4 w-4 rounded-full border"
+                                              style={{ backgroundColor: option.value }}
+                                            ></span>
+                                            {option.label}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <input
+                                      type="color"
+                                      value={customTextColor}
+                                      onChange={(e) => {
+                                        setCustomTextColor(e.target.value);
+                                        setActiveField("html");
+                                        applyEditorCommand("foreColor", e.target.value);
+                                      }}
+                                      title="Custom text color"
+                                      className="h-6 w-6 cursor-pointer rounded border border-white/30 bg-transparent p-0"
+                                      data-testid="input-custom-text-color"
+                                    />
                                   </div>
-                                )}
-                                <div
-                                  ref={editorRef}
-                                  className="min-h-[420px] w-full resize-y overflow-auto rounded-lg bg-white p-5 text-sm leading-relaxed text-slate-900 focus:outline-none"
-                                  contentEditable
-                                  suppressContentEditableWarning
-                                  onInput={syncEditorHtml}
-                                  onBlur={syncEditorHtml}
-                                  onFocus={() => setActiveField("html")}
-                                  spellCheck
-                                  data-testid="email-html-editor"
-                                />
-                              </div>
-                            </div>
-                            <p className="text-xs text-blue-200/70">
-                              Tip: Use {"{{ACCOUNT_SUMMARY_BLOCK}}"} in any design to auto-replace with your account table and payment
-                              button quick inserts.
-                            </p>
-                          </div>
 
-                          <div className="border border-white/20 rounded-lg p-4 bg-white/5">
-                            <div className="flex items-center justify-between mb-3">
-                              <Label className="text-sm font-medium flex items-center gap-2 text-blue-100">
-                                <Eye className="h-4 w-4" />
-                                Preview
-                              </Label>
-                              {emailTemplateForm.html && (
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={openAccountPreviewModal}
-                                  className="text-xs h-7 px-3 border-blue-400/40 bg-blue-500/10 text-blue-200 hover:bg-blue-500/20 hover:text-white"
-                                >
-                                  <Search className="h-3 w-3 mr-1" />
-                                  Preview with account
-                                </Button>
-                              )}
-                            </div>
-                            <div className="border border-white/20 rounded-lg overflow-auto bg-white p-4 max-h-96">
-                              {emailTemplateForm.html ? (
-                                <div className="bg-white">
-                                  <div className="mb-4 pb-4 border-b">
-                                    <div className="text-xs text-gray-500 mb-1">Subject:</div>
-                                    <div className="font-semibold text-gray-900">{renderSubjectPreview()}</div>
+                                  <div className="flex items-center gap-1 rounded-md border border-white/20 bg-white/10 pl-1 pr-1.5">
+                                    <Select
+                                      onValueChange={(value) => {
+                                        setActiveField("html");
+                                        applyEditorCommand("hiliteColor", value);
+                                      }}
+                                    >
+                                      <SelectTrigger className="flex h-8 w-[130px] items-center gap-2 border-0 bg-transparent text-blue-100 text-xs focus:ring-0">
+                                        <Highlighter className="h-3.5 w-3.5" />
+                                        <SelectValue placeholder="Highlight" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {highlightOptions.map((option) => (
+                                          <SelectItem key={option.value} value={option.value} className="flex items-center gap-2">
+                                            <span
+                                              className="h-4 w-4 rounded-full border"
+                                              style={{ backgroundColor: option.value === "transparent" ? "#ffffff" : option.value }}
+                                            ></span>
+                                            {option.label}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <input
+                                      type="color"
+                                      value={customHighlightColor}
+                                      onChange={(e) => {
+                                        setCustomHighlightColor(e.target.value);
+                                        setActiveField("html");
+                                        applyEditorCommand("hiliteColor", e.target.value);
+                                      }}
+                                      title="Custom highlight color"
+                                      className="h-6 w-6 cursor-pointer rounded border border-white/30 bg-transparent p-0"
+                                      data-testid="input-custom-highlight-color"
+                                    />
                                   </div>
-                                  <div
-                                    className="prose prose-sm max-w-none"
-                                    dangerouslySetInnerHTML={{ __html: renderPreview() }}
-                                  />
+
+                                  <Popover open={linkPopoverOpen} onOpenChange={handleLinkPopoverOpenChange}>
+                                    <PopoverTrigger asChild>
+                                      <Button
+                                        type="button"
+                                        size="icon"
+                                        variant="outline"
+                                        className="h-8 w-8 border-white/20 bg-white/10 text-blue-100 hover:bg-white/20"
+                                        title="Insert or edit link"
+                                        data-testid="button-insert-link"
+                                      >
+                                        <Link2 className="h-4 w-4" />
+                                      </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-80 space-y-3" align="start">
+                                      <div>
+                                        <Label className="text-xs font-medium">Link text</Label>
+                                        <Input
+                                          value={linkTextDraft}
+                                          onChange={(e) => setLinkTextDraft(e.target.value)}
+                                          placeholder="e.g., View my account"
+                                          className="mt-1 h-8 text-sm"
+                                          data-testid="input-link-text"
+                                        />
+                                      </div>
+                                      <div>
+                                        <Label className="text-xs font-medium">URL</Label>
+                                        <Input
+                                          value={linkUrlDraft}
+                                          onChange={(e) => setLinkUrlDraft(e.target.value)}
+                                          placeholder="https://"
+                                          className="mt-1 h-8 text-sm"
+                                          data-testid="input-link-url"
+                                        />
+                                      </div>
+                                      <div className="flex justify-end gap-2 pt-1">
+                                        <Button type="button" size="sm" variant="outline" onClick={() => setLinkPopoverOpen(false)}>
+                                          Cancel
+                                        </Button>
+                                        <Button type="button" size="sm" onClick={handleApplyLink} data-testid="button-apply-link">
+                                          Apply link
+                                        </Button>
+                                      </div>
+                                    </PopoverContent>
+                                  </Popover>
+                                  <Button
+                                    type="button"
+                                    size="icon"
+                                    variant="outline"
+                                    className="h-8 w-8 border-white/20 bg-white/10 text-blue-100 hover:bg-white/20"
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={handleRemoveLink}
+                                    title="Remove link"
+                                  >
+                                    <Link2Off className="h-4 w-4" />
+                                  </Button>
                                 </div>
-                              ) : (
-                                <div className="h-full flex items-center justify-center text-gray-400 py-8">
-                                  <div className="text-center">
-                                    <Eye className="h-12 w-12 mx-auto mb-3 opacity-30" />
-                                    <p className="text-sm">Select a template design to see preview</p>
+
+                                <div className="rounded-lg border border-white/20 bg-white shadow-sm">
+                                  <div className="relative">
+                                    {!getPlainText(emailTemplateForm.html) && (
+                                      <div className="pointer-events-none absolute inset-0 flex h-full w-full items-start justify-start p-5 text-sm text-blue-400">
+                                        <p>
+                                          Start typing your full email here. Use variables from the right to personalize content, or drop in
+                                          quick layout blocks like the account table and payment button.
+                                        </p>
+                                      </div>
+                                    )}
+                                    <div
+                                      ref={editorRef}
+                                      className="min-h-[65vh] w-full resize-y overflow-auto rounded-lg bg-white p-5 text-base leading-relaxed text-slate-900 caret-blue-600 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-400"
+                                      contentEditable
+                                      suppressContentEditableWarning
+                                      onInput={syncEditorHtml}
+                                      onBlur={syncEditorHtml}
+                                      onFocus={() => setActiveField("html")}
+                                      onMouseUp={handleEditorSelectionChange}
+                                      onKeyUp={handleEditorSelectionChange}
+                                      onSelect={handleEditorSelectionChange}
+                                      spellCheck
+                                      data-testid="email-html-editor"
+                                    />
                                   </div>
                                 </div>
-                              )}
-                            </div>
+                                <p className="text-xs text-blue-200/70 mt-2">
+                                  Tip: Use {"{{ACCOUNT_SUMMARY_BLOCK}}"} in any design to auto-replace with your account table and payment
+                                  button quick inserts.
+                                </p>
+                              </TabsContent>
+
+                              <TabsContent value="preview" className="mt-0">
+                                <div className="flex items-center justify-between mb-3">
+                                  <Label className="text-sm font-medium flex items-center gap-2 text-blue-100">
+                                    <Eye className="h-4 w-4" />
+                                    Live preview
+                                  </Label>
+                                  {emailTemplateForm.html && (
+                                    <div className="flex items-center gap-2">
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={openAccountPreviewModal}
+                                        className="text-xs h-7 px-3 border-blue-400/40 bg-blue-500/10 text-blue-200 hover:bg-blue-500/20 hover:text-white"
+                                      >
+                                        <Search className="h-3 w-3 mr-1" />
+                                        Preview with account
+                                      </Button>
+                                      <Popover
+                                        open={testEmailPopoverOpen}
+                                        onOpenChange={(open) => {
+                                          if (open && !testEmailAddress) {
+                                            setTestEmailAddress((user as any)?.email || "");
+                                          }
+                                          setTestEmailPopoverOpen(open);
+                                        }}
+                                      >
+                                        <PopoverTrigger asChild>
+                                          <Button
+                                            type="button"
+                                            size="sm"
+                                            variant="outline"
+                                            className="text-xs h-7 px-3 border-emerald-400/40 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20 hover:text-white"
+                                            data-testid="button-send-test-email"
+                                          >
+                                            <Send className="h-3 w-3 mr-1" />
+                                            Send test email
+                                          </Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="w-80 space-y-3" align="end">
+                                          <div>
+                                            <Label className="text-xs font-medium">Send a real test copy to</Label>
+                                            <Input
+                                              value={testEmailAddress}
+                                              onChange={(e) => setTestEmailAddress(e.target.value)}
+                                              placeholder="you@example.com"
+                                              className="mt-1 h-8 text-sm"
+                                              data-testid="input-test-email-address"
+                                            />
+                                            <p className="mt-1.5 text-[11px] text-muted-foreground">
+                                              {accountPreviewSelectedId
+                                                ? `Uses ${accountPreviewSelectedLabel || "the selected account"}'s real data for variables.`
+                                                : "Sends with your brand colors and layout applied; variables not tied to an account will show as {{tags}}."}
+                                            </p>
+                                          </div>
+                                          <div className="flex justify-end">
+                                            <Button
+                                              type="button"
+                                              size="sm"
+                                              onClick={handleSendTestEmail}
+                                              disabled={!testEmailAddress.trim() || sendTestTemplateEmailMutation.isPending}
+                                              data-testid="button-confirm-send-test-email"
+                                            >
+                                              {sendTestTemplateEmailMutation.isPending ? (
+                                                <>
+                                                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                                                  Sending...
+                                                </>
+                                              ) : (
+                                                "Send"
+                                              )}
+                                            </Button>
+                                          </div>
+                                        </PopoverContent>
+                                      </Popover>
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="border border-white/20 rounded-lg overflow-auto bg-white p-6 min-h-[65vh]">
+                                  {emailTemplateForm.html ? (
+                                    <div className="mx-auto max-w-2xl bg-white">
+                                      <div className="mb-4 pb-4 border-b">
+                                        <div className="text-xs text-gray-500 mb-1">Subject:</div>
+                                        <div className="font-semibold text-gray-900">{renderSubjectPreview()}</div>
+                                      </div>
+                                      <div
+                                        className="prose prose-sm max-w-none"
+                                        dangerouslySetInnerHTML={{ __html: renderPreview() }}
+                                      />
+                                    </div>
+                                  ) : (
+                                    <div className="h-full flex items-center justify-center text-gray-400 py-8">
+                                      <div className="text-center">
+                                        <Eye className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                                        <p className="text-sm">Select a template design to see preview</p>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </TabsContent>
+                            </Tabs>
                           </div>
                         </div>
 

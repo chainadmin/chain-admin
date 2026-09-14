@@ -4059,6 +4059,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Send a real, brand-styled test copy of an in-progress email template so
+  // it can be checked in an actual inbox (colors, links, variables, layout)
+  // before it's used on a live campaign.
+  app.post('/api/templates/send-test', authenticateUser, requireEmailService, requireServiceAccess('email'), async (req: any, res) => {
+    try {
+      const tenantId = await getTenantId(req, storage);
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { to, subject, html, accountId } = req.body;
+      if (!to || !subject || !html) {
+        return res.status(400).json({ message: "to, subject, and html are required" });
+      }
+
+      const { tenant, tenantBranding, tenantWithSettings } = await buildTenantEmailContext(tenantId);
+      const baseUrl = `${req.protocol}://${req.get('host')}`;
+
+      let renderedSubject = subject;
+      let renderedHtml = html;
+
+      if (accountId) {
+        const account = await storage.getAccount(accountId);
+        if (account && account.tenantId === tenantId) {
+          const consumer = account.consumer || {};
+          renderedSubject = replaceTemplateVariables(subject, consumer, account, tenantWithSettings, baseUrl);
+          renderedHtml = replaceTemplateVariables(html, consumer, account, tenantWithSettings, baseUrl);
+        }
+      }
+
+      const finalizedHtml = finalizeEmailHtml(renderedHtml, {
+        logoUrl: tenantBranding?.logoUrl,
+        agencyName: tenant?.name,
+        primaryColor: tenantBranding?.primaryColor || tenantBranding?.buttonColor,
+        accentColor: tenantBranding?.secondaryColor || tenantBranding?.linkColor,
+        backgroundColor: tenantBranding?.emailBackgroundColor || tenantBranding?.backgroundColor,
+        contentBackgroundColor:
+          tenantBranding?.emailContentBackgroundColor ||
+          tenantBranding?.cardBackgroundColor ||
+          tenantBranding?.panelBackgroundColor,
+        textColor: tenantBranding?.emailTextColor || tenantBranding?.textColor,
+        previewText: renderedSubject,
+      }) || renderedHtml;
+
+      let fromEmail;
+      if (tenant?.customSenderEmail) {
+        fromEmail = `${tenant.name} <${tenant.customSenderEmail}>`;
+      } else {
+        fromEmail = tenant ? `${tenant.name} <${tenant.slug}@chainsoftwaregroup.com>` : 'support@chainsoftwaregroup.com';
+      }
+
+      const result = await emailService.sendEmail({
+        to,
+        from: fromEmail,
+        subject: `[TEST] ${renderedSubject}`,
+        html: finalizedHtml,
+        tag: 'template-test',
+        metadata: {
+          type: 'template-test',
+          tenantId,
+        },
+        tenantId,
+      });
+
+      if (!result.success) {
+        throw new Error(result.error || "Email provider rejected the message");
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error sending test template email:", error);
+      res.status(500).json({ message: "Failed to send test email" });
+    }
+  });
+
   // Email template routes
   app.get('/api/email-templates', authenticateUser, async (req: any, res) => {
     try {
