@@ -12555,6 +12555,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.json({ success: false, requiresPaymentMethod: true });
       }
 
+      // A DMP-linked account is charged by DMP, not Chain - mirror the same
+      // dmpEnabled/filenumber gate used when arrangements are created via
+      // /api/consumer/payments/process (routes.ts ~14597) so this schedule
+      // isn't picked up by Chain's own scheduled-payment runner too.
+      const settings = await storage.getTenantSettings(tenantId);
+      const account = await storage.getAccount(proposed.accountId);
+      const isDmpManaged = Boolean((settings as any)?.dmpEnabled && account?.filenumber);
+
       // Calculate start/next/end payment dates
       const today = new Date();
       const nextPaymentDate = new Date(today);
@@ -12592,7 +12600,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         remainingPayments: proposed.numberOfPayments - 1,
         totalPayments: proposed.numberOfPayments,
         status: 'active',
-        source: 'chain',
+        source: isDmpManaged ? 'dmp' : 'chain',
+        processor: isDmpManaged ? 'dmp' : 'chain',
         smaxSynced: false,
       });
 
@@ -12960,6 +12969,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       if (schedule.arrangementType === 'settlement') {
         return res.status(400).json({ message: "Settlement arrangements cannot be paid off early. The remaining balance is forgiven upon completion of settlement payments." });
+      }
+
+      // A DMP-managed schedule has no real card on file - its paymentMethodId
+      // points at the 'DMP_MANAGED' placeholder (storage.ts syncDmpArrangementToChain),
+      // and DMP is what actually charges the consumer. Attempting a payoff here
+      // would submit that placeholder token as if it were a real card to the
+      // tenant's payment gateway. Payoff for a DMP-owned arrangement must happen
+      // in DMP directly.
+      if (schedule.processor === 'dmp' || schedule.source === 'dmp') {
+        return res.status(400).json({ message: "This payment arrangement is managed by Debt Manager Pro and cannot be paid off here. Please contact your agency to pay off the remaining balance." });
       }
 
       // Get the account to calculate remaining balance
