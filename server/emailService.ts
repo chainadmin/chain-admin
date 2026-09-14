@@ -120,21 +120,28 @@ export class EmailService {
       const activeClient = tenantToken ? new Client(tenantToken) : postmarkClient;
       const result = await activeClient.sendEmail(emailPayload);
 
-      // Log email to database if tenantId is provided
+      // Log email to database if tenantId is provided. Postmark has already
+      // accepted the message at this point, so a failure here must not be
+      // reported as a send failure - it's a bookkeeping write, not the send
+      // itself, and this whole method sits inside one try/catch.
       if (options.tenantId) {
-        await db.insert(emailLogs).values({
-          tenantId: options.tenantId,
-          consumerId: options.consumerId || null, // Link to consumer for conversation tracking
-          messageId: result.MessageID,
-          fromEmail: fromEmail,
-          toEmail: options.to,
-          subject: options.subject,
-          htmlBody: options.html,
-          textBody: textBody,
-          status: 'sent',
-          tag: options.tag,
-          metadata: normalizedMetadata || {},
-        });
+        try {
+          await db.insert(emailLogs).values({
+            tenantId: options.tenantId,
+            consumerId: options.consumerId || null, // Link to consumer for conversation tracking
+            messageId: result.MessageID,
+            fromEmail: fromEmail,
+            toEmail: options.to,
+            subject: options.subject,
+            htmlBody: options.html,
+            textBody: textBody,
+            status: 'sent',
+            tag: options.tag,
+            metadata: normalizedMetadata || {},
+          });
+        } catch (logError) {
+          console.error('Failed to record email log after successful send (non-blocking):', logError);
+        }
       }
 
       // DMP owns the communication history for DMP-linked accounts. Keep its

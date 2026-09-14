@@ -405,23 +405,30 @@ class SmsService {
       const segmentCount = this.calculateSegments(message);
       console.log(`📊 SMS segment calculation: ${message.length} chars = ${segmentCount} segment(s)`);
 
-      // Track ALL sent SMS for billing purposes (not just campaigns)
-      await storage.createSmsTracking({
-        tenantId,
-        campaignId: campaignId || null,
-        consumerId: consumerId || null,
-        phoneNumber: to,
-        messageBody: message,
-        segments: segmentCount, // Store calculated segment count
-        status: result.status || 'queued', // Use Twilio's actual status (queued, accepted, etc.)
-        sentAt: new Date(),
-        trackingData: {
-          twilioSid: result.sid,
-          ...(metadata?.sequenceId ? { sequenceId: metadata.sequenceId, sequenceStepOrder: metadata.sequenceStepOrder } : {}),
-        },
-      });
-      
-      console.log(`📱 SMS tracking created: tenant=${tenantId}, sid=${result.sid}, segments=${segmentCount}, campaign=${campaignId || 'none'}`);
+      // Track ALL sent SMS for billing purposes (not just campaigns). Twilio
+      // has already accepted the message at this point, so a failure here
+      // must not be reported as a send failure - it's a bookkeeping write,
+      // not the send itself, and this whole block sits inside the same
+      // try/catch as the Twilio call above.
+      try {
+        await storage.createSmsTracking({
+          tenantId,
+          campaignId: campaignId || null,
+          consumerId: consumerId || null,
+          phoneNumber: to,
+          messageBody: message,
+          segments: segmentCount, // Store calculated segment count
+          status: result.status || 'queued', // Use Twilio's actual status (queued, accepted, etc.)
+          sentAt: new Date(),
+          trackingData: {
+            twilioSid: result.sid,
+            ...(metadata?.sequenceId ? { sequenceId: metadata.sequenceId, sequenceStepOrder: metadata.sequenceStepOrder } : {}),
+          },
+        });
+        console.log(`📱 SMS tracking created: tenant=${tenantId}, sid=${result.sid}, segments=${segmentCount}, campaign=${campaignId || 'none'}`);
+      } catch (trackingError) {
+        console.error('Failed to record SMS tracking after successful send (non-blocking):', trackingError);
+      }
 
       // Record billing at send time with accurate segment count
       try {
