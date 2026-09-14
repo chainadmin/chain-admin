@@ -1,3 +1,5 @@
+import { deriveDmpArrangement, type DmpArrangementSummary } from './dmpPaymentReconciliation';
+
 type ImportStorage = {
   getAccountsByTenant(tenantId: string): Promise<any[]>;
   getFoldersByTenant?(tenantId: string): Promise<any[]>;
@@ -135,6 +137,66 @@ export async function syncDmpAccountPayments(
       results.pendingPayments += pending.length;
     } catch (error: any) {
       results.errors.push(`Payment sync failed for DMP account ${filenumber}: ${error?.message || 'Unknown error'}`);
+    }
+  }
+
+  return results;
+}
+
+type DmpArrangementSyncStorage = Pick<ImportStorage, 'getAccountsByTenant'> & {
+  getActivePaymentSchedulesByConsumerAndAccount(
+    consumerId: string, accountId: string, tenantId: string,
+  ): Promise<Array<{ source: string }>>;
+  syncDmpArrangementToChain(
+    tenantId: string, consumerId: string, accountId: string, arrangement: DmpArrangementSummary,
+  ): Promise<unknown>;
+};
+
+export interface DmpArrangementSyncResults {
+  arrangementsSynced: number;
+  errors: string[];
+}
+
+/**
+ * Pulls payment arrangements a DMP collector created directly in DMP into
+ * Chain's own payment_schedules table. This is separate from
+ * syncDmpAccountPayments (which only caches raw payment history/pending
+ * arrays onto the account) because an arrangement needs its own placeholder
+ * payment method and upsert logic - see storage.syncDmpArrangementToChain.
+ * Skips any account that already has an active non-DMP schedule so this
+ * never overwrites or duplicates an arrangement Chain or SMAX already owns.
+ */
+export async function syncDmpArrangements(
+  storage: DmpArrangementSyncStorage,
+  tenantId: string,
+  getPayments: (filenumber: string) => Promise<any[] | null>,
+): Promise<DmpArrangementSyncResults> {
+  const results: DmpArrangementSyncResults = {
+    arrangementsSynced: 0,
+    errors: [],
+  };
+  const accounts = await storage.getAccountsByTenant(tenantId);
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+
+  for (const account of accounts) {
+    const filenumber = typeof account.filenumber === 'string' ? account.filenumber.trim() : '';
+    if (!filenumber || account.additionalData?.dmpSource !== 'dmp' || !account.consumerId) continue;
+
+    try {
+      const existingActiveSchedules = await storage.getActivePaymentSchedulesByConsumerAndAccount(
+        account.consumerId, account.id, tenantId,
+      );
+      const hasNonDmpActiveSchedule = existingActiveSchedules.some(s => s.source !== 'dmp');
+      if (hasNonDmpActiveSchedule) continue;
+
+      const rawPayments = await getPayments(filenumber);
+      const arrangement = deriveDmpArrangement(rawPayments, today);
+      if (arrangement) {
+        await storage.syncDmpArrangementToChain(tenantId, account.consumerId, account.id, arrangement);
+        results.arrangementsSynced++;
+      }
+    } catch (error: any) {
+      results.errors.push(`Arrangement sync failed for DMP account ${filenumber}: ${error?.message || 'Unknown error'}`);
     }
   }
 

@@ -11257,6 +11257,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         hydrateDmpAccountPhones,
         importDmpAccounts,
         syncDmpAccountPayments,
+        syncDmpArrangements,
       } = await import('./dmpAccountImport');
       const dmpAccounts = await hydrateDmpAccountPhones(
         dmpFetch.accounts,
@@ -11287,18 +11288,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         tenantId,
         filenumber => dmpService.getPayments(tenantId, filenumber),
       );
+      const arrangementResults = await syncDmpArrangements(
+        storage,
+        tenantId,
+        filenumber => dmpService.getPayments(tenantId, filenumber),
+      );
 
       res.json({
         success: true,
-        message: `Synced ${results.imported} new accounts and refreshed ${results.updated} existing accounts, plus ${paymentResults.historyPayments} payment history records and ${paymentResults.pendingPayments} pending payments`
+        message: `Synced ${results.imported} new accounts and refreshed ${results.updated} existing accounts, plus ${paymentResults.historyPayments} payment history records, ${paymentResults.pendingPayments} pending payments, and ${arrangementResults.arrangementsSynced} DMP-native payment arrangement(s)`
           + (dmpFetch.rejected > 0
             ? `. Rejected ${dmpFetch.rejected} DMP ${dmpFetch.rejected === 1 ? 'row' : 'rows'} without a valid file number.`
             : ''),
         fetched: dmpFetch.fetched,
-        failed: dmpFetch.rejected + results.errors.length + paymentResults.errors.length,
+        failed: dmpFetch.rejected + results.errors.length + paymentResults.errors.length + arrangementResults.errors.length,
         rejected: dmpFetch.rejected,
         ...results,
         payments: paymentResults,
+        arrangements: arrangementResults,
       });
     } catch (error: any) {
       console.error("Error importing accounts from DMP:", error);
@@ -17383,7 +17390,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const dmpFetch = await dmpService.getAccountsWithStats(tenant.id);
               const dmpAccounts = dmpFetch.accounts;
               if (dmpAccounts && dmpAccounts.length > 0) {
-                const { importDmpAccounts } = await import('./dmpAccountImport');
+                const { importDmpAccounts, syncDmpArrangements } = await import('./dmpAccountImport');
                 const results = await importDmpAccounts(
                   storage,
                   tenant.id,
@@ -17398,6 +17405,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   `[DMP Sync] Tenant ${tenant.name}: ${results.updated} updated, `
                   + `${results.imported} created, ${results.skipped} skipped `
                   + `${dmpFetch.rejected} rejected from ${dmpFetch.fetched} DMP rows`,
+                );
+
+                const arrangementResults = await syncDmpArrangements(
+                  storage,
+                  tenant.id,
+                  filenumber => dmpService.getPayments(tenant.id, filenumber),
+                );
+                console.log(
+                  `[DMP Sync] Tenant ${tenant.name}: ${arrangementResults.arrangementsSynced} `
+                  + `payment arrangement(s) synced from DMP`
+                  + (arrangementResults.errors.length
+                    ? `, ${arrangementResults.errors.length} error(s): ${arrangementResults.errors.join('; ')}`
+                    : ''),
                 );
               }
             }
