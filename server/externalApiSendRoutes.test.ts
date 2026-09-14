@@ -21,6 +21,24 @@ async function withTestServer(run: (baseUrl: string) => Promise<void>) {
   }
 }
 
+// Production mounts this router (server/routes.ts) before its own
+// app.use(express.json()) call, so the router must parse its own body
+// rather than relying on a parser mounted ahead of it. Mirror that order
+// here instead of installing express.json() first, the way withTestServer
+// above does.
+async function withProductionOrderedTestServer(run: (baseUrl: string) => Promise<void>) {
+  const app = express();
+  app.use("/api/v2", externalApiRouter);
+  const server = app.listen(0);
+  try {
+    await new Promise<void>((resolve) => server.once("listening", resolve));
+    const port = (server.address() as AddressInfo).port;
+    await run(`http://127.0.0.1:${port}/api/v2`);
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+}
+
 function stubTenantAuth() {
   (storage as any).getTenantByExternalApiKey = async (key: string) =>
     key === "valid-key" ? { tenantId: "tenant-1" } : null;
@@ -141,4 +159,57 @@ test("send routes reject a request without a valid bearer key", async () => {
     });
     assert.equal(response.status, 401);
   });
+});
+
+test("POST /send_text still parses the body when mounted ahead of the app's JSON parser (production order)", async () => {
+  stubTenantAuth();
+  const originalSendSms = smsService.sendSms;
+  let calledWith: any;
+  (smsService as any).sendSms = async (to: string, message: string, tenantId: string) => {
+    calledWith = { to, message, tenantId };
+    return { success: true };
+  };
+
+  try {
+    await withProductionOrderedTestServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/send_text`, {
+        method: "POST",
+        headers: { Authorization: "Bearer valid-key", "Content-Type": "application/json" },
+        body: JSON.stringify({ phoneNumber: "2025550101", message: "Your payment is due" }),
+      });
+      const body = await response.json();
+      assert.equal(response.status, 200);
+      assert.equal(body.success, true);
+      assert.equal(calledWith.to, "2025550101");
+      assert.equal(calledWith.message, "Your payment is due");
+    });
+  } finally {
+    (smsService as any).sendSms = originalSendSms;
+  }
+});
+
+test("POST /send_email_c2c still parses the body when mounted ahead of the app's JSON parser (production order)", async () => {
+  stubTenantAuth();
+  const originalSendEmail = emailService.sendEmail;
+  let calledWith: any;
+  (emailService as any).sendEmail = async (options: any) => {
+    calledWith = options;
+    return { success: true, messageId: "msg-1" };
+  };
+
+  try {
+    await withProductionOrderedTestServer(async (baseUrl) => {
+      const response = await fetch(`${baseUrl}/send_email_c2c`, {
+        method: "POST",
+        headers: { Authorization: "Bearer valid-key", "Content-Type": "application/json" },
+        body: JSON.stringify({ emailAddress: "ada@example.test", subject: "Receipt", body: "<p>Paid</p>" }),
+      });
+      const body = await response.json();
+      assert.equal(response.status, 200);
+      assert.equal(body.success, true);
+      assert.equal(calledWith.to, "ada@example.test");
+    });
+  } finally {
+    (emailService as any).sendEmail = originalSendEmail;
+  }
 });

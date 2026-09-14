@@ -36,6 +36,12 @@ const sendRenderedCampaignSchema = z.object({
 
 const router = express.Router();
 
+// This router is mounted ahead of the app's global express.json() call
+// (see registerRoutes in routes.ts), so req.body would otherwise be
+// undefined for every route here - parse it locally instead of relying on
+// mount order.
+router.use(express.json({ limit: "10mb" }));
+
 router.use(async (req: ExternalApiRequest, res, next) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
