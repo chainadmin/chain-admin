@@ -1090,6 +1090,27 @@ test('DMP balance repair previews and idempotently applies authoritative cents b
   }]);
 });
 
+test('DMP balance repair falls back originalBalanceCents to the current balance, never the stored value, when the provider omits it', async () => {
+  const updates: any[] = [];
+  const fakeStorage = {
+    getAccountsByTenant: async () => [
+      { id: 'dmp-1', filenumber: 'file-1', balanceCents: 750000, originalBalanceCents: 1000000, additionalData: { dmpSource: 'dmp' } },
+    ],
+    applyDmpBalanceRepair: async (tenantId: string, changes: any[]) => {
+      updates.push({ tenantId, changes });
+      return changes.length;
+    },
+  };
+  // No originalBalance field at all - this is the shape every row from
+  // Chain's bulk sync now has.
+  const provider = [{ filenumber: 'file-1', balance: 7500 }];
+
+  const preview = await planDmpBalanceRepair(fakeStorage, 'tenant-1', provider);
+  assert.equal(preview.changed, 1);
+  assert.equal(preview.changes[0].originalBalanceCents, 7500);
+  assert.notEqual(preview.changes[0].originalBalanceCents, 1000000);
+});
+
 test('reimport repairs a retained placeholder consumer instead of creating another consumer', async () => {
   const updates: any[] = [];
   let consumerCreates = 0;

@@ -85,3 +85,46 @@ test("a sync row reporting a genuine zero balance is still applied, not treated 
   assert.equal(updates.length, 1);
   assert.equal(updates[0].patch.balanceCents, 0);
 });
+
+test("with no originalBalance on the sync row, originalBalanceCents falls back to the current balance - never the account's previously stored original balance", async () => {
+  const existing = {
+    id: "account-1",
+    filenumber: "940",
+    balanceCents: 111180,
+    originalBalanceCents: 197062,
+    status: "active",
+    creditor: "Acme",
+    additionalData: {},
+  };
+  const { storage, updates } = fakeStorage(existing);
+
+  // Chain's bulk sync no longer sends originalBalance at all, so this is the
+  // shape every real sync row now has.
+  await importDmpAccounts(storage as any, "tenant-1", [
+    { filenumber: "940", balance: 95380, status: "active" },
+  ]);
+
+  assert.equal(updates.length, 1);
+  assert.equal(updates[0].patch.originalBalanceCents, 95380);
+  assert.notEqual(updates[0].patch.originalBalanceCents, existing.originalBalanceCents);
+});
+
+test("an originalBalance the sync row does provide is still used as-is", async () => {
+  const existing = {
+    id: "account-1",
+    filenumber: "940",
+    balanceCents: 111180,
+    originalBalanceCents: 197062,
+    status: "active",
+    creditor: "Acme",
+    additionalData: {},
+  };
+  const { storage, updates } = fakeStorage(existing);
+
+  await importDmpAccounts(storage as any, "tenant-1", [
+    { filenumber: "940", balance: 95380, originalBalance: 197062, status: "active" },
+  ]);
+
+  assert.equal(updates.length, 1);
+  assert.equal(updates[0].patch.originalBalanceCents, 197062);
+});
