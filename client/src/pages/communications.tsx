@@ -749,14 +749,21 @@ export default function Communications() {
     queryKey: ["/api/callback-requests"],
   });
 
+  // Only poll these while the SMS view is actually showing them — they're
+  // irrelevant on the email side, and polling regardless of tab forced this
+  // whole (very large) page to re-render every 5 seconds no matter what the
+  // user was doing, which was visible as repeated freezes/jank while
+  // composing an email template.
   const { data: smsRateLimitStatus } = useQuery({
     queryKey: ["/api/sms-rate-limit-status"],
-    refetchInterval: 5000, // Refresh every 5 seconds for real-time updates
+    enabled: communicationType === "sms",
+    refetchInterval: communicationType === "sms" ? 5000 : false,
   });
 
   const { data: smsQueueStatus } = useQuery({
     queryKey: ["/api/sms-queue-status"],
-    refetchInterval: 5000,
+    enabled: communicationType === "sms",
+    refetchInterval: communicationType === "sms" ? 5000 : false,
   });
 
   const { data: tenantSettings } = useQuery({
