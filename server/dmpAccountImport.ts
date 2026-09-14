@@ -233,7 +233,13 @@ export async function importDmpAccounts(
       if (existing) {
         await storage.updateAccount(existing.id, {
           accountNumber: dmpAccount.accountNumber || existing.accountNumber,
-          balanceCents: dmpAccount.balance || 0,
+          // A sync hiccup (timeout, malformed row, transient DMP API error)
+          // must never wipe out a balance Chain already has correctly - fall
+          // back to the existing stored value, the same way originalBalanceCents
+          // already does below. Falling back to 0 here previously meant one bad
+          // sync could zero an account's balance permanently, since nothing
+          // ever re-derives it from anywhere else afterward.
+          balanceCents: dmpAccount.balance ?? existing.balanceCents ?? 0,
           originalBalanceCents: dmpAccount.originalBalance ?? existing.originalBalanceCents ?? dmpAccount.balance ?? 0,
           status: dmpAccount.status || existing.status,
           creditor: dmpAccount.creditorName || existing.creditor,
