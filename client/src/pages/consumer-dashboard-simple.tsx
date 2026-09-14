@@ -787,8 +787,11 @@ export default function ConsumerDashboardSimple() {
     } else if (paymentMethod === 'custom' && customPaymentAmount) {
       // Custom payment amount validation (for existing SMAX arrangements or other custom payments)
       const amount = parseFloat(customPaymentAmount);
-      const minAmount = (settings?.minimumMonthlyPayment || 100) / 100;
       const maxAmount = (selectedAccount.balanceCents || 0) / 100;
+      // The minimum can never exceed what's actually owed - a consumer
+      // paying off a small remaining balance must not be blocked by a
+      // configured minimum that's now higher than the balance itself.
+      const minAmount = Math.min((settings?.minimumMonthlyPayment || 100) / 100, maxAmount);
       
       if (isNaN(amount) || amount <= 0) {
         toast({
@@ -837,8 +840,9 @@ export default function ConsumerDashboardSimple() {
     // Validate one-time payment amount
     if (selectedArrangement?.planType === 'one_time_payment') {
       const amount = parseFloat(customPaymentAmount);
-      const minAmount = (selectedArrangement.oneTimePaymentMin || 0) / 100;
       const maxAmount = (selectedAccount.balanceCents || 0) / 100;
+      // The minimum can never exceed what's actually owed.
+      const minAmount = Math.min((selectedArrangement.oneTimePaymentMin || 0) / 100, maxAmount);
       
       if (!customPaymentAmount || isNaN(amount)) {
         toast({
@@ -2626,7 +2630,7 @@ export default function ConsumerDashboardSimple() {
                           setPaymentMethod('custom');
                           setSelectedArrangement(null);
                         }}
-                        min={settings?.minimumMonthlyPayment ? (settings.minimumMonthlyPayment / 100) : 1}
+                        min={Math.min(settings?.minimumMonthlyPayment ? (settings.minimumMonthlyPayment / 100) : 1, (selectedAccount?.balanceCents || 0) / 100)}
                         max={(selectedAccount?.balanceCents || 0) / 100}
                         step="0.01"
                         placeholder="0.00"
@@ -2637,7 +2641,7 @@ export default function ConsumerDashboardSimple() {
                       />
                     </div>
                     <p className="text-xs text-purple-100/50 mt-2">
-                      Min: ${((settings?.minimumMonthlyPayment || 100) / 100).toFixed(2)} | 
+                      Min: ${Math.min((settings?.minimumMonthlyPayment || 100) / 100, (selectedAccount?.balanceCents || 0) / 100).toFixed(2)} |
                       Max: ${((selectedAccount?.balanceCents || 0) / 100).toFixed(2)} (Full Balance)
                     </p>
                     {paymentMethod === 'custom' && customPaymentAmount && !isNaN(parseFloat(customPaymentAmount)) && (
@@ -2872,7 +2876,7 @@ export default function ConsumerDashboardSimple() {
                               id="oneTimePaymentInput"
                               value={customPaymentAmount}
                               onChange={(e) => setCustomPaymentAmount(e.target.value)}
-                              min={(selectedArrangement.oneTimePaymentMin || 0) / 100}
+                              min={Math.min((selectedArrangement.oneTimePaymentMin || 0) / 100, (selectedAccount?.balanceCents || 0) / 100)}
                               max={(selectedAccount?.balanceCents || 0) / 100}
                               step="0.01"
                               placeholder="0.00"
@@ -2881,7 +2885,7 @@ export default function ConsumerDashboardSimple() {
                             />
                           </div>
                           <p className="text-xs text-blue-100/50">
-                            Min: ${((selectedArrangement.oneTimePaymentMin || 0) / 100).toFixed(2)} | Max: ${((selectedAccount?.balanceCents || 0) / 100).toFixed(2)}
+                            Min: ${Math.min((selectedArrangement.oneTimePaymentMin || 0) / 100, (selectedAccount?.balanceCents || 0) / 100).toFixed(2)} | Max: ${((selectedAccount?.balanceCents || 0) / 100).toFixed(2)}
                           </p>
                         </div>
                       )}
@@ -3060,7 +3064,7 @@ export default function ConsumerDashboardSimple() {
                         id="customAmount"
                         value={customPaymentAmount}
                         onChange={(e) => setCustomPaymentAmount(e.target.value)}
-                        min={(selectedArrangement.oneTimePaymentMin || 0) / 100}
+                        min={Math.min((selectedArrangement.oneTimePaymentMin || 0) / 100, (selectedAccount?.balanceCents || 0) / 100)}
                         max={(selectedAccount?.balanceCents || 0) / 100}
                         step="0.01"
                         placeholder="0.00"
@@ -3070,7 +3074,7 @@ export default function ConsumerDashboardSimple() {
                       />
                     </div>
                     <p className="text-xs text-blue-100/50 mt-1">
-                      Min: ${((selectedArrangement.oneTimePaymentMin || 0) / 100).toFixed(2)} | Max: ${((selectedAccount?.balanceCents || 0) / 100).toFixed(2)} (Full Balance)
+                      Min: ${Math.min((selectedArrangement.oneTimePaymentMin || 0) / 100, (selectedAccount?.balanceCents || 0) / 100).toFixed(2)} | Max: ${((selectedAccount?.balanceCents || 0) / 100).toFixed(2)} (Full Balance)
                     </p>
                   </div>
                 )}

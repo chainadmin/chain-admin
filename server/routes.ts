@@ -14164,13 +14164,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
             });
           }
 
-          // Validate against minimum payment amount
-          const minAmount = arrangement.oneTimePaymentMin || 0;
+          // Validate against minimum payment amount - but the minimum can
+          // never be more than what's actually owed. A consumer paying off
+          // a $1 remaining balance must not be blocked by a $100 configured
+          // minimum; the effective floor is whichever is smaller.
+          const minAmount = Math.min(arrangement.oneTimePaymentMin || 0, accountBalance);
           if (customPaymentAmountCents < minAmount) {
             console.log('❌ Payment below minimum:', { customPaymentAmountCents, minAmount });
-            return res.status(400).json({ 
+            return res.status(400).json({
               success: false,
-              message: `Minimum payment amount is $${(minAmount / 100).toFixed(2)}` 
+              message: `Minimum payment amount is $${(minAmount / 100).toFixed(2)}`
             });
           }
 
