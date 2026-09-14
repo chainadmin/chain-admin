@@ -6,6 +6,15 @@ interface DmpConfig {
   apiUrl: string;
   username: string;
   password: string;
+  // Included so the auth token cache below can be scoped per tenant, not
+  // just per username+apiUrl - dmpService is a single shared instance for
+  // the whole process, and the daily sync cron authenticates one tenant
+  // after another in it. Without tenantId in the cache key, any two
+  // tenants whose DMP username+apiUrl ever coincide (shared DMP server,
+  // similar/reused credentials) would silently share a cached auth token
+  // and one tenant's sync could pull back another tenant's account data -
+  // no error, just the wrong company's numbers.
+  tenantId: string;
 }
 
 export const REDACTED_DMP_PASSWORD = '••••••••';
@@ -461,6 +470,7 @@ export class DebtManagerProService {
         apiUrl: apiUrl.replace(/\/$/, ''),
         username,
         password,
+        tenantId,
       };
     } catch (error) {
       console.error('Error getting DMP config:', error);
@@ -469,7 +479,7 @@ export class DebtManagerProService {
   }
 
   private async authenticate(config: DmpConfig): Promise<string | null> {
-    const cacheKey = `${config.username}:${config.apiUrl}`;
+    const cacheKey = `${config.tenantId}:${config.username}:${config.apiUrl}`;
     const cached = this.tokenCache.get(cacheKey);
     
     if (cached && Date.now() < cached.expires) {
@@ -572,7 +582,7 @@ export class DebtManagerProService {
     body?: unknown,
     context?: DmpImportRequestContext,
   ): Promise<unknown> {
-    const cacheKey = `${config.username}:${config.apiUrl}`;
+    const cacheKey = `${config.tenantId}:${config.username}:${config.apiUrl}`;
     const cached = this.tokenCache.get(cacheKey);
     let token = cached && Date.now() < cached.expires ? cached.token : undefined;
 
