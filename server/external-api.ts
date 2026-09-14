@@ -154,6 +154,7 @@ router.post("/send_email_c2c", async (req: ExternalApiRequest, res) => {
       useBroadcastStream: true,
       metadata: {
         source: "external_campaign_api",
+        tenantId,
         fileNumber: fileNumber || "",
       },
     });
@@ -256,6 +257,7 @@ async function sendCampaignWithChainTemplate(
         useBroadcastStream: true,
         metadata: {
           source: "external_campaign_api",
+          tenantId,
           campaignLogId: campaignLog.id,
           fileNumber: contact.fileNumber || "",
         },
@@ -361,6 +363,7 @@ async function sendPreRenderedCampaign(
         useBroadcastStream: true,
         metadata: {
           source: "external_campaign_api",
+          tenantId,
           campaignLogId: campaignLog.id,
           fileNumber: account.fileNumber || "",
         },

@@ -143,6 +143,12 @@ test("POST /send_email_c2c delivers via emailService", async () => {
       assert.equal(calledWith.subject, "Receipt");
       assert.equal(calledWith.html, "<p>Paid</p>");
       assert.equal(calledWith.tenantId, "tenant-1");
+      // Postmark's delivery webhook (server/routes.ts processPostmarkWebhook)
+      // only records billable usage when it can read tenantId back out of the
+      // event's own Metadata - the top-level options.tenantId above never
+      // reaches Postmark. Without this, emails sent through this route are
+      // silently never billed.
+      assert.equal(calledWith.metadata?.tenantId, "tenant-1");
     });
   } finally {
     (emailService as any).sendEmail = originalSendEmail;
