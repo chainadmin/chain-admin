@@ -17400,9 +17400,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
                   + `${dmpFetch.rejected} rejected from ${dmpFetch.fetched} DMP rows`,
                 );
               }
+              // A successful run (even one that fetched 0 accounts) clears any
+              // previously recorded failure, so this reflects the *last*
+              // attempt's outcome, not just the last failure.
+              await storage.upsertTenantSettings({
+                tenantId: tenant.id,
+                dmpLastSyncAt: new Date(),
+                dmpLastSyncError: null,
+              } as any);
             }
           } catch (dmpSyncError) {
             console.error(`[DMP Sync] Failed for tenant ${tenant.name} (non-blocking):`, dmpSyncError);
+            // This cron loop is intentionally non-blocking so one tenant's DMP
+            // outage never stops payment processing for the rest - but that
+            // means a persistently failing sync was otherwise invisible
+            // outside server logs. Record it so it shows up in Settings.
+            try {
+              await storage.upsertTenantSettings({
+                tenantId: tenant.id,
+                dmpLastSyncAt: new Date(),
+                dmpLastSyncError: dmpSyncError instanceof Error ? dmpSyncError.message : String(dmpSyncError),
+              } as any);
+            } catch (recordError) {
+              console.error(`[DMP Sync] Failed to record sync failure for tenant ${tenant.name}:`, recordError);
+            }
           }
         }
       }

@@ -2739,6 +2739,30 @@ export default function Settings() {
                     </div>
                   )}
 
+                  {/* Last automatic sync outcome - the daily cron previously only
+                      logged a failure to the server console, so a tenant whose
+                      sync silently kept failing had no way to ever know. */}
+                  {(localSettings as any)?.dmpEnabled && (localSettings as any)?.dmpLastSyncAt && (
+                    <div
+                      className={cn(
+                        "rounded-xl border p-4 text-sm",
+                        (localSettings as any)?.dmpLastSyncError
+                          ? "border-red-500/30 bg-red-500/10 text-red-100"
+                          : "border-white/10 bg-white/5 text-blue-100/70",
+                      )}
+                      data-testid="dmp-last-sync-status"
+                    >
+                      {(localSettings as any)?.dmpLastSyncError ? (
+                        <>
+                          <span className="font-medium text-red-200">Last automatic sync failed</span>
+                          {" "}({new Date((localSettings as any).dmpLastSyncAt).toLocaleString()}): {(localSettings as any).dmpLastSyncError}
+                        </>
+                      ) : (
+                        <>Last automatic sync succeeded at {new Date((localSettings as any).dmpLastSyncAt).toLocaleString()}.</>
+                      )}
+                    </div>
+                  )}
+
                   {/* DMP Import Accounts - Only show when enabled */}
                   {(localSettings as any)?.dmpEnabled && (
                     <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-4">

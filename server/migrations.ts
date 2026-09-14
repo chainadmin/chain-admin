@@ -251,7 +251,13 @@ export async function runMigrations() {
       { name: 'dmp_enabled', type: 'BOOLEAN', default: 'false' },
       { name: 'dmp_api_url', type: 'TEXT' },
       { name: 'dmp_username', type: 'TEXT' },
-      { name: 'dmp_password', type: 'TEXT' }
+      { name: 'dmp_password', type: 'TEXT' },
+      // The daily auto-sync cron catches and only console.error's a failed
+      // tenant sync, so a tenant whose sync has been silently failing every
+      // day has no way to ever know - these make the last attempt's outcome
+      // visible instead of only living in server logs.
+      { name: 'dmp_last_sync_at', type: 'TIMESTAMP' },
+      { name: 'dmp_last_sync_error', type: 'TEXT' },
     ];
     
     for (const col of dmpColumns) {
