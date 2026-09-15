@@ -19913,6 +19913,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error('SMAX sync failed:', smaxError);
       }
 
+      // Report to DMP the same way, mirroring the SMAX sync above. Chain is
+      // just the payment gateway here - DMP owns the arrangement/schedule
+      // and its own reconciliation once it has this record.
+      try {
+        if (settings?.dmpEnabled && !settings?.smaxEnabled) {
+          const { dmpService } = await import('./dmpService');
+          const accounts = await storage.getAccountsByConsumer(consumer.id);
+          const account = (targetAccountId && accounts.find(a => a.id === targetAccountId)) || accounts[0];
+          if (account?.filenumber) {
+            await dmpService.insertPayment(tenantId, {
+              filenumber: account.filenumber,
+              paymentdate: new Date().toISOString().split('T')[0],
+              paymentamount: amountCents / 100,
+              paymentmethod: 'CREDIT CARD',
+              paymentstatus: 'PROCESSED',
+              typeofpayment: 'Manual',
+              cardnumber: cardLast4 ? `****${cardLast4}` : '',
+              cardexpirationmonth: expiryMonth || '',
+              cardexpirationyear: expiryYear || '',
+              transactionid: transactionId || undefined,
+              invoice: transactionId || '',
+            });
+            console.log(`✅ Admin payment reported to DMP for filenumber: ${account.filenumber}`);
+          } else {
+            console.warn(`⚠️ No filenumber for account ${account?.accountNumber || account?.id} - skipping DMP report`);
+          }
+        }
+      } catch (dmpError) {
+        console.error('DMP payment report failed:', dmpError);
+      }
+
       res.json({
         success: true,
         payment: {
