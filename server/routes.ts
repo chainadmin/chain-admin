@@ -17486,9 +17486,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
             if ((tenantSettings as any)?.dmpEnabled) {
               const { dmpService } = await import('./dmpService');
               const dmpFetch = await dmpService.getAccountsWithStats(tenant.id);
-              const dmpAccounts = dmpFetch.accounts;
-              if (dmpAccounts && dmpAccounts.length > 0) {
-                const { importDmpAccounts, syncDmpAccountPayments } = await import('./dmpAccountImport');
+              if (dmpFetch.accounts && dmpFetch.accounts.length > 0) {
+                const { hydrateDmpAccountPhones, importDmpAccounts, syncDmpAccountPayments } = await import('./dmpAccountImport');
+                // The bulk portfolio endpoint doesn't always include a phone
+                // number on every row; without this fallback lookup, the
+                // consumer is imported/updated with a missing phone and
+                // nothing ever backfills it later. Manual "Sync Now" already
+                // does this - the cron sync must match it.
+                const dmpAccounts = await hydrateDmpAccountPhones(
+                  dmpFetch.accounts,
+                  filenumber => dmpService.getPhones(tenant.id, filenumber),
+                );
                 const results = await importDmpAccounts(
                   storage,
                   tenant.id,
