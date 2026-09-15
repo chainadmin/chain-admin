@@ -233,6 +233,7 @@ test("logCallResult sends DMP's fileNumber/phoneNumber/outcome keys, not filenum
   assert.equal(body.duration, 42);
   assert.equal(body.disposition, "promise");
   assert.equal(body.notes, "Spoke with debtor");
+  assert.equal(body.direction, "outbound");
   assert.equal(body.filenumber, undefined);
   assert.equal(body.phone_number, undefined);
   assert.equal(body.result, undefined);

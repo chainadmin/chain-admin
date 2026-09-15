@@ -1093,7 +1093,10 @@ export class DebtManagerProService {
     }
 
     // DMP's /api/v2/softphone/result requires camelCase fileNumber/phoneNumber
-    // and calls the outcome field "outcome", not "result".
+    // and calls the outcome field "outcome", not "result". DMP's handler
+    // doesn't currently read direction (it hardcodes "outbound" on its own
+    // side), but forward it anyway so the payload stays complete if that
+    // changes.
     return await this.makeRequest<any>(config, 'POST', '/api/v2/softphone/result', {
       fileNumber: callData.filenumber,
       phoneNumber: callData.phone_number,
@@ -1101,6 +1104,7 @@ export class DebtManagerProService {
       duration: callData.duration,
       disposition: callData.disposition,
       notes: callData.notes,
+      direction: callData.direction,
     });
   }
 
