@@ -654,8 +654,6 @@ export default function ConsumerDashboardSimple() {
   };
 
   // Get arrangements applicable to the selected account
-  const minimumMonthlyPaymentCents = settings?.minimumMonthlyPayment ?? 5000; // Default $50
-  
   const applicableArrangements = useMemo(() => {
     if (!selectedAccount || !arrangements) return [];
     
@@ -677,18 +675,16 @@ export default function ConsumerDashboardSimple() {
         return hasActiveSchedule;
       }
       
-      // Calculate what the payment would be for this arrangement
-      const calculatedPaymentAmount = calculateArrangementPayment(arr, selectedAccount.balanceCents || 0);
-      
-      // Filter out arrangements where the calculated payment is less than the minimum.
-      // Exceptions: pay_in_full and settlement plans should always remain available.
-      if (arr.planType !== 'pay_in_full' && arr.planType !== 'settlement' && calculatedPaymentAmount < minimumMonthlyPaymentCents) {
-        return false;
-      }
-      
+      // minBalance/maxBalance above is the company's own tiering mechanism -
+      // an arrangement template configured for a smaller balance range is
+      // legitimately allowed to have a smaller payment amount than the
+      // general Minimum Payment setting. Re-filtering it against that
+      // general minimum here would hide a tier the company deliberately
+      // set up for exactly this balance range, so this template is offered
+      // once its balance range matches, with no further amount check.
       return true;
     }) || [];
-  }, [selectedAccount, arrangements, settings?.forceArrangement, paymentSchedules, minimumMonthlyPaymentCents]);
+  }, [selectedAccount, arrangements, settings?.forceArrangement, paymentSchedules]);
   
   // Get existing SMAX arrangements for this consumer
   const existingSMAXArrangements = arrangements?.existingArrangements || [];
