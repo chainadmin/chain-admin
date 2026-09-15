@@ -145,7 +145,7 @@ export default function Settings() {
     name: "",
     description: "",
     balanceTier: "",
-    planType: "settlement",
+    planType: "fixed_monthly",
     monthlyPaymentMin: "",
     monthlyPaymentMax: "",
     fixedMonthlyPayment: "",
@@ -4078,13 +4078,13 @@ export default function Settings() {
                                 <SelectValue placeholder="Select plan type" />
                               </SelectTrigger>
                               <SelectContent>
-                                {/* "range" (Monthly range) and "fixed_monthly" (Fixed monthly amount)
-                                    are intentionally not offered here - selecting a payment
-                                    frequency other than monthly for either doesn't divide the
-                                    configured amount, so it charges the full monthly figure at
-                                    that shorter cadence. Existing arrangements of these types
-                                    keep working; new ones just can't be created until that's
-                                    fixed. */}
+                                {/* "range" (Monthly range, legacy min/max) is still not offered -
+                                    "fixed_monthly" (one fixed amount per balance tier, consumer
+                                    picks weekly/biweekly/monthly at payment time) is the intended
+                                    tiered-amount option and is back now that a chosen frequency
+                                    actually divides the configured amount instead of charging the
+                                    full monthly figure at that shorter cadence. */}
+                                <SelectItem value="fixed_monthly">Fixed monthly amount</SelectItem>
                                 <SelectItem value="settlement">Settlement (% of balance)</SelectItem>
                                 <SelectItem value="custom_terms">Custom terms copy</SelectItem>
                                 <SelectItem value="one_time_payment">One-time payment</SelectItem>

@@ -910,12 +910,23 @@ export default function ConsumerDashboardSimple() {
         // 1. Explicit custom amounts entered by user (customPaymentAmount text field)
         // 2. SMAX one-time payments (no arrangement, just paying existing plan)
         // 3. Custom amount selected via range plan input (paymentMethod === 'custom', amount stored in calculatedPayment)
-        // For arrangement-driven term payments, leave null so backend uses arrangement logic
+        // 4. A frequency (weekly/biweekly/monthly) chosen for a fixed_monthly/range
+        //    arrangement (paymentMethod === 'term') - calculatedPayment already holds
+        //    the monthly amount divided for that frequency via convertToFrequency.
+        //    Leaving this null here used to mean "backend uses arrangement logic",
+        //    but that logic only knows the arrangement's full monthly figure, not
+        //    the frequency chosen for this payment - it charged the whole month's
+        //    amount regardless of frequency. Sending the already-correct divided
+        //    amount fixes that.
         customPaymentAmountCents: (customPaymentAmount && !isNaN(parseFloat(customPaymentAmount)) && parseFloat(customPaymentAmount) > 0)
           ? Math.round(parseFloat(customPaymentAmount) * 100)
-          : ((paymentMethod === 'smax' || paymentMethod === 'custom') && calculatedPayment !== null && calculatedPayment > 0)
+          : ((paymentMethod === 'smax' || paymentMethod === 'custom' || paymentMethod === 'term') && calculatedPayment !== null && calculatedPayment > 0)
             ? calculatedPayment
             : null,
+        // The recurring schedule this payment sets up must bill at the same
+        // cadence the consumer just paid at, not silently fall back to the
+        // arrangement's own configured default frequency.
+        paymentFrequency: paymentMethod === 'term' ? paymentFrequency : undefined,
         // Simplified flow specific data
         simplifiedFlow: isSimplifiedFlow ? {
           paymentMethod,

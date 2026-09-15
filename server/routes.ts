@@ -13932,8 +13932,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         simplifiedFlow, // New simplified arrangement flow data
         manualArrangementId, // Consumer paying against an admin-created manual arrangement
         opaqueDataDescriptor, // Authorize.net tokenized data
-        opaqueDataValue // Authorize.net tokenized data
+        opaqueDataValue, // Authorize.net tokenized data
+        // The frequency the consumer chose for this payment on a fixed_monthly/
+        // range arrangement (weekly/biweekly/monthly) - the schedule this
+        // payment sets up must bill at this cadence, not the arrangement's own
+        // configured default, which may not match what the consumer picked.
+        paymentFrequency: requestedPaymentFrequency,
       } = req.body;
+      const validPaymentFrequency = ['weekly', 'biweekly', 'monthly'].includes(requestedPaymentFrequency)
+        ? requestedPaymentFrequency
+        : null;
 
       let normalizedFirstPaymentDate: Date | null = null;
       if (firstPaymentDate) {
@@ -14637,7 +14645,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let createdSchedule: any = null;
         if (arrangement && savedPaymentMethod) {
           const paymentStartDate = normalizedFirstPaymentDate ? new Date(normalizedFirstPaymentDate) : new Date();
-          const arrangementFrequency = arrangement?.paymentFrequency || arrangement?.settlementPaymentFrequency || 'monthly';
+          const arrangementFrequency = validPaymentFrequency || arrangement?.paymentFrequency || arrangement?.settlementPaymentFrequency || 'monthly';
           const nextMonth = calculateNextPaymentDate(paymentStartDate, arrangementFrequency);
           const today = new Date();
           today.setHours(0, 0, 0, 0);
@@ -15261,7 +15269,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let createdSchedule: any = null;
         if (arrangement && savedPaymentMethod) {
           const paymentStartDate = normalizedFirstPaymentDate ? new Date(normalizedFirstPaymentDate) : new Date();
-          const arrangementFrequency = arrangement?.paymentFrequency || arrangement?.settlementPaymentFrequency || 'monthly';
+          const arrangementFrequency = validPaymentFrequency || arrangement?.paymentFrequency || arrangement?.settlementPaymentFrequency || 'monthly';
           const nextMonth = calculateNextPaymentDate(paymentStartDate, arrangementFrequency);
 
           let remainingPayments = null;
@@ -15901,7 +15909,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const paymentStartDate = normalizedFirstPaymentDate ? new Date(normalizedFirstPaymentDate) : new Date();
         console.log('📆 Payment start date:', paymentStartDate.toISOString());
         
-        const mainArrangementFrequency = arrangement?.paymentFrequency || arrangement?.settlementPaymentFrequency || simplifiedArrangementData?.paymentFrequency || 'monthly';
+        const mainArrangementFrequency = validPaymentFrequency || arrangement?.paymentFrequency || arrangement?.settlementPaymentFrequency || simplifiedArrangementData?.paymentFrequency || 'monthly';
         const nextMonth = calculateNextPaymentDate(paymentStartDate, mainArrangementFrequency);
         const today = new Date();
         today.setHours(0, 0, 0, 0);
