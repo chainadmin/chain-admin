@@ -108,3 +108,97 @@ test("makeRequest returns a response that isn't wrapped in a data envelope as-is
     global.fetch = originalFetch;
   }
 });
+
+// DMP's write endpoints (InsertNoteline, send_email_c2c, insertattempt,
+// send_text) require camelCase fileNumber/content/emailAddress/attemptType
+// keys - Chain's internal DmpNoteData/DmpEmailData/DmpAttemptData/DmpSmsData
+// shapes are lowercase/snake_case and predate that contract. Sending the
+// internal shape directly makes DMP's required-field check fail on every
+// call (400, silently swallowed), so nothing Chain sends ever shows up in
+// DMP's Notes tab. These tests lock in that the outgoing body is translated
+// to DMP's actual wire format.
+async function captureRequestBody(
+  call: (service: any) => Promise<any>,
+): Promise<any> {
+  process.env.DATABASE_URL ||= "postgresql://test:test@localhost:5432/test";
+  const { DebtManagerProService } = await import("./dmpService");
+  const service = new DebtManagerProService() as any;
+  service.getDmpConfig = async () => ({ enabled: true, apiUrl: "https://dmp.test", username: "u", password: "p" });
+  service.authenticate = async () => "test-token";
+
+  let capturedBody: any = null;
+  const originalFetch = global.fetch;
+  global.fetch = (async (_url: string, options: any) => {
+    capturedBody = JSON.parse(options.body);
+    return { ok: true, json: async () => ({ success: true, data: {} }), text: async () => "" };
+  }) as any;
+
+  try {
+    await call(service);
+  } finally {
+    global.fetch = originalFetch;
+  }
+  return capturedBody;
+}
+
+test("insertNote sends DMP's fileNumber/content keys, not filenumber/logmessage", async () => {
+  const body = await captureRequestBody((service) =>
+    service.insertNote("tenant-1", { filenumber: "FILE-1", collectorname: "Chain", logmessage: "Hello" }),
+  );
+  assert.equal(body.fileNumber, "FILE-1");
+  assert.equal(body.content, "Hello");
+  assert.equal(body.filenumber, undefined);
+  assert.equal(body.logmessage, undefined);
+});
+
+test("sendEmail sends DMP's fileNumber/emailAddress keys, not filenumber/email_address", async () => {
+  const body = await captureRequestBody((service) =>
+    service.sendEmail("tenant-1", {
+      filenumber: "FILE-1",
+      email_address: "debtor@example.com",
+      subject: "Payment reminder",
+      body: "Please pay",
+      direction: "outbound",
+    }),
+  );
+  assert.equal(body.fileNumber, "FILE-1");
+  assert.equal(body.emailAddress, "debtor@example.com");
+  assert.equal(body.subject, "Payment reminder");
+  assert.equal(body.body, "Please pay");
+  assert.equal(body.filenumber, undefined);
+  assert.equal(body.email_address, undefined);
+});
+
+test("insertAttempt sends DMP's fileNumber/attemptType keys, not filenumber/attempttype", async () => {
+  const body = await captureRequestBody((service) =>
+    service.insertAttempt("tenant-1", {
+      filenumber: "FILE-1",
+      attempttype: "EMAIL",
+      attemptdate: "2026-09-15",
+      notes: "Email sent",
+      result: "SENT",
+    }),
+  );
+  assert.equal(body.fileNumber, "FILE-1");
+  assert.equal(body.attemptType, "EMAIL");
+  assert.equal(body.notes, "Email sent");
+  assert.equal(body.outcome, "SENT");
+  assert.equal(body.filenumber, undefined);
+  assert.equal(body.attempttype, undefined);
+});
+
+test("sendText sends DMP's fileNumber/phoneNumber keys, not filenumber/phone_number", async () => {
+  const body = await captureRequestBody((service) =>
+    service.sendText("tenant-1", {
+      filenumber: "FILE-1",
+      phone_number: "5551234567",
+      message: "Your payment is due",
+      direction: "outbound",
+    }),
+  );
+  assert.equal(body.fileNumber, "FILE-1");
+  assert.equal(body.phoneNumber, "5551234567");
+  assert.equal(body.message, "Your payment is due");
+  assert.equal(body.filenumber, undefined);
+  assert.equal(body.phone_number, undefined);
+});
