@@ -3921,7 +3921,7 @@ export default function Settings() {
             </TabsContent>
 
             {localSettings?.businessType !== 'municipality' && <TabsContent value="arrangements" className="space-y-6">
-              {/* Minimum Monthly Payment */}
+              {/* Minimum Payment */}
               <Card className={cardBaseClasses}>
                 <CardHeader className="text-white">
                   <CardTitle className="text-xl font-semibold text-white">Arrangement Settings</CardTitle>
@@ -3931,9 +3931,9 @@ export default function Settings() {
                 </CardHeader>
                 <CardContent className="space-y-4 text-sm text-blue-100/80">
                   <div className="space-y-2">
-                    <Label htmlFor="minimumMonthlyPayment" className="text-base font-medium text-white">Minimum Monthly Payment Amount</Label>
+                    <Label htmlFor="minimumMonthlyPayment" className="text-base font-medium text-white">Minimum Payment Amount</Label>
                     <p className="text-sm text-blue-100/70">
-                      The minimum monthly payment amount for payment arrangements (applies to all accounts)
+                      The minimum amount a consumer can pay in a single payment (applies to all accounts). A specific arrangement or existing SMAX/DMP payment plan set below this is always still payable - this is only a floor on amounts not tied to one.
                     </p>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-100/60">$</span>
@@ -4101,7 +4101,7 @@ export default function Settings() {
                                   className={inputClasses}
                                 />
                                 <p className="mt-1 text-xs text-blue-100/70">
-                                  Leave blank to use the global Minimum Monthly Payment from Settings. Consumers can pay any amount from this minimum up to the full balance.
+                                  Leave blank to use the global Minimum Payment from Settings. Consumers can pay any amount from this minimum up to the full balance.
                                 </p>
                               </div>
                             </div>
