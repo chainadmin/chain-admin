@@ -145,7 +145,7 @@ export default function Settings() {
     name: "",
     description: "",
     balanceTier: "",
-    planType: "range",
+    planType: "settlement",
     monthlyPaymentMin: "",
     monthlyPaymentMax: "",
     fixedMonthlyPayment: "",
@@ -4078,8 +4078,13 @@ export default function Settings() {
                                 <SelectValue placeholder="Select plan type" />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="range">Monthly range (legacy)</SelectItem>
-                                <SelectItem value="fixed_monthly">Fixed monthly amount</SelectItem>
+                                {/* "range" (Monthly range) and "fixed_monthly" (Fixed monthly amount)
+                                    are intentionally not offered here - selecting a payment
+                                    frequency other than monthly for either doesn't divide the
+                                    configured amount, so it charges the full monthly figure at
+                                    that shorter cadence. Existing arrangements of these types
+                                    keep working; new ones just can't be created until that's
+                                    fixed. */}
                                 <SelectItem value="settlement">Settlement (% of balance)</SelectItem>
                                 <SelectItem value="custom_terms">Custom terms copy</SelectItem>
                                 <SelectItem value="one_time_payment">One-time payment</SelectItem>
