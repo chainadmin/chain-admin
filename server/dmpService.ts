@@ -958,7 +958,14 @@ export class DebtManagerProService {
       return null;
     }
 
-    return await this.makeRequest<any>(config, 'POST', '/api/v2/insertattempt', attempt);
+    // DMP's /api/v2/insertattempt requires camelCase fileNumber/attemptType;
+    // our internal DmpAttemptData shape predates that contract, so translate here.
+    return await this.makeRequest<any>(config, 'POST', '/api/v2/insertattempt', {
+      fileNumber: attempt.filenumber,
+      attemptType: attempt.attempttype,
+      notes: attempt.notes,
+      outcome: attempt.result,
+    });
   }
 
   async insertNote(tenantId: string, note: DmpNoteData): Promise<any | null> {
@@ -968,7 +975,12 @@ export class DebtManagerProService {
       return null;
     }
 
-    return await this.makeRequest<any>(config, 'POST', '/api/v2/InsertNoteline', note);
+    // DMP's /api/v2/InsertNoteline requires camelCase fileNumber/content;
+    // our internal DmpNoteData shape predates that contract, so translate here.
+    return await this.makeRequest<any>(config, 'POST', '/api/v2/InsertNoteline', {
+      fileNumber: note.filenumber,
+      content: note.logmessage,
+    });
   }
 
   async insertPhone(tenantId: string, filenumber: string, phone: string, phoneType: string): Promise<any | null> {
@@ -1016,7 +1028,13 @@ export class DebtManagerProService {
       return null;
     }
 
-    return await this.makeRequest<any>(config, 'POST', '/api/v2/send_text', smsData);
+    // DMP's /api/v2/send_text requires camelCase fileNumber/phoneNumber;
+    // our internal DmpSmsData shape predates that contract, so translate here.
+    return await this.makeRequest<any>(config, 'POST', '/api/v2/send_text', {
+      fileNumber: smsData.filenumber,
+      phoneNumber: smsData.phone_number,
+      message: smsData.message,
+    });
   }
 
   async sendEmail(tenantId: string, emailData: DmpEmailData): Promise<any | null> {
@@ -1026,7 +1044,14 @@ export class DebtManagerProService {
       return null;
     }
 
-    return await this.makeRequest<any>(config, 'POST', '/api/v2/send_email_c2c', emailData);
+    // DMP's /api/v2/send_email_c2c requires camelCase fileNumber/emailAddress;
+    // our internal DmpEmailData shape predates that contract, so translate here.
+    return await this.makeRequest<any>(config, 'POST', '/api/v2/send_email_c2c', {
+      fileNumber: emailData.filenumber,
+      emailAddress: emailData.email_address,
+      subject: emailData.subject,
+      body: emailData.body,
+    });
   }
 
   async createCallback(tenantId: string, filenumber: string, scheduledTime: string, notes?: string): Promise<any | null> {
