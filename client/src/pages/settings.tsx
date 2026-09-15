@@ -4086,7 +4086,10 @@ export default function Settings() {
                                     full monthly figure at that shorter cadence. */}
                                 <SelectItem value="fixed_monthly">Fixed monthly amount</SelectItem>
                                 <SelectItem value="settlement">Settlement (% of balance)</SelectItem>
-                                <SelectItem value="custom_terms">Custom terms copy</SelectItem>
+                                {/* "custom_terms" is not offered - calculateArrangementDetails has
+                                    no case for it, so it never produces a payable amount. It's
+                                    just a free-text description with no payment mechanism behind
+                                    it - unusable for an actual arrangement. */}
                                 <SelectItem value="one_time_payment">One-time payment</SelectItem>
                                 <SelectItem value="pay_in_full">Pay Balance in Full</SelectItem>
                               </SelectContent>
