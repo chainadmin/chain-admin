@@ -148,6 +148,10 @@ export default function SoftphonePage() {
   const retentionLockRef = useRef(false);
   const dialLockRef = useRef(false);
   const outboundRef = useRef(new SoftphoneOutboundCallCoordinator());
+  // onActive fires for both inbound and outbound calls alike, but DMP only
+  // needs to know about ones the agent answered - marked here, the only
+  // point that's unambiguously inbound-only, and consumed once in onActive.
+  const inboundCallsRef = useRef(new WeakSet<object>());
 
   const setStableStatus = (message: string) => setInlineStatus((previous) => dedupeStatus(previous, message));
 
@@ -158,6 +162,21 @@ export default function SoftphonePage() {
       activeCallRef.current = activeCall;
       setWaitingCalls((current) => current.filter((waiting) => waiting.call !== call));
       setHandoffCall(null);
+      // Only a freshly-answered inbound call should screen-pop DMP - not an
+      // outbound call the agent placed themselves (they already know who
+      // they're calling), and not a recovered/reconnected call (DMP was
+      // already notified for its original answer).
+      if (!recovered && inboundCallsRef.current.has(activeCall as unknown as object)) {
+        const callerNumber = activeCall.parameters?.From;
+        if (callerNumber) {
+          fetch(softphoneApiUrl("/api/voip/dmp-notify-answered"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+            credentials: "include",
+            body: JSON.stringify({ phoneNumber: callerNumber }),
+          }).catch((error) => console.error("Failed to notify DMP of answered call (non-blocking):", error));
+        }
+      }
       if (metadata) {
         setDialpadNumber(metadata.callerNumber);
         setActiveCallerName(metadata.callerName);
@@ -190,6 +209,7 @@ export default function SoftphonePage() {
     },
     onIncoming: (call) => {
       const providerCall = call as Call;
+      inboundCallsRef.current.add(providerCall as object);
       const callerNumber = providerCall.parameters.From || "Unknown";
       const lifecycleCall = providerCall as unknown as ProviderCall;
       const waitingId = providerCall.parameters.CallSid || `waiting-${++waitingCallIdRef.current}`;

@@ -27483,6 +27483,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Fired by the softphone widget when an inbound call is answered, so DMP
+  // can screen-pop the matching account for whoever answered. Non-blocking
+  // by design (mirrors the existing DMP sync calls throughout this file) -
+  // a failure here should never affect the call itself.
+  app.post('/api/voip/dmp-notify-answered', authenticateUser, async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { phoneNumber } = req.body;
+      if (!phoneNumber || typeof phoneNumber !== 'string') {
+        return res.status(400).json({ message: "phoneNumber is required" });
+      }
+
+      const tenantSettings = await storage.getTenantSettings(user.tenantId);
+      if (!(tenantSettings as any)?.dmpEnabled || !user.email) {
+        return res.json({ success: true, notified: false });
+      }
+
+      const { dmpService } = await import('./dmpService');
+      const result = await dmpService.notifyCallAnswered(user.tenantId, user.email, phoneNumber);
+      res.json({ success: true, notified: result !== null });
+    } catch (error) {
+      console.error("Error notifying DMP of answered call:", error);
+      // Never surface this as a failure to the softphone UI - the call
+      // itself already connected successfully.
+      res.json({ success: true, notified: false });
+    }
+  });
+
   // Get tenant's VoIP phone numbers
   app.get('/api/voip/phone-numbers', authenticateUser, async (req, res) => {
     try {

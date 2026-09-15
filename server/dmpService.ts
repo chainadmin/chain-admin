@@ -1073,6 +1073,22 @@ export class DebtManagerProService {
     return await this.makeRequest<any[]>(config, 'GET', '/api/v2/softphone/queue');
   }
 
+  // Tells DMP a call was answered by a specific collector, identified by the
+  // email they log into Chiamo with (the link set on their DMP collector
+  // profile - see collectors.chiamoEmail). DMP resolves the phone number to
+  // an account itself and pushes a screen-pop to that collector's live
+  // connection; Chiamo doesn't need to know whether that succeeded.
+  async notifyCallAnswered(tenantId: string, chiamoEmail: string, phoneNumber: string): Promise<any | null> {
+    const config = await this.getDmpConfig(tenantId);
+    if (!config) return null;
+
+    return await this.makeRequest<any>(config, 'POST', '/api/v2/softphone/call-event', {
+      event: 'answered',
+      chiamoEmail,
+      phoneNumber,
+    });
+  }
+
   async initiateCall(tenantId: string, filenumber: string, phoneNumber: string): Promise<any | null> {
     const config = await this.getDmpConfig(tenantId);
     if (!config) return null;
