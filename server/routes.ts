@@ -14555,6 +14555,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
+        // Report this payment to DMP the same way it's reported to SMAX above.
+        // DMP owns the actual schedule and its own posted/pending status for
+        // this account - Chain isn't telling DMP to do anything here, just
+        // handing it a completed payment record so DMP's own reconciliation
+        // (and the regular DMP sync pulling balance/status back into Chain)
+        // can pick it up on its own.
+        if (settings.dmpEnabled && !settings.smaxEnabled && account.filenumber && consumer) {
+          try {
+            const { dmpService } = await import('./dmpService');
+            const payorName = `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim() || 'Consumer';
+
+            await dmpService.insertPayment(tenantId, {
+              filenumber: account.filenumber,
+              paymentdate: new Date().toISOString().split('T')[0],
+              paymentamount: amountCents / 100,
+              paymentmethod: 'CREDIT CARD',
+              paymentstatus: 'PROCESSED',
+              typeofpayment: 'Online',
+              cardtype: cardBrand || '',
+              cardnumber: cardLast4 ? `****${cardLast4}` : '',
+              cardexpirationmonth: expiryMonth || '',
+              cardexpirationyear: expiryYear || '',
+              transactionid: paymentResult.transactionId || undefined,
+              invoice: paymentResult.transactionId || '',
+            });
+
+            console.log('✅ Authorize.net payment reported to DMP');
+          } catch (dmpError) {
+            console.error('Failed to report Authorize.net payment to DMP:', dmpError);
+          }
+        }
+
         // Create customer payment profile and save payment method if needed
         let savedPaymentMethod = null;
         const needsPaymentProfile = saveCard || setupRecurring || (normalizedFirstPaymentDate !== null && normalizedFirstPaymentDate.getTime() > today.getTime());
@@ -14875,6 +14907,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
+        if (settings.dmpEnabled && !settings.smaxEnabled && account.filenumber && consumer) {
+          try {
+            const { dmpService } = await import('./dmpService');
+
+            await dmpService.insertPayment(tenantId, {
+              filenumber: account.filenumber,
+              paymentdate: new Date().toISOString().split('T')[0],
+              paymentamount: amountCents / 100,
+              paymentmethod: 'CREDIT CARD',
+              paymentstatus: 'PROCESSED',
+              typeofpayment: 'Online',
+              cardnumber: cardLast4 ? `****${cardLast4}` : '',
+              cardexpirationmonth: expiryMonth || '',
+              cardexpirationyear: expiryYear || '',
+              transactionid: paymentResult.transactionId || undefined,
+              invoice: paymentResult.transactionId || '',
+            });
+
+            console.log('✅ Authorize.net payment reported to DMP');
+          } catch (dmpError) {
+            console.error('Failed to report Authorize.net payment to DMP:', dmpError);
+          }
+        }
+
         return res.json({
           success: true,
           message: 'Payment processed successfully',
@@ -15129,6 +15185,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
               console.log('✅ NMI payment synced to SMAX');
             } catch (smaxError) {
               console.error('Failed to sync NMI payment to SMAX:', smaxError);
+            }
+          }
+
+          if (settings.dmpEnabled && !settings.smaxEnabled && account.filenumber && consumerForSmax) {
+            try {
+              const { dmpService } = await import('./dmpService');
+
+              await dmpService.insertPayment(tenantId, {
+                filenumber: account.filenumber,
+                paymentdate: new Date().toISOString().split('T')[0],
+                paymentamount: amountCents / 100,
+                paymentmethod: 'CREDIT CARD',
+                paymentstatus: 'PROCESSED',
+                typeofpayment: 'Online',
+                cardtype: cardBrand || '',
+                cardnumber: cardLast4 ? `****${cardLast4}` : '',
+                cardexpirationmonth: expiryMonth || '',
+                cardexpirationyear: expiryYear || '',
+                transactionid: transactionId || undefined,
+                invoice: transactionId || '',
+              });
+
+              console.log('✅ NMI payment reported to DMP');
+            } catch (dmpError) {
+              console.error('Failed to report NMI payment to DMP:', dmpError);
             }
           }
         }
@@ -15746,6 +15827,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         } else if (!account.filenumber) {
           console.log('ℹ️ No filenumber available - skipping SMAX payment sync');
+        }
+
+        if (settings.dmpEnabled && !settings.smaxEnabled && account.filenumber) {
+          try {
+            const { dmpService } = await import('./dmpService');
+
+            await dmpService.insertPayment(tenantId, {
+              filenumber: account.filenumber,
+              paymentdate: normalizedPaymentDate
+                ? normalizedPaymentDate.toISOString().split('T')[0]
+                : new Date().toISOString().split('T')[0],
+              paymentamount: amountCents / 100,
+              paymentmethod: 'CREDIT CARD',
+              paymentstatus: 'PROCESSED',
+              typeofpayment: 'Online',
+              cardtype: cardBrand || 'Unknown',
+              cardnumber: cardLast4 ? `****${cardLast4}` : '',
+              cardexpirationmonth: expiryMonth || '',
+              cardexpirationyear: expiryYear || '',
+              transactionid: transactionId || undefined,
+              invoice: transactionId || '',
+            });
+
+            console.log('✅ USAePay payment reported to DMP');
+          } catch (dmpError) {
+            console.error('Failed to report USAePay payment to DMP:', dmpError);
+          }
         }
       } else {
         success = true;
