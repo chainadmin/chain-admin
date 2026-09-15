@@ -1,3 +1,5 @@
+import { deriveDmpArrangement } from './dmpPaymentReconciliation';
+
 type ImportStorage = {
   getAccountsByTenant(tenantId: string): Promise<any[]>;
   getFoldersByTenant?(tenantId: string): Promise<any[]>;
@@ -17,7 +19,15 @@ function normalizeFolderStatus(value: unknown): string {
     : '';
 }
 
-type DmpPaymentSyncStorage = Pick<ImportStorage, 'getAccountsByTenant' | 'updateAccount'>;
+type DmpPaymentSyncStorage = Pick<ImportStorage, 'getAccountsByTenant' | 'updateAccount'> & {
+  getActivePaymentSchedulesByConsumerAndAccount(consumerId: string, accountId: string, tenantId: string): Promise<{ source: string | null }[]>;
+  syncDmpArrangementToChain(
+    tenantId: string,
+    consumerId: string,
+    accountId: string,
+    dmpArrangement: { arrangementId: string; amountCents: number; nextPaymentDate: string; remainingPayments: number; startDate: string; frequency: string },
+  ): Promise<unknown>;
+};
 
 function phoneFromDmpRecord(value: unknown): string | undefined {
   if (typeof value === 'string' && value.trim()) return value.trim();
@@ -68,6 +78,7 @@ export interface DmpPaymentSyncResults {
   accountsSynced: number;
   historyPayments: number;
   pendingPayments: number;
+  arrangementsSynced: number;
   errors: string[];
 }
 
@@ -84,9 +95,14 @@ export async function syncDmpAccountPayments(
     accountsSynced: 0,
     historyPayments: 0,
     pendingPayments: 0,
+    arrangementsSynced: 0,
     errors: [],
   };
   const accounts = await storage.getAccountsByTenant(tenantId);
+  // Matches the timezone deriveDmpArrangement's caller uses on consumer
+  // login, so "today" for arrangement derivation is consistent regardless
+  // of which trigger ran it.
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 
   for (const account of accounts) {
     const filenumber = typeof account.filenumber === 'string' ? account.filenumber.trim() : '';
@@ -133,6 +149,31 @@ export async function syncDmpAccountPayments(
       results.accountsSynced++;
       results.historyPayments += history.length;
       results.pendingPayments += pending.length;
+
+      // A DMP-native arrangement otherwise only reaches Chain's
+      // paymentSchedules table when its consumer happens to log into the
+      // portal (see the equivalent derivation on consumer login). That
+      // makes the admin payments screen's visibility depend on consumer
+      // activity, which defeats its purpose - derive and sync it here too,
+      // from the same rawPayments already fetched above, so every
+      // DMP-linked account gets it regardless of consumer login.
+      if (account.consumerId) {
+        try {
+          const existingActiveSchedules = await storage.getActivePaymentSchedulesByConsumerAndAccount(
+            account.consumerId, account.id, tenantId,
+          );
+          const hasNonDmpActiveSchedule = existingActiveSchedules.some(s => s.source !== 'dmp');
+          if (!hasNonDmpActiveSchedule) {
+            const dmpArrangement = deriveDmpArrangement(rawPayments, today);
+            if (dmpArrangement) {
+              await storage.syncDmpArrangementToChain(tenantId, account.consumerId, account.id, dmpArrangement);
+              results.arrangementsSynced++;
+            }
+          }
+        } catch (arrangementError: any) {
+          results.errors.push(`Arrangement sync failed for DMP account ${filenumber}: ${arrangementError?.message || 'Unknown error'}`);
+        }
+      }
     } catch (error: any) {
       results.errors.push(`Payment sync failed for DMP account ${filenumber}: ${error?.message || 'Unknown error'}`);
     }

@@ -17631,7 +17631,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 );
                 console.log(
                   `[DMP Sync] Tenant ${tenant.name}: payments synced for ${paymentResults.accountsSynced} accounts `
-                  + `(${paymentResults.historyPayments} history, ${paymentResults.pendingPayments} pending)`,
+                  + `(${paymentResults.historyPayments} history, ${paymentResults.pendingPayments} pending, `
+                  + `${paymentResults.arrangementsSynced} arrangements)`,
                 );
               }
               // A successful run (even one that fetched 0 accounts) clears any
