@@ -17288,14 +17288,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const merchantProvider = detectProcessorForPayment(settings, paymentMethod);
             console.log(`🏦 Schedule ${schedule.id}: detected processor='${merchantProvider}' (tenant setting='${tenantDefaultProvider}', token='${paymentMethod.paymentToken?.substring(0, 12)}...')`);
 
+            // A scheduled charge must never exceed what's actually still owed -
+            // not just on the installment the schedule's own counter thinks is
+            // last. The balance can already be smaller than schedule.amountCents
+            // on an earlier installment too (an extra manual payment elsewhere,
+            // a credit, a DMP-side adjustment the sync hasn't caught up
+            // schedule.remainingPayments for yet), so this checks the real
+            // current balance on every scheduled charge, not only when
+            // remainingPayments says 1.
             let paymentAmountCents = schedule.amountCents;
-            const isLastPayment = schedule.remainingPayments !== null && schedule.remainingPayments === 1;
-            if (isLastPayment) {
-              const acct = await storage.getAccount(schedule.accountId);
-              if (acct && acct.balanceCents > 0 && acct.balanceCents < schedule.amountCents) {
-                console.log(`💳 Final payment - using remaining balance: $${(acct.balanceCents / 100).toFixed(2)}`);
-                paymentAmountCents = acct.balanceCents;
-              }
+            const acct = await storage.getAccount(schedule.accountId);
+            if (acct && acct.balanceCents > 0 && acct.balanceCents < schedule.amountCents) {
+              console.log(`💳 Scheduled amount exceeds remaining balance - using remaining balance: $${(acct.balanceCents / 100).toFixed(2)}`);
+              paymentAmountCents = acct.balanceCents;
             }
 
             let success = false;
