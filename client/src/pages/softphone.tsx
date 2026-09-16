@@ -148,12 +148,50 @@ export default function SoftphonePage() {
   const retentionLockRef = useRef(false);
   const dialLockRef = useRef(false);
   const outboundRef = useRef(new SoftphoneOutboundCallCoordinator());
+  // DMP-triggered remote commands (call-control over /ws/softphone) always
+  // dispatch through this ref rather than closing over handler functions
+  // directly, since the WS connection effect only reruns on [user?.id] and
+  // would otherwise keep calling stale closures from whichever render it
+  // last connected in. Reassigned with fresh closures on every render, just
+  // below where each handler it references is defined.
+  const remoteCommandHandlersRef = useRef<{
+    dial: (toNumber: string) => void;
+    answer: () => void;
+    decline: () => void;
+    hangup: () => void;
+    mute: () => void;
+    unmute: () => void;
+    hold: () => void;
+    resume: () => void;
+  }>({
+    dial: () => {}, answer: () => {}, decline: () => {}, hangup: () => {},
+    mute: () => {}, unmute: () => {}, hold: () => {}, resume: () => {},
+  });
   // onActive fires for both inbound and outbound calls alike, but DMP only
   // needs to know about ones the agent answered - marked here, the only
   // point that's unambiguously inbound-only, and consumed once in onActive.
   const inboundCallsRef = useRef(new WeakSet<object>());
 
   const setStableStatus = (message: string) => setInlineStatus((previous) => dedupeStatus(previous, message));
+
+  // DMP is the control surface for CTI-enabled orgs - every call-state
+  // transition gets reported here so it can render an incoming call, a
+  // connected call's timer, hold state, etc. Always non-blocking: a
+  // failure here must never affect the call itself.
+  const notifyDmpCallState = (
+    status: "ringing" | "connected" | "held" | "muted" | "unmuted" | "ended" | "missed",
+    direction: "inbound" | "outbound",
+    phoneNumber: string | undefined,
+    callerName?: string,
+  ) => {
+    if (!phoneNumber) return;
+    fetch(softphoneApiUrl("/api/voip/dmp-call-state"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+      credentials: "include",
+      body: JSON.stringify({ status, direction, phoneNumber, callerName }),
+    }).catch((error) => console.error("Failed to notify DMP of call state (non-blocking):", error));
+  };
 
   lifecycleRef.current.configure({
     onActive: (call, recovered, metadata) => {
@@ -162,20 +200,16 @@ export default function SoftphonePage() {
       activeCallRef.current = activeCall;
       setWaitingCalls((current) => current.filter((waiting) => waiting.call !== call));
       setHandoffCall(null);
-      // Only a freshly-answered inbound call should screen-pop DMP - not an
-      // outbound call the agent placed themselves (they already know who
-      // they're calling), and not a recovered/reconnected call (DMP was
-      // already notified for its original answer).
-      if (!recovered && inboundCallsRef.current.has(activeCall as unknown as object)) {
-        const callerNumber = activeCall.parameters?.From;
-        if (callerNumber) {
-          fetch(softphoneApiUrl("/api/voip/dmp-notify-answered"), {
-            method: "POST",
-            headers: { "Content-Type": "application/json", ...getAuthHeaders() },
-            credentials: "include",
-            body: JSON.stringify({ phoneNumber: callerNumber }),
-          }).catch((error) => console.error("Failed to notify DMP of answered call (non-blocking):", error));
-        }
+      // Covers every path into an active call - a fresh answer, a fresh
+      // outbound connect, and resuming from hold alike. A redundant
+      // "connected" push for an already-connected call is harmless (DMP
+      // just re-renders the same state), so this doesn't special-case
+      // recovered/resumed calls.
+      {
+        const direction = inboundCallsRef.current.has(activeCall as unknown as object) ? "inbound" : "outbound";
+        const phoneNumber = (direction === "inbound" ? activeCall.parameters?.From : activeCall.parameters?.To)
+          || metadata?.callerNumber;
+        notifyDmpCallState("connected", direction, phoneNumber, metadata?.callerName);
       }
       if (metadata) {
         setDialpadNumber(metadata.callerNumber);
@@ -190,7 +224,16 @@ export default function SoftphonePage() {
     onEnded: (call) => {
       outboundRef.current.completeCall(call);
       if (activeCallRef.current === call) activeCallRef.current = null;
-      setCallState(lifecycleRef.current.isCallTransitionPending() ? "connecting" : "ended");
+      const transitioning = lifecycleRef.current.isCallTransitionPending();
+      setCallState(transitioning ? "connecting" : "ended");
+      // A hold/park handoff also disconnects the SDK call object - don't
+      // report "ended" for that, only for a call that's genuinely over.
+      if (!transitioning) {
+        const endedCall = call as Call;
+        const direction = inboundCallsRef.current.has(endedCall as unknown as object) ? "inbound" : "outbound";
+        const phoneNumber = dialpadNumber || (direction === "inbound" ? endedCall.parameters?.From : endedCall.parameters?.To);
+        notifyDmpCallState("ended", direction, phoneNumber);
+      }
       scheduleSoftphoneCallCleanup(
         () => lifecycleRef.current.getActiveCall()
           ? "active"
@@ -216,15 +259,25 @@ export default function SoftphonePage() {
       setWaitingCalls((current) => current.some((waiting) => waiting.call === lifecycleCall)
         ? current
         : [...current, { id: waitingId, call: lifecycleCall, callerNumber, callerName: "" }]);
+      notifyDmpCallState("ringing", "inbound", callerNumber);
       void lookupCallerName(callerNumber).then((name) => {
         if (!lifecycleRef.current.isIncoming(providerCall as unknown as ProviderCall)) return;
         setWaitingCalls((current) => current.map((waiting) =>
           waiting.call === lifecycleCall ? { ...waiting, callerName: name } : waiting));
+        notifyDmpCallState("ringing", "inbound", callerNumber, name);
       });
     },
     onIncomingCleared: (call) => {
+      const providerCall = call as Call;
+      const wasStillWaiting = waitingCalls.some((waiting) => waiting.call === call);
       setWaitingCalls((current) => current.filter((waiting) => waiting.call !== call));
       setHandoffCall((current) => current === call ? null : current);
+      // Only "missed" if it was actually taken away (caller hung up, someone
+      // else in the ring group answered) - not when we're the ones accepting
+      // it (that already routes through onActive as "connected").
+      if (wasStillWaiting) {
+        notifyDmpCallState("missed", "inbound", providerCall.parameters?.From);
+      }
     },
     onReconnectChanged: setPendingReconnect,
     onError: setStableStatus,
@@ -581,6 +634,12 @@ export default function SoftphonePage() {
   useEffect(() => {
     if (activeCallRef.current) {
       synchronizeCallMute(activeCallRef.current, isMuted);
+      notifyDmpCallState(
+        isMuted ? "muted" : "unmuted",
+        inboundCallsRef.current.has(activeCallRef.current as unknown as object) ? "inbound" : "outbound",
+        dialpadNumber,
+        activeCallerName,
+      );
     }
   }, [isMuted]);
 
@@ -654,7 +713,10 @@ export default function SoftphonePage() {
       lifecycleRef.current.attachActive(call as unknown as ProviderCall, false, undefined, false);
 
       call.on("ringing", () => {
-        if (outboundRef.current.isCurrent(attempt) && lifecycleRef.current.getActiveCall() === call) setCallState("ringing");
+        if (outboundRef.current.isCurrent(attempt) && lifecycleRef.current.getActiveCall() === call) {
+          setCallState("ringing");
+          notifyDmpCallState("ringing", "outbound", toNumber);
+        }
       });
 
       return call;
@@ -743,69 +805,6 @@ export default function SoftphonePage() {
 
   const handleCall = () => dialNumber(dialpadNumber);
 
-  // DMP-triggered click-to-dial arrives over /ws/softphone rather than a
-  // plain HTTP push, because placing a brand new outbound call needs
-  // device.connect() to run inside this tab - see server/realtimeSoftphone.ts.
-  useEffect(() => {
-    if (!user?.id) return;
-
-    let socket: WebSocket | null = null;
-    let reconnectTimer: number | undefined;
-    let cancelled = false;
-
-    const connect = async () => {
-      if (cancelled) return;
-      try {
-        const response = await fetch(softphoneApiUrl("/api/voip/realtime-token"), {
-          headers: getAuthHeaders(),
-          credentials: "include",
-        });
-        if (!response.ok) throw new Error("Failed to mint realtime token");
-        const { token } = await response.json();
-        if (cancelled || !token) return;
-
-        const apiBase = softphoneApiUrl("");
-        const wsBase = apiBase
-          ? apiBase.replace(/^http/, "ws")
-          : `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}`;
-        socket = new WebSocket(`${wsBase}/ws/softphone?token=${encodeURIComponent(token)}`);
-
-        socket.onmessage = (event) => {
-          try {
-            const message = JSON.parse(event.data) as { type: string; phoneNumber?: string };
-            if (message.type === "click-to-dial" && message.phoneNumber) {
-              setDialpadNumber(message.phoneNumber);
-              void dialNumber(message.phoneNumber);
-            }
-          } catch {
-            // Ignore malformed messages rather than crash the connection.
-          }
-        };
-
-        socket.onclose = () => {
-          if (cancelled) return;
-          reconnectTimer = window.setTimeout(connect, 5000);
-        };
-
-        socket.onerror = () => {
-          socket?.close();
-        };
-      } catch {
-        if (!cancelled) {
-          reconnectTimer = window.setTimeout(connect, 5000);
-        }
-      }
-    };
-
-    connect();
-
-    return () => {
-      cancelled = true;
-      if (reconnectTimer) window.clearTimeout(reconnectTimer);
-      socket?.close();
-    };
-  }, [user?.id]);
-
   const handleToggleHold = async () => {
     const oldAgentCall = activeCallRef.current;
     const activeCallSid = oldAgentCall?.parameters.CallSid;
@@ -823,6 +822,12 @@ export default function SoftphonePage() {
       );
       setHeldCall({ ...retained, callerName: retained.callerName || activeCallerName, callerNumber: retained.callerNumber || dialpadNumber, duration: retained.duration ?? callDuration });
       setStableStatus("Caller is on hold. Select Resume to reconnect.");
+      notifyDmpCallState(
+        "held",
+        inboundCallsRef.current.has(oldAgentCall as unknown as object) ? "inbound" : "outbound",
+        retained.callerNumber || dialpadNumber,
+        retained.callerName || activeCallerName,
+      );
     } catch (error) {
       setStableStatus(error instanceof Error ? error.message : "Could not retain the call. The caller remains connected.");
     } finally {
@@ -908,6 +913,96 @@ export default function SoftphonePage() {
     }
     setCallState("idle");
   };
+
+  // Fresh closures every render - see the remoteCommandHandlersRef
+  // declaration up top for why this can't just be read directly inside the
+  // WS effect below.
+  remoteCommandHandlersRef.current = {
+    dial: (toNumber) => { setDialpadNumber(toNumber); void dialNumber(toNumber); },
+    answer: () => { if (waitingCalls[0]) handleAcceptInbound(waitingCalls[0]); },
+    decline: () => { if (waitingCalls[0]) handleRejectInbound(waitingCalls[0]); },
+    hangup: handleHangup,
+    mute: () => setIsMuted(true),
+    unmute: () => setIsMuted(false),
+    hold: () => { void handleToggleHold(); },
+    resume: () => { void handleResumeHeldCall(); },
+  };
+
+  // DMP is the control surface for CTI-enabled orgs: click-to-dial and
+  // every other call-control command (answer/decline/hangup/mute/hold)
+  // arrive here over /ws/softphone rather than a plain HTTP push, because
+  // none of them can be a pure server-side action - they all act on the
+  // live device.connect() session that only exists inside this tab. See
+  // server/realtimeSoftphone.ts.
+  useEffect(() => {
+    if (!user?.id) return;
+
+    let socket: WebSocket | null = null;
+    let reconnectTimer: number | undefined;
+    let cancelled = false;
+
+    const connect = async () => {
+      if (cancelled) return;
+      try {
+        const response = await fetch(softphoneApiUrl("/api/voip/realtime-token"), {
+          headers: getAuthHeaders(),
+          credentials: "include",
+        });
+        if (!response.ok) throw new Error("Failed to mint realtime token");
+        const { token } = await response.json();
+        if (cancelled || !token) return;
+
+        const apiBase = softphoneApiUrl("");
+        const wsBase = apiBase
+          ? apiBase.replace(/^http/, "ws")
+          : `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}`;
+        socket = new WebSocket(`${wsBase}/ws/softphone?token=${encodeURIComponent(token)}`);
+
+        socket.onmessage = (event) => {
+          try {
+            const message = JSON.parse(event.data) as { type: string; phoneNumber?: string; action?: string };
+            const handlers = remoteCommandHandlersRef.current;
+            if (message.type === "click-to-dial" && message.phoneNumber) {
+              handlers.dial(message.phoneNumber);
+            } else if (message.type === "call-control") {
+              switch (message.action) {
+                case "answer": handlers.answer(); break;
+                case "decline": handlers.decline(); break;
+                case "hangup": handlers.hangup(); break;
+                case "mute": handlers.mute(); break;
+                case "unmute": handlers.unmute(); break;
+                case "hold": handlers.hold(); break;
+                case "resume": handlers.resume(); break;
+              }
+            }
+          } catch {
+            // Ignore malformed messages rather than crash the connection.
+          }
+        };
+
+        socket.onclose = () => {
+          if (cancelled) return;
+          reconnectTimer = window.setTimeout(connect, 5000);
+        };
+
+        socket.onerror = () => {
+          socket?.close();
+        };
+      } catch {
+        if (!cancelled) {
+          reconnectTimer = window.setTimeout(connect, 5000);
+        }
+      }
+    };
+
+    connect();
+
+    return () => {
+      cancelled = true;
+      if (reconnectTimer) window.clearTimeout(reconnectTimer);
+      socket?.close();
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     if (isAuthenticated) {
