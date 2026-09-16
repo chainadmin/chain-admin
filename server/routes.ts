@@ -28534,7 +28534,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (const pkg of packages) for (const geo of pkg.geographies || []) areaStates.set(geo.areaCode, geo.state);
       return areaCode => areaStates.get(areaCode);
     },
-    createCallLog: values => voipStorage.createVoipCallLog(values),
+    createCallLog: async values => {
+      const callLog = await voipStorage.createVoipCallLog(values);
+
+      // Tell DMP this call is starting so it shows up in the account's
+      // communication history, same as the note/email/SMS sync. Only
+      // possible for outbound calls dialed from a known account (inbound
+      // calls don't have a resolved account yet at this point - DMP
+      // resolves those itself via the answered-call webhook).
+      if (values.accountId) {
+        try {
+          const tenantSettings = await storage.getTenantSettings(values.tenantId);
+          if ((tenantSettings as any)?.dmpEnabled) {
+            const account = await storage.getAccount(values.accountId);
+            if (account?.filenumber) {
+              const { dmpService } = await import('./dmpService');
+              await dmpService.initiateCall(values.tenantId, account.filenumber, values.toNumber);
+            }
+          }
+        } catch (dmpError) {
+          console.error('⚠️ Failed to notify DMP of call initiation (non-blocking):', dmpError);
+        }
+      }
+
+      return callLog;
+    },
     signSelectionToken: async payload => {
       const jwt = (await import('jsonwebtoken')).default;
       return jwt.sign(payload, process.env.JWT_SECRET!, { expiresIn: '5m' });
@@ -28904,6 +28928,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         await voipStorage.updateVoipCallLog(callLog.id, tenantId, updates);
+
+        // Log the finished call to DMP so it appears in the account's
+        // communication history. Only possible when this call is tied to
+        // a known account with a filenumber - true for outbound calls
+        // (known up front) and for inbound calls the collector has since
+        // linked to an account via the call log's consumerId/accountId.
+        if (['completed', 'busy', 'no-answer', 'failed', 'canceled'].includes(CallStatus) && callLog.accountId) {
+          try {
+            const tenantSettings = await storage.getTenantSettings(tenantId);
+            if ((tenantSettings as any)?.dmpEnabled) {
+              const account = await storage.getAccount(callLog.accountId);
+              if (account?.filenumber) {
+                const wasAnswered = Boolean(updates.answeredAt || callLog.answeredAt);
+                const outcome = wasAnswered ? 'connected' : CallStatus.replace(/-/g, '_');
+                const { dmpService } = await import('./dmpService');
+                await dmpService.logCallResult(tenantId, {
+                  filenumber: account.filenumber,
+                  phone_number: callLog.direction === 'outbound' ? callLog.toNumber : callLog.fromNumber,
+                  direction: callLog.direction,
+                  duration: updates.duration ?? callLog.duration ?? undefined,
+                  result: outcome,
+                  notes: callLog.notes || undefined,
+                });
+              }
+            }
+          } catch (dmpError) {
+            console.error('⚠️ Failed to sync call result to DMP (non-blocking):', dmpError);
+          }
+        }
       }
 
       res.sendStatus(200);
