@@ -131,7 +131,7 @@ export default function Accounts() {
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   
   const { data: accounts, isLoading: accountsLoading } = useQuery({
     queryKey: ["/api/accounts"],
@@ -1825,11 +1825,35 @@ export default function Accounts() {
                                   <span className="text-xs text-blue-100/50">{payment.paymentMethod}</span>
                                 )}
                               </div>
-                              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                                isPending ? 'bg-yellow-500/20 text-yellow-300' : 'bg-emerald-500/20 text-emerald-300'
-                              }`}>
-                                {isPending ? 'Pending' : (payment.status || 'Posted')}
-                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                                  isPending ? 'bg-yellow-500/20 text-yellow-300' : 'bg-emerald-500/20 text-emerald-300'
+                                }`}>
+                                  {isPending ? 'Pending' : (payment.status || 'Posted')}
+                                </span>
+                                {isPending && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 text-xs"
+                                    data-testid={`button-pay-now-dmp-${selectedAccount.id}-${index}`}
+                                    onClick={() => {
+                                      // DMP owns this payment's schedule - Chain is only the
+                                      // gateway. Hand the exact amount off to the existing Pay
+                                      // Now flow on the payments page rather than duplicating
+                                      // card-entry UI here.
+                                      const params = new URLSearchParams({
+                                        payNowConsumerEmail: selectedAccount.consumer?.email || '',
+                                        payNowAmount: (Number(payment.amountCents || 0) / 100).toFixed(2),
+                                        payNowAccountId: selectedAccount.id,
+                                      });
+                                      setLocation(`/payments?${params.toString()}`);
+                                    }}
+                                  >
+                                    Pay Now
+                                  </Button>
+                                )}
+                              </div>
                             </div>
                           );
                         })}

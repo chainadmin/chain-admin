@@ -83,6 +83,58 @@ test('manual DMP sync caches posted history and pending payments on each DMP acc
   assert.match(updates[0].values.additionalData.dmpPaymentsSyncedAt, /^\d{4}-\d{2}-\d{2}T/);
 });
 
+test('DMP payment sync also derives and syncs an active arrangement into paymentSchedules', async () => {
+  const syncedArrangements: any[] = [];
+  const farFuture = new Date();
+  farFuture.setFullYear(farFuture.getFullYear() + 1);
+  const futureDate = farFuture.toISOString().slice(0, 10);
+
+  const result = await syncDmpAccountPayments({
+    getAccountsByTenant: async () => [
+      { id: 'account-1', consumerId: 'consumer-1', filenumber: 'file-1', additionalData: { dmpSource: 'dmp' } },
+    ],
+    updateAccount: async () => {},
+    getActivePaymentSchedulesByConsumerAndAccount: async () => [],
+    syncDmpArrangementToChain: async (tenantId: string, consumerId: string, accountId: string, arrangement: any) => {
+      syncedArrangements.push({ tenantId, consumerId, accountId, arrangement });
+    },
+  }, 'tenant-1', async () => [
+    { arrangementId: 'arr-1', paymentdate: futureDate, paymentamount: '50.00', paymentstatus: 'Scheduled' },
+  ]);
+
+  assert.equal(result.arrangementsSynced, 1);
+  assert.equal(syncedArrangements.length, 1);
+  assert.equal(syncedArrangements[0].tenantId, 'tenant-1');
+  assert.equal(syncedArrangements[0].consumerId, 'consumer-1');
+  assert.equal(syncedArrangements[0].accountId, 'account-1');
+  assert.equal(syncedArrangements[0].arrangement.arrangementId, 'arr-1');
+  assert.equal(syncedArrangements[0].arrangement.amountCents, 5000);
+  assert.equal(syncedArrangements[0].arrangement.nextPaymentDate, futureDate);
+});
+
+test('DMP payment sync skips arrangement derivation when a non-DMP schedule is already active', async () => {
+  const syncedArrangements: any[] = [];
+  const farFuture = new Date();
+  farFuture.setFullYear(farFuture.getFullYear() + 1);
+  const futureDate = farFuture.toISOString().slice(0, 10);
+
+  const result = await syncDmpAccountPayments({
+    getAccountsByTenant: async () => [
+      { id: 'account-1', consumerId: 'consumer-1', filenumber: 'file-1', additionalData: { dmpSource: 'dmp' } },
+    ],
+    updateAccount: async () => {},
+    getActivePaymentSchedulesByConsumerAndAccount: async () => [{ source: 'chain' }],
+    syncDmpArrangementToChain: async (...args: any[]) => {
+      syncedArrangements.push(args);
+    },
+  }, 'tenant-1', async () => [
+    { arrangementId: 'arr-1', paymentdate: futureDate, paymentamount: '50.00', paymentstatus: 'Scheduled' },
+  ]);
+
+  assert.equal(result.arrangementsSynced, 0);
+  assert.equal(syncedArrangements.length, 0);
+});
+
 test('normalizes flat and wrapped DMP lists', () => {
   const portfolios = [{ id: 'portfolio-1', name: 'Primary' }];
   const accounts = [{ filenumber: 'file-1' }];

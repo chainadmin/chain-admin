@@ -132,8 +132,9 @@ export default function Settings() {
     oneTimePaymentMin: string;
     payoffPercentage: string;
     payoffDueDate: string;
-    settlementPaymentCounts: string; // Comma-separated values like "1,3,6"
+    settlementPaymentCount: string;
     settlementPaymentFrequency: string;
+    settlementStartDate: string;
     settlementOfferExpiresDate: string;
     paymentFrequency: string;
     payoffText: string;
@@ -145,15 +146,16 @@ export default function Settings() {
     name: "",
     description: "",
     balanceTier: "",
-    planType: "range",
+    planType: "fixed_monthly",
     monthlyPaymentMin: "",
     monthlyPaymentMax: "",
     fixedMonthlyPayment: "",
     oneTimePaymentMin: "",
     payoffPercentage: "",
     payoffDueDate: "",
-    settlementPaymentCounts: "1,3,6", // Default to 3 options
+    settlementPaymentCount: "1",
     settlementPaymentFrequency: "monthly",
+    settlementStartDate: "",
     settlementOfferExpiresDate: "",
     paymentFrequency: "monthly",
     payoffText: "",
@@ -1145,11 +1147,7 @@ export default function Settings() {
       payload.paymentFrequency = arrangementForm.paymentFrequency || 'monthly';
     } else if (planType === "settlement") {
       const settlementPercentage = parsePercentageInput(arrangementForm.payoffPercentage);
-      // Parse comma-separated payment counts like "1,3,6"
-      const settlementPaymentCounts = arrangementForm.settlementPaymentCounts
-        .split(',')
-        .map(s => parseInt(s.trim(), 10))
-        .filter(n => !isNaN(n) && n > 0);
+      const settlementPaymentCount = parseInt(arrangementForm.settlementPaymentCount.trim(), 10);
       const settlementPaymentFrequency = arrangementForm.settlementPaymentFrequency.trim();
       const settlementText = arrangementForm.payoffText.trim();
 
@@ -1171,10 +1169,10 @@ export default function Settings() {
         return;
       }
 
-      if (settlementPaymentCounts.length === 0) {
+      if (isNaN(settlementPaymentCount) || settlementPaymentCount < 1) {
         toast({
-          title: "Payment Count Options Required",
-          description: "Enter payment count options separated by commas (e.g., 1,3,6).",
+          title: "Number of Payments Required",
+          description: "Enter how many payments this settlement offer is split into (1 for a single payoff).",
           variant: "destructive",
         });
         return;
@@ -1189,9 +1187,31 @@ export default function Settings() {
         return;
       }
 
+      if (!arrangementForm.settlementStartDate) {
+        toast({
+          title: "Start Date Required",
+          description: "Set the date this settlement offer becomes available.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (
+        arrangementForm.settlementOfferExpiresDate &&
+        arrangementForm.settlementOfferExpiresDate < arrangementForm.settlementStartDate
+      ) {
+        toast({
+          title: "Invalid End Date",
+          description: "The end date must be on or after the start date.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       payload.payoffPercentageBasisPoints = settlementPercentage;
-      payload.settlementPaymentCounts = settlementPaymentCounts;
+      payload.settlementPaymentCount = settlementPaymentCount;
       payload.settlementPaymentFrequency = settlementPaymentFrequency;
+      payload.settlementStartDate = parseDateInput(arrangementForm.settlementStartDate);
       payload.settlementOfferExpiresDate = arrangementForm.settlementOfferExpiresDate ? parseDateInput(arrangementForm.settlementOfferExpiresDate) : null;
       payload.payoffText = settlementText || undefined;
       payload.maxTermMonths = null;
@@ -2889,10 +2909,10 @@ export default function Settings() {
                       />
                     </div>
 
-                    {(localSettings as any)?.campaignIntegrationEnabled && (
+                    {((localSettings as any)?.dmpEnabled || (localSettings as any)?.campaignIntegrationEnabled) && (
                       <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-4">
                         <div className="space-y-2">
-                          <Label className="text-white">Chain API Key — provide this to Debt Manager Pro so it can send campaigns to Chain</Label>
+                          <Label className="text-white">Chain API Key — provide this to Debt Manager Pro so it can call back into Chain (campaign sends, call-parking pickup)</Label>
                           <div className="flex items-center gap-2">
                             <Input
                               readOnly
@@ -2937,6 +2957,7 @@ export default function Settings() {
                           </Button>
                         </div>
 
+                        {(localSettings as any)?.campaignIntegrationEnabled && (
                         <div className="space-y-2">
                           <h4 className="text-base font-medium text-white">Campaign History</h4>
                           {campaignLogsLoading ? (
@@ -3000,6 +3021,7 @@ export default function Settings() {
                             </div>
                           )}
                         </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -3921,7 +3943,7 @@ export default function Settings() {
             </TabsContent>
 
             {localSettings?.businessType !== 'municipality' && <TabsContent value="arrangements" className="space-y-6">
-              {/* Minimum Monthly Payment */}
+              {/* Minimum Payment */}
               <Card className={cardBaseClasses}>
                 <CardHeader className="text-white">
                   <CardTitle className="text-xl font-semibold text-white">Arrangement Settings</CardTitle>
@@ -3931,9 +3953,9 @@ export default function Settings() {
                 </CardHeader>
                 <CardContent className="space-y-4 text-sm text-blue-100/80">
                   <div className="space-y-2">
-                    <Label htmlFor="minimumMonthlyPayment" className="text-base font-medium text-white">Minimum Monthly Payment Amount</Label>
+                    <Label htmlFor="minimumMonthlyPayment" className="text-base font-medium text-white">Minimum Payment Amount</Label>
                     <p className="text-sm text-blue-100/70">
-                      The minimum monthly payment amount for payment arrangements (applies to all accounts)
+                      The minimum amount a consumer can pay in a single payment (applies to all accounts). A specific arrangement or existing SMAX/DMP payment plan set below this is always still payable - this is only a floor on amounts not tied to one.
                     </p>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-blue-100/60">$</span>
@@ -4078,10 +4100,18 @@ export default function Settings() {
                                 <SelectValue placeholder="Select plan type" />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="range">Monthly range (legacy)</SelectItem>
+                                {/* "range" (Monthly range, legacy min/max) is still not offered -
+                                    "fixed_monthly" (one fixed amount per balance tier, consumer
+                                    picks weekly/biweekly/monthly at payment time) is the intended
+                                    tiered-amount option and is back now that a chosen frequency
+                                    actually divides the configured amount instead of charging the
+                                    full monthly figure at that shorter cadence. */}
                                 <SelectItem value="fixed_monthly">Fixed monthly amount</SelectItem>
                                 <SelectItem value="settlement">Settlement (% of balance)</SelectItem>
-                                <SelectItem value="custom_terms">Custom terms copy</SelectItem>
+                                {/* "custom_terms" is not offered - calculateArrangementDetails has
+                                    no case for it, so it never produces a payable amount. It's
+                                    just a free-text description with no payment mechanism behind
+                                    it - unusable for an actual arrangement. */}
                                 <SelectItem value="one_time_payment">One-time payment</SelectItem>
                                 <SelectItem value="pay_in_full">Pay Balance in Full</SelectItem>
                               </SelectContent>
@@ -4101,7 +4131,7 @@ export default function Settings() {
                                   className={inputClasses}
                                 />
                                 <p className="mt-1 text-xs text-blue-100/70">
-                                  Leave blank to use the global Minimum Monthly Payment from Settings. Consumers can pay any amount from this minimum up to the full balance.
+                                  Leave blank to use the global Minimum Payment from Settings. Consumers can pay any amount from this minimum up to the full balance.
                                 </p>
                               </div>
                             </div>
@@ -4164,17 +4194,19 @@ export default function Settings() {
                               </div>
                               <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                  <Label className="text-white">Payment Options *</Label>
+                                  <Label className="text-white">Number of Payments *</Label>
                                   <Input
-                                    type="text"
-                                    value={arrangementForm.settlementPaymentCounts}
-                                    onChange={(e) => setArrangementForm({ ...arrangementForm, settlementPaymentCounts: e.target.value })}
-                                    placeholder="1,3,6"
+                                    type="number"
+                                    step="1"
+                                    min="1"
+                                    value={arrangementForm.settlementPaymentCount}
+                                    onChange={(e) => setArrangementForm({ ...arrangementForm, settlementPaymentCount: e.target.value })}
+                                    placeholder="1"
                                     className={inputClasses}
-                                    data-testid="input-settlement-payment-counts"
+                                    data-testid="input-settlement-payment-count"
                                   />
                                   <p className="mt-1 text-xs text-blue-100/70">
-                                    Comma-separated (e.g., "1,3,6" creates 3 options)
+                                    1 = single payoff payment. Enter more to split the settlement total into installments.
                                   </p>
                                 </div>
                                 <div>
@@ -4193,22 +4225,37 @@ export default function Settings() {
                                     </SelectContent>
                                   </Select>
                                   <p className="mt-1 text-xs text-blue-100/70">
-                                    How often payments occur
+                                    How often payments occur (ignored when Number of Payments is 1)
                                   </p>
                                 </div>
                               </div>
-                              <div>
-                                <Label className="text-white">Settlement Offer Expires (Optional)</Label>
-                                <Input
-                                  type="date"
-                                  value={arrangementForm.settlementOfferExpiresDate}
-                                  onChange={(e) => setArrangementForm({ ...arrangementForm, settlementOfferExpiresDate: e.target.value })}
-                                  className={inputClasses}
-                                  data-testid="input-settlement-expires-date"
-                                />
-                                <p className="mt-1 text-xs text-blue-100/70">
-                                  Leave blank for indefinite availability. If set, consumers can only accept this settlement before this date.
-                                </p>
+                              <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                  <Label className="text-white">Settlement Offer Starts *</Label>
+                                  <Input
+                                    type="date"
+                                    value={arrangementForm.settlementStartDate}
+                                    onChange={(e) => setArrangementForm({ ...arrangementForm, settlementStartDate: e.target.value })}
+                                    className={inputClasses}
+                                    data-testid="input-settlement-start-date"
+                                  />
+                                  <p className="mt-1 text-xs text-blue-100/70">
+                                    Date this offer becomes available to consumers.
+                                  </p>
+                                </div>
+                                <div>
+                                  <Label className="text-white">Settlement Offer Ends (Optional)</Label>
+                                  <Input
+                                    type="date"
+                                    value={arrangementForm.settlementOfferExpiresDate}
+                                    onChange={(e) => setArrangementForm({ ...arrangementForm, settlementOfferExpiresDate: e.target.value })}
+                                    className={inputClasses}
+                                    data-testid="input-settlement-expires-date"
+                                  />
+                                  <p className="mt-1 text-xs text-blue-100/70">
+                                    Leave blank to make this the standing offer for this tier. If set, consumers can only accept it before this date.
+                                  </p>
+                                </div>
                               </div>
                               <div>
                                 <Label className="text-white">Settlement Terms</Label>

@@ -148,6 +148,10 @@ export default function SoftphonePage() {
   const retentionLockRef = useRef(false);
   const dialLockRef = useRef(false);
   const outboundRef = useRef(new SoftphoneOutboundCallCoordinator());
+  // onActive fires for both inbound and outbound calls alike, but DMP only
+  // needs to know about ones the agent answered - marked here, the only
+  // point that's unambiguously inbound-only, and consumed once in onActive.
+  const inboundCallsRef = useRef(new WeakSet<object>());
 
   const setStableStatus = (message: string) => setInlineStatus((previous) => dedupeStatus(previous, message));
 
@@ -158,6 +162,21 @@ export default function SoftphonePage() {
       activeCallRef.current = activeCall;
       setWaitingCalls((current) => current.filter((waiting) => waiting.call !== call));
       setHandoffCall(null);
+      // Only a freshly-answered inbound call should screen-pop DMP - not an
+      // outbound call the agent placed themselves (they already know who
+      // they're calling), and not a recovered/reconnected call (DMP was
+      // already notified for its original answer).
+      if (!recovered && inboundCallsRef.current.has(activeCall as unknown as object)) {
+        const callerNumber = activeCall.parameters?.From;
+        if (callerNumber) {
+          fetch(softphoneApiUrl("/api/voip/dmp-notify-answered"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...getAuthHeaders() },
+            credentials: "include",
+            body: JSON.stringify({ phoneNumber: callerNumber }),
+          }).catch((error) => console.error("Failed to notify DMP of answered call (non-blocking):", error));
+        }
+      }
       if (metadata) {
         setDialpadNumber(metadata.callerNumber);
         setActiveCallerName(metadata.callerName);
@@ -190,6 +209,7 @@ export default function SoftphonePage() {
     },
     onIncoming: (call) => {
       const providerCall = call as Call;
+      inboundCallsRef.current.add(providerCall as object);
       const callerNumber = providerCall.parameters.From || "Unknown";
       const lifecycleCall = providerCall as unknown as ProviderCall;
       const waitingId = providerCall.parameters.CallSid || `waiting-${++waitingCallIdRef.current}`;
@@ -696,9 +716,9 @@ export default function SoftphonePage() {
     }
   };
 
-  const handleCall = async () => {
+  const dialNumber = async (toNumber: string) => {
     if (!canStartSoftphoneOutboundCall({
-      hasNumber: !!dialpadNumber,
+      hasNumber: !!toNumber,
       dialLocked: dialLockRef.current,
       requestPending: initiateCallMutation.isPending,
       hasActiveCall: !!lifecycleRef.current.getActiveCall(),
@@ -708,10 +728,10 @@ export default function SoftphonePage() {
     setIsDialPreparing(true);
     const attempt = outboundRef.current.begin();
     try {
-      setActiveCallerName(await lookupCallerName(dialpadNumber));
+      setActiveCallerName(await lookupCallerName(toNumber));
       if (!outboundRef.current.isCurrent(attempt)) return;
       setIsOnHold(false);
-      initiateCallMutation.mutate({ toNumber: dialpadNumber, attempt });
+      initiateCallMutation.mutate({ toNumber, attempt });
     } catch {
       if (outboundRef.current.isCurrent(attempt)) {
         outboundRef.current.complete(attempt);
@@ -720,6 +740,71 @@ export default function SoftphonePage() {
       }
     }
   };
+
+  const handleCall = () => dialNumber(dialpadNumber);
+
+  // DMP-triggered click-to-dial arrives over /ws/softphone rather than a
+  // plain HTTP push, because placing a brand new outbound call needs
+  // device.connect() to run inside this tab - see server/realtimeSoftphone.ts.
+  useEffect(() => {
+    if (!user?.id) return;
+
+    let socket: WebSocket | null = null;
+    let reconnectTimer: number | undefined;
+    let cancelled = false;
+
+    const connect = async () => {
+      if (cancelled) return;
+      try {
+        const response = await fetch(softphoneApiUrl("/api/voip/realtime-token"), {
+          headers: getAuthHeaders(),
+          credentials: "include",
+        });
+        if (!response.ok) throw new Error("Failed to mint realtime token");
+        const { token } = await response.json();
+        if (cancelled || !token) return;
+
+        const apiBase = softphoneApiUrl("");
+        const wsBase = apiBase
+          ? apiBase.replace(/^http/, "ws")
+          : `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}`;
+        socket = new WebSocket(`${wsBase}/ws/softphone?token=${encodeURIComponent(token)}`);
+
+        socket.onmessage = (event) => {
+          try {
+            const message = JSON.parse(event.data) as { type: string; phoneNumber?: string };
+            if (message.type === "click-to-dial" && message.phoneNumber) {
+              setDialpadNumber(message.phoneNumber);
+              void dialNumber(message.phoneNumber);
+            }
+          } catch {
+            // Ignore malformed messages rather than crash the connection.
+          }
+        };
+
+        socket.onclose = () => {
+          if (cancelled) return;
+          reconnectTimer = window.setTimeout(connect, 5000);
+        };
+
+        socket.onerror = () => {
+          socket?.close();
+        };
+      } catch {
+        if (!cancelled) {
+          reconnectTimer = window.setTimeout(connect, 5000);
+        }
+      }
+    };
+
+    connect();
+
+    return () => {
+      cancelled = true;
+      if (reconnectTimer) window.clearTimeout(reconnectTimer);
+      socket?.close();
+    };
+  }, [user?.id]);
 
   const handleToggleHold = async () => {
     const oldAgentCall = activeCallRef.current;

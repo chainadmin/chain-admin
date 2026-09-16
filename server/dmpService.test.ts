@@ -202,3 +202,66 @@ test("sendText sends DMP's fileNumber/phoneNumber keys, not filenumber/phone_num
   assert.equal(body.filenumber, undefined);
   assert.equal(body.phone_number, undefined);
 });
+
+// The DMP softphone/CTI endpoints (initiate, result, disposition, inbound,
+// markphone) have the same camelCase-vs-lowercase/snake_case contract
+// mismatch as the notes/email/attempt/SMS endpoints above - these lock in
+// the same translation for each of them.
+test("initiateCall sends DMP's fileNumber/phoneNumber keys, not filenumber/phone_number", async () => {
+  const body = await captureRequestBody((service) => service.initiateCall("tenant-1", "FILE-1", "5551234567"));
+  assert.equal(body.fileNumber, "FILE-1");
+  assert.equal(body.phoneNumber, "5551234567");
+  assert.equal(body.filenumber, undefined);
+  assert.equal(body.phone_number, undefined);
+});
+
+test("logCallResult sends DMP's fileNumber/phoneNumber/outcome keys, not filenumber/phone_number/result", async () => {
+  const body = await captureRequestBody((service) =>
+    service.logCallResult("tenant-1", {
+      filenumber: "FILE-1",
+      phone_number: "5551234567",
+      direction: "outbound",
+      duration: 42,
+      result: "connected",
+      disposition: "promise",
+      notes: "Spoke with debtor",
+    }),
+  );
+  assert.equal(body.fileNumber, "FILE-1");
+  assert.equal(body.phoneNumber, "5551234567");
+  assert.equal(body.outcome, "connected");
+  assert.equal(body.duration, 42);
+  assert.equal(body.disposition, "promise");
+  assert.equal(body.notes, "Spoke with debtor");
+  assert.equal(body.direction, "outbound");
+  assert.equal(body.filenumber, undefined);
+  assert.equal(body.phone_number, undefined);
+  assert.equal(body.result, undefined);
+});
+
+test("setDisposition sends DMP's fileNumber/disposition keys, not filenumber/disposition_code", async () => {
+  const body = await captureRequestBody((service) => service.setDisposition("tenant-1", "FILE-1", "promise", "Will pay Friday"));
+  assert.equal(body.fileNumber, "FILE-1");
+  assert.equal(body.disposition, "promise");
+  assert.equal(body.notes, "Will pay Friday");
+  assert.equal(body.filenumber, undefined);
+  assert.equal(body.disposition_code, undefined);
+});
+
+test("lookupInboundCaller sends DMP's phoneNumber key, not phone_number", async () => {
+  const body = await captureRequestBody((service) => service.lookupInboundCaller("tenant-1", "5551234567"));
+  assert.equal(body.phoneNumber, "5551234567");
+  assert.equal(body.phone_number, undefined);
+});
+
+test("markPhoneBad sends DMP's fileNumber/phoneNumber/isBad/notes keys, not filenumber/phone_number/status/reason", async () => {
+  const body = await captureRequestBody((service) => service.markPhoneBad("tenant-1", "FILE-1", "5551234567", "Disconnected"));
+  assert.equal(body.fileNumber, "FILE-1");
+  assert.equal(body.phoneNumber, "5551234567");
+  assert.equal(body.isBad, true);
+  assert.equal(body.notes, "Disconnected");
+  assert.equal(body.filenumber, undefined);
+  assert.equal(body.phone_number, undefined);
+  assert.equal(body.status, undefined);
+  assert.equal(body.reason, undefined);
+});
