@@ -2922,6 +2922,32 @@ export async function runMigrations() {
         ('NATIONAL_PLUS', 'National Plus', 'Configured enhanced national local-number coverage', 0, '[]'::jsonb, 'DRAFT')
       ON CONFLICT (code) DO NOTHING
     `);
+    // Settlement arrangements move from a menu of payment-count options back
+    // to a single exact offer: singular settlement_payment_count plus a
+    // start date (settlement_offer_expires_date already exists as the end
+    // date). Backfill from the first value of the old array column, then
+    // drop it.
+    console.log('Migrating settlement_payment_counts array back to a single exact offer...');
+    try {
+      await client.query(`ALTER TABLE arrangement_options ADD COLUMN IF NOT EXISTS settlement_payment_count INTEGER`);
+      await client.query(`ALTER TABLE arrangement_options ADD COLUMN IF NOT EXISTS settlement_start_date DATE`);
+
+      await client.query(`
+        UPDATE arrangement_options
+        SET settlement_payment_count = settlement_payment_counts[1]
+        WHERE plan_type = 'settlement'
+          AND settlement_payment_counts IS NOT NULL
+          AND array_length(settlement_payment_counts, 1) > 0
+          AND settlement_payment_count IS NULL
+      `);
+
+      await client.query(`ALTER TABLE arrangement_options DROP COLUMN IF EXISTS settlement_payment_counts`);
+
+      console.log(`  ✓ settlement_payment_count / settlement_start_date (migrated from settlement_payment_counts)`);
+    } catch (err) {
+      console.log(`  ⚠ settlement single-offer migration (error):`, err);
+    }
+
     console.log('✅ Database migrations completed successfully');
   } catch (error: any) {
     if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {

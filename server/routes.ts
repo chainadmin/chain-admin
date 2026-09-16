@@ -10138,11 +10138,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const description = sanitizeOptionalText(body.description);
     const isActive = body.isActive === undefined ? true : Boolean(body.isActive);
 
-    // Parse settlementPaymentCounts as array
-    const settlementPaymentCounts = Array.isArray(body.settlementPaymentCounts) 
-      ? body.settlementPaymentCounts.map((c: number | string) => parseOptionalInteger(c)).filter((c: number | null): c is number => c !== null)
-      : [];
+    const settlementPaymentCount = parseOptionalInteger(body.settlementPaymentCount);
     const settlementPaymentFrequency = typeof body.settlementPaymentFrequency === "string" ? body.settlementPaymentFrequency.trim() : null;
+    const settlementStartDate = parseDateInput(body.settlementStartDate);
     const settlementOfferExpiresDate = parseDateInput(body.settlementOfferExpiresDate);
     const paymentFrequency = typeof body.paymentFrequency === "string" && ['weekly', 'biweekly', 'monthly'].includes(body.paymentFrequency) ? body.paymentFrequency : 'monthly';
 
@@ -10161,8 +10159,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       payoffText: planType === "settlement" ? payoffText : null,
       payoffPercentageBasisPoints: planType === "settlement" ? payoffPercentage : null,
       payoffDueDate: null,
-      settlementPaymentCounts: planType === "settlement" ? settlementPaymentCounts : null,
+      settlementPaymentCount: planType === "settlement" ? settlementPaymentCount : null,
       settlementPaymentFrequency: planType === "settlement" ? settlementPaymentFrequency : null,
+      settlementStartDate: planType === "settlement" ? settlementStartDate : null,
       settlementOfferExpiresDate: planType === "settlement" ? settlementOfferExpiresDate : null,
       paymentFrequency: (planType === "range" || planType === "fixed_monthly") ? paymentFrequency : null,
       customTermsText: planType === "custom_terms" ? customTermsText : null,
@@ -12408,45 +12407,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return false;
         }
         
-        // Check if settlement offer has expired
-        if (option.planType === 'settlement' && option.settlementOfferExpiresDate) {
-          const expirationDate = new Date(option.settlementOfferExpiresDate);
-          expirationDate.setHours(0, 0, 0, 0);
-          if (expirationDate < today) {
-            return false; // Offer has expired
+        // Settlement offers are only available within their start/end window.
+        // No end date means it's the standing offer for this tier.
+        if (option.planType === 'settlement') {
+          if (option.settlementStartDate) {
+            const startDate = new Date(option.settlementStartDate);
+            startDate.setHours(0, 0, 0, 0);
+            if (startDate > today) {
+              return false; // Offer isn't active yet
+            }
+          }
+          if (option.settlementOfferExpiresDate) {
+            const expirationDate = new Date(option.settlementOfferExpiresDate);
+            expirationDate.setHours(0, 0, 0, 0);
+            if (expirationDate < today) {
+              return false; // Offer has expired
+            }
           }
         }
-        
+
         // If forceArrangement is enabled, filter out one_time_payment plans
         if (settings?.forceArrangement && option.planType === 'one_time_payment') {
           return false;
         }
-        
+
         return true;
       });
       
-      // Expand settlement options with multiple payment counts into separate options
-      const expandedOptions: any[] = [];
-      for (const option of applicableOptions) {
-        if (option.planType === 'settlement' && option.settlementPaymentCounts && Array.isArray(option.settlementPaymentCounts) && option.settlementPaymentCounts.length > 0) {
-          // Create a separate option for each payment count
-          for (const paymentCount of option.settlementPaymentCounts) {
-            expandedOptions.push({
-              ...option,
-              settlementPaymentCount: paymentCount, // Add individual count for calculation
-              name: `${option.name} - ${paymentCount} ${paymentCount === 1 ? 'Payment' : 'Payments'}`, // Unique name for each option
-            });
-          }
-        } else {
-          // Non-settlement or settlement without counts array
-          expandedOptions.push(option);
-        }
-      }
-      
-      // Calculate payment details for each expanded option and filter out non-viable ones
+      // Calculate payment details for each applicable option and filter out non-viable ones
       // Use tenant's global minimumMonthlyPayment as fallback when plan has no specific minimum
       const tenantGlobalMinimum = settings?.minimumMonthlyPayment || 0;
-      const calculatedOptions = expandedOptions
+      const calculatedOptions = applicableOptions
         .map(option => calculateArrangementDetails(option, balanceCents, tenantGlobalMinimum))
         .filter(option => option !== null);
       
@@ -13917,7 +13908,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const {
         accountId,
         arrangementId,
-        settlementPaymentCount: requestedSettlementPaymentCount,
         cardNumber,
         expiryMonth,
         expiryYear,
@@ -14211,20 +14201,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
-        if (arrangement.planType === 'settlement' && requestedSettlementPaymentCount) {
-          const validCounts = arrangement.settlementPaymentCounts || [1];
-          const requestedCount = Number(requestedSettlementPaymentCount);
-          if (validCounts.includes(requestedCount)) {
-            (arrangement as any).settlementPaymentCount = requestedCount;
-            console.log('📋 Settlement payment count set from request:', requestedCount);
-          } else {
-            (arrangement as any).settlementPaymentCount = validCounts[0] || 1;
-            console.log('⚠️ Requested settlement count not in valid options, using default:', validCounts[0] || 1);
-          }
-        } else if (arrangement.planType === 'settlement') {
-          const validCounts = arrangement.settlementPaymentCounts || [1];
-          (arrangement as any).settlementPaymentCount = validCounts[0] || 1;
-          console.log('📋 Settlement payment count defaulted to:', validCounts[0] || 1);
+        if (arrangement.planType === 'settlement') {
+          // Settlement is a single exact offer defined by the admin, not a
+          // consumer-selectable menu — use the arrangement's own count.
+          (arrangement as any).settlementPaymentCount = arrangement.settlementPaymentCount || 1;
         }
 
         // Calculate payment amount based on arrangement type

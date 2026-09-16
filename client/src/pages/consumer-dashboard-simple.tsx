@@ -900,7 +900,6 @@ export default function ConsumerDashboardSimple() {
         accountId: selectedAccount.id,
         arrangementId: selectedArrangement?.id || null,
         manualArrangementId: selectedManualArrangement?.id || null,
-        settlementPaymentCount: selectedArrangement?.planType === 'settlement' ? (selectedArrangement?.settlementPaymentCount || 1) : undefined,
         cardName: paymentForm.cardName,
         zipCode: paymentForm.zipCode,
         saveCard: saveCard || isSimplifiedFlow,
