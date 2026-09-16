@@ -26818,6 +26818,137 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (result.failed) console.error(`[Voice] Suspended cleanup failures code=provider_update_failed count=${result.failed}`);
   }
 
+  // Shared by the collector-facing pickup route and the DMP-delegated pickup
+  // route (a DMP user clicking "pick up" targets a specific Chiamo-linked
+  // collector by userId instead of the session's own user). Reconnect tokens
+  // are opaque bookkeeping for beginReconnect's claim/callback matching, not
+  // a WebRTC handshake, so the caller may supply one instead of a browser.
+  type PickupParkedCallOutcome =
+    | { kind: 'CONFLICT' }
+    | { kind: 'MISSING' }
+    | { kind: 'UNAVAILABLE' }
+    | { kind: 'OK'; parkedCall: typeof voipSuspendedCalls.$inferSelect; reconnectToken: string; reconnectExpiresAt: Date };
+
+  async function pickupParkedCallForUser(
+    tenantId: string,
+    userId: string,
+    parkedCallId: string,
+    reconnectToken: string,
+  ): Promise<PickupParkedCallOutcome> {
+    const tokenHash = hashReconnectToken(reconnectToken);
+    const reconnectExpiresAt = new Date(Date.now() + suspendedCallReconnectMs);
+    await cleanupExpiredSuspendedCalls();
+    const reconnectResult = await beginReconnect({
+      claimActive: async () => {
+        const [record] = await db.update(voipSuspendedCalls).set({
+          status: 'RESUMING',
+          reconnectTokenHash: tokenHash,
+          reconnectingUserId: userId,
+          reconnectExpiresAt,
+          reconnectAnsweredAt: null,
+          updatedAt: new Date(),
+        }).where(and(
+          eq(voipSuspendedCalls.id, parkedCallId),
+          eq(voipSuspendedCalls.tenantId, tenantId),
+          eq(voipSuspendedCalls.kind, 'PARK'),
+          eq(voipSuspendedCalls.status, 'ACTIVE'),
+          gt(voipSuspendedCalls.expiresAt, new Date()),
+        )).returning();
+        return record || null;
+      },
+      findExactClaim: async () => {
+        const [record] = await db.select().from(voipSuspendedCalls).where(and(
+          eq(voipSuspendedCalls.id, parkedCallId),
+          eq(voipSuspendedCalls.tenantId, tenantId),
+          eq(voipSuspendedCalls.kind, 'PARK'),
+          eq(voipSuspendedCalls.status, 'RESUMING'),
+          eq(voipSuspendedCalls.reconnectingUserId, userId),
+          eq(voipSuspendedCalls.reconnectTokenHash, tokenHash),
+          gt(voipSuspendedCalls.reconnectExpiresAt, new Date()),
+        )).limit(1);
+        return record || null;
+      },
+      hasCompetingClaim: async () => {
+        const [record] = await db.select({ id: voipSuspendedCalls.id }).from(voipSuspendedCalls).where(and(
+          eq(voipSuspendedCalls.id, parkedCallId),
+          eq(voipSuspendedCalls.tenantId, tenantId),
+          eq(voipSuspendedCalls.kind, 'PARK'),
+          inArray(voipSuspendedCalls.status, ['RESUMING', 'CANCELING']),
+        )).limit(1);
+        return Boolean(record);
+      },
+      startProviderReconnect: parkedCall => reconnectSuspendedVoipCall(
+        tenantId, parkedCall.retainedCallSid, userId, parkedCall.id, reconnectToken,
+      ),
+    });
+    if (reconnectResult.kind === 'CONFLICT') return { kind: 'CONFLICT' };
+    if (reconnectResult.kind === 'MISSING') return { kind: 'MISSING' };
+    if (!('record' in reconnectResult)) return { kind: 'UNAVAILABLE' };
+
+    try {
+      const { dmpService } = await import('./dmpService');
+      await dmpService.notifyCallUnparked(tenantId, reconnectResult.record.id);
+    } catch (dmpError) {
+      console.error('⚠️ Failed to notify DMP of parked call pickup (non-blocking):', dmpError);
+    }
+
+    return {
+      kind: 'OK',
+      parkedCall: reconnectResult.record,
+      reconnectToken,
+      reconnectExpiresAt: reconnectResult.record.reconnectExpiresAt || reconnectExpiresAt,
+    };
+  }
+
+  // Authenticates DMP calling back into Chain (the reverse of dmpService.ts's
+  // calls into DMP). Reuses the same externalApiKey tenantSettings already
+  // generates from the "Campaign Integration" settings panel - one bearer
+  // token per tenant, presented by DMP on every request into this namespace.
+  const authenticateDmpCallback = async (req: any, res: any, next: any) => {
+    const authHeader = String(req.header('authorization') || '');
+    const match = /^Bearer\s+(.+)$/i.exec(authHeader);
+    const token = match?.[1]?.trim();
+    if (!token) return res.status(401).json({ success: false, error: 'Missing bearer token' });
+    const [settings] = await db.select().from(tenantSettings)
+      .where(eq(tenantSettings.externalApiKey, token)).limit(1);
+    if (!settings || !(settings as any).dmpEnabled) {
+      return res.status(403).json({ success: false, error: 'Invalid or inactive API key' });
+    }
+    req.dmpTenantId = settings.tenantId;
+    next();
+  };
+
+  app.post('/api/v2/parked_call_pickup', authenticateDmpCallback, async (req, res) => {
+    try {
+      const tenantId = (req as any).dmpTenantId as string;
+      const { parkedCallId, chiamoEmail } = req.body || {};
+      if (typeof parkedCallId !== 'string' || !parkedCallId.trim()) {
+        return res.status(400).json({ success: false, error: 'parkedCallId is required' });
+      }
+      if (typeof chiamoEmail !== 'string' || !chiamoEmail.trim()) {
+        return res.status(400).json({ success: false, error: 'chiamoEmail is required' });
+      }
+
+      const credentials = await storage.getAgencyCredentialsByEmail(chiamoEmail);
+      if (!credentials || credentials.tenantId !== tenantId) {
+        return res.status(404).json({ success: false, error: 'No Chiamo user found for that email' });
+      }
+      if (!canUseSoftphone(credentials as any)) {
+        return res.status(403).json({ success: false, error: 'That Chiamo user does not have VoIP access enabled' });
+      }
+
+      const reconnectToken = crypto.randomBytes(24).toString('hex');
+      const outcome = await pickupParkedCallForUser(tenantId, credentials.id, parkedCallId, reconnectToken);
+      if (outcome.kind === 'CONFLICT') return res.status(409).json({ success: false, error: 'This call already has a reconnect claim' });
+      if (outcome.kind === 'MISSING') return res.status(404).json({ success: false, error: 'Parked call not found' });
+      if (outcome.kind === 'UNAVAILABLE') return res.status(409).json({ success: false, error: 'Reconnect claim unavailable' });
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error handling DMP parked-call pickup request:', error);
+      res.status(500).json({ success: false, error: 'Failed to pick up parked call' });
+    }
+  });
+
   const suspendedCallCleanupTimer = setInterval(() => {
     cleanupExpiredSuspendedCalls().catch(error => console.error('[Voice] Suspended call cleanup failed:', error));
   }, 60_000);
@@ -28380,6 +28511,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         eq(voipSuspendedCalls.retentionOperationId, operationId),
       )).returning();
       if (!activated) throw new Error('retention_fence_lost');
+
+      try {
+        const { dmpService } = await import('./dmpService');
+        await dmpService.notifyCallParked(user.tenantId, parkedCall.id, parkedCall.callerName, parkedCall.callerNumber);
+      } catch (dmpError) {
+        console.error('⚠️ Failed to notify DMP of parked call (non-blocking):', dmpError);
+      }
+
       res.json({
         id: parkedCall.id,
         callerName: parkedCall.callerName,
@@ -28402,59 +28541,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!canUseSoftphone(user)) return res.status(403).json({ message: 'VoIP access not enabled for this user' });
       const tokenResult = reconnectTokenSchema.safeParse(req.body?.reconnectToken);
       if (!tokenResult.success) return res.status(400).json({ message: 'A valid reconnect token is required' });
-      const reconnectToken = tokenResult.data;
-      const tokenHash = hashReconnectToken(reconnectToken);
-      const reconnectExpiresAt = new Date(Date.now() + suspendedCallReconnectMs);
-      await cleanupExpiredSuspendedCalls();
-      const reconnectResult = await beginReconnect({
-        claimActive: async () => {
-          const [record] = await db.update(voipSuspendedCalls).set({
-            status: 'RESUMING',
-            reconnectTokenHash: tokenHash,
-            reconnectingUserId: user.id,
-            reconnectExpiresAt,
-            reconnectAnsweredAt: null,
-            updatedAt: new Date(),
-          }).where(and(
-            eq(voipSuspendedCalls.id, req.params.id),
-            eq(voipSuspendedCalls.tenantId, user.tenantId),
-            eq(voipSuspendedCalls.kind, 'PARK'),
-            eq(voipSuspendedCalls.status, 'ACTIVE'),
-            gt(voipSuspendedCalls.expiresAt, new Date()),
-          )).returning();
-          return record || null;
-        },
-        findExactClaim: async () => {
-          const [record] = await db.select().from(voipSuspendedCalls).where(and(
-            eq(voipSuspendedCalls.id, req.params.id),
-            eq(voipSuspendedCalls.tenantId, user.tenantId),
-            eq(voipSuspendedCalls.kind, 'PARK'),
-            eq(voipSuspendedCalls.status, 'RESUMING'),
-            eq(voipSuspendedCalls.reconnectingUserId, user.id),
-            eq(voipSuspendedCalls.reconnectTokenHash, tokenHash),
-            gt(voipSuspendedCalls.reconnectExpiresAt, new Date()),
-          )).limit(1);
-          return record || null;
-        },
-        hasCompetingClaim: async () => {
-          const [record] = await db.select({ id: voipSuspendedCalls.id }).from(voipSuspendedCalls).where(and(
-          eq(voipSuspendedCalls.id, req.params.id),
-          eq(voipSuspendedCalls.tenantId, user.tenantId),
-          eq(voipSuspendedCalls.kind, 'PARK'),
-          inArray(voipSuspendedCalls.status, ['RESUMING', 'CANCELING']),
-        )).limit(1);
-          return Boolean(record);
-        },
-        startProviderReconnect: parkedCall => reconnectSuspendedVoipCall(
-          user.tenantId, parkedCall.retainedCallSid, user.id, parkedCall.id, reconnectToken,
-        ),
-      });
-      if (reconnectResult.kind === 'CONFLICT') return res.status(409).json({ message: 'This call already has a reconnect claim' });
-      if (reconnectResult.kind === 'MISSING') return res.status(404).json({ message: "Parked call not found" });
-      if (!('record' in reconnectResult)) return res.status(409).json({ message: 'Reconnect claim unavailable' });
-      const parkedCall = reconnectResult.record;
+      const outcome = await pickupParkedCallForUser(user.tenantId, user.id, req.params.id, tokenResult.data);
+      if (outcome.kind === 'CONFLICT') return res.status(409).json({ message: 'This call already has a reconnect claim' });
+      if (outcome.kind === 'MISSING') return res.status(404).json({ message: "Parked call not found" });
+      if (outcome.kind === 'UNAVAILABLE') return res.status(409).json({ message: 'Reconnect claim unavailable' });
+      const { parkedCall, reconnectToken, reconnectExpiresAt } = outcome;
       res.json({ success: true, reconnect: {
-        id: parkedCall.id, token: reconnectToken, expiresAt: parkedCall.reconnectExpiresAt || reconnectExpiresAt,
+        id: parkedCall.id, token: reconnectToken, expiresAt: reconnectExpiresAt,
         callerName: parkedCall.callerName, callerNumber: parkedCall.callerNumber,
       } });
     } catch (error) {

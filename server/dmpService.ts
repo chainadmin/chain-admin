@@ -1089,6 +1089,35 @@ export class DebtManagerProService {
     });
   }
 
+  // Tells DMP a call was parked in Chiamo. Unlike notifyCallAnswered, this
+  // isn't addressed to one collector - parked calls are tenant-wide in
+  // Chiamo (any collector with softphone access can see and pick one up),
+  // so DMP broadcasts this to every connected collector in the org rather
+  // than resolving a single chiamoEmail.
+  async notifyCallParked(tenantId: string, parkedCallId: string, callerName: string, callerNumber: string): Promise<any | null> {
+    const config = await this.getDmpConfig(tenantId);
+    if (!config) return null;
+
+    return await this.makeRequest<any>(config, 'POST', '/api/v2/softphone/call-event', {
+      event: 'parked',
+      parkedCallId,
+      callerName,
+      callerNumber,
+    });
+  }
+
+  // Tells DMP a previously-parked call is no longer available (picked up,
+  // expired, or canceled) so it can drop it from the collector's view.
+  async notifyCallUnparked(tenantId: string, parkedCallId: string): Promise<any | null> {
+    const config = await this.getDmpConfig(tenantId);
+    if (!config) return null;
+
+    return await this.makeRequest<any>(config, 'POST', '/api/v2/softphone/call-event', {
+      event: 'unparked',
+      parkedCallId,
+    });
+  }
+
   async initiateCall(tenantId: string, filenumber: string, phoneNumber: string): Promise<any | null> {
     const config = await this.getDmpConfig(tenantId);
     if (!config) return null;

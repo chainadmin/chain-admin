@@ -2909,10 +2909,10 @@ export default function Settings() {
                       />
                     </div>
 
-                    {(localSettings as any)?.campaignIntegrationEnabled && (
+                    {((localSettings as any)?.dmpEnabled || (localSettings as any)?.campaignIntegrationEnabled) && (
                       <div className="space-y-4 rounded-xl border border-white/10 bg-white/5 p-4">
                         <div className="space-y-2">
-                          <Label className="text-white">Chain API Key — provide this to Debt Manager Pro so it can send campaigns to Chain</Label>
+                          <Label className="text-white">Chain API Key — provide this to Debt Manager Pro so it can call back into Chain (campaign sends, call-parking pickup)</Label>
                           <div className="flex items-center gap-2">
                             <Input
                               readOnly
@@ -2957,6 +2957,7 @@ export default function Settings() {
                           </Button>
                         </div>
 
+                        {(localSettings as any)?.campaignIntegrationEnabled && (
                         <div className="space-y-2">
                           <h4 className="text-base font-medium text-white">Campaign History</h4>
                           {campaignLogsLoading ? (
@@ -3020,6 +3021,7 @@ export default function Settings() {
                             </div>
                           )}
                         </div>
+                        )}
                       </div>
                     )}
                   </div>
