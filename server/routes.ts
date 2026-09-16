@@ -26949,6 +26949,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // DMP-triggered click-to-dial: unlike pickup (a server-side Twilio REST
+  // redirect of a call already in progress), placing a brand new outbound
+  // call requires the Twilio Voice SDK's device.connect(), which only runs
+  // inside the target user's own browser tab. So this doesn't place the
+  // call itself - it pushes a "please dial this" message over the
+  // /ws/softphone connection (see realtimeSoftphone.ts) and the softphone
+  // widget dials it the same way a manually-typed number would be.
+  app.post('/api/v2/click_to_dial', authenticateDmpCallback, async (req, res) => {
+    try {
+      const tenantId = (req as any).dmpTenantId as string;
+      const { chiamoEmail, phoneNumber, fileNumber } = req.body || {};
+      if (typeof chiamoEmail !== 'string' || !chiamoEmail.trim()) {
+        return res.status(400).json({ success: false, error: 'chiamoEmail is required' });
+      }
+      if (typeof phoneNumber !== 'string' || !phoneNumber.trim()) {
+        return res.status(400).json({ success: false, error: 'phoneNumber is required' });
+      }
+
+      const credentials = await storage.getAgencyCredentialsByEmail(chiamoEmail);
+      if (!credentials || credentials.tenantId !== tenantId) {
+        return res.status(404).json({ success: false, error: 'No Chiamo user found for that email' });
+      }
+      if (!canUseSoftphone(credentials as any)) {
+        return res.status(403).json({ success: false, error: 'That Chiamo user does not have VoIP access enabled' });
+      }
+
+      const { pushToUser } = await import('./realtimeSoftphone');
+      const delivered = pushToUser(credentials.id, {
+        type: 'click-to-dial',
+        phoneNumber: phoneNumber.trim(),
+        fileNumber: typeof fileNumber === 'string' ? fileNumber : undefined,
+      });
+      if (!delivered) {
+        return res.status(409).json({ success: false, error: 'That Chiamo user does not have the softphone open right now' });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error handling DMP click-to-dial request:', error);
+      res.status(500).json({ success: false, error: 'Failed to trigger call' });
+    }
+  });
+
   const suspendedCallCleanupTimer = setInterval(() => {
     cleanupExpiredSuspendedCalls().catch(error => console.error('[Voice] Suspended call cleanup failed:', error));
   }, 60_000);
@@ -27591,6 +27633,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error generating voice token:", error);
       res.status(500).json({ message: "Failed to generate voice token" });
+    }
+  });
+
+  // Mints a short-lived, one-time token for the softphone widget's browser
+  // to open the /ws/softphone WebSocket connection with, so a DMP-triggered
+  // click-to-dial can reach this user's live tab (see server/realtimeSoftphone.ts).
+  app.get('/api/voip/realtime-token', authenticateUser, async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      if (!canUseSoftphone(user as any)) {
+        return res.status(403).json({ message: "VoIP access not enabled for this user" });
+      }
+
+      const { mintRealtimeToken } = await import('./realtimeSoftphone');
+      const token = mintRealtimeToken(user.id, user.tenantId);
+      res.json({ token });
+    } catch (error) {
+      console.error("Error minting realtime token:", error);
+      res.status(500).json({ message: "Failed to mint realtime token" });
     }
   });
 
@@ -29166,5 +29230,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerWalletRoutes(app);
 
   const httpServer = createServer(app);
+
+  const { initRealtimeSoftphone } = await import('./realtimeSoftphone');
+  initRealtimeSoftphone(httpServer);
+
   return httpServer;
 }

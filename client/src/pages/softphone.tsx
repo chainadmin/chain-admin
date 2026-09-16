@@ -716,9 +716,9 @@ export default function SoftphonePage() {
     }
   };
 
-  const handleCall = async () => {
+  const dialNumber = async (toNumber: string) => {
     if (!canStartSoftphoneOutboundCall({
-      hasNumber: !!dialpadNumber,
+      hasNumber: !!toNumber,
       dialLocked: dialLockRef.current,
       requestPending: initiateCallMutation.isPending,
       hasActiveCall: !!lifecycleRef.current.getActiveCall(),
@@ -728,10 +728,10 @@ export default function SoftphonePage() {
     setIsDialPreparing(true);
     const attempt = outboundRef.current.begin();
     try {
-      setActiveCallerName(await lookupCallerName(dialpadNumber));
+      setActiveCallerName(await lookupCallerName(toNumber));
       if (!outboundRef.current.isCurrent(attempt)) return;
       setIsOnHold(false);
-      initiateCallMutation.mutate({ toNumber: dialpadNumber, attempt });
+      initiateCallMutation.mutate({ toNumber, attempt });
     } catch {
       if (outboundRef.current.isCurrent(attempt)) {
         outboundRef.current.complete(attempt);
@@ -740,6 +740,71 @@ export default function SoftphonePage() {
       }
     }
   };
+
+  const handleCall = () => dialNumber(dialpadNumber);
+
+  // DMP-triggered click-to-dial arrives over /ws/softphone rather than a
+  // plain HTTP push, because placing a brand new outbound call needs
+  // device.connect() to run inside this tab - see server/realtimeSoftphone.ts.
+  useEffect(() => {
+    if (!user?.id) return;
+
+    let socket: WebSocket | null = null;
+    let reconnectTimer: number | undefined;
+    let cancelled = false;
+
+    const connect = async () => {
+      if (cancelled) return;
+      try {
+        const response = await fetch(softphoneApiUrl("/api/voip/realtime-token"), {
+          headers: getAuthHeaders(),
+          credentials: "include",
+        });
+        if (!response.ok) throw new Error("Failed to mint realtime token");
+        const { token } = await response.json();
+        if (cancelled || !token) return;
+
+        const apiBase = softphoneApiUrl("");
+        const wsBase = apiBase
+          ? apiBase.replace(/^http/, "ws")
+          : `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}`;
+        socket = new WebSocket(`${wsBase}/ws/softphone?token=${encodeURIComponent(token)}`);
+
+        socket.onmessage = (event) => {
+          try {
+            const message = JSON.parse(event.data) as { type: string; phoneNumber?: string };
+            if (message.type === "click-to-dial" && message.phoneNumber) {
+              setDialpadNumber(message.phoneNumber);
+              void dialNumber(message.phoneNumber);
+            }
+          } catch {
+            // Ignore malformed messages rather than crash the connection.
+          }
+        };
+
+        socket.onclose = () => {
+          if (cancelled) return;
+          reconnectTimer = window.setTimeout(connect, 5000);
+        };
+
+        socket.onerror = () => {
+          socket?.close();
+        };
+      } catch {
+        if (!cancelled) {
+          reconnectTimer = window.setTimeout(connect, 5000);
+        }
+      }
+    };
+
+    connect();
+
+    return () => {
+      cancelled = true;
+      if (reconnectTimer) window.clearTimeout(reconnectTimer);
+      socket?.close();
+    };
+  }, [user?.id]);
 
   const handleToggleHold = async () => {
     const oldAgentCall = activeCallRef.current;
