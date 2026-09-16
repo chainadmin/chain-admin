@@ -345,7 +345,7 @@ export default function ConsumerDashboardSimple() {
     retry: 1,
   });
 
-  // Fetch settings to get minimum monthly payment and merchant provider info
+  // Fetch settings to get minimum payment and merchant provider info
   const { data: settings } = useQuery({
     queryKey: ['/api/consumer/tenant-settings'],
     queryFn: async () => {
@@ -654,8 +654,6 @@ export default function ConsumerDashboardSimple() {
   };
 
   // Get arrangements applicable to the selected account
-  const minimumMonthlyPaymentCents = settings?.minimumMonthlyPayment ?? 5000; // Default $50
-  
   const applicableArrangements = useMemo(() => {
     if (!selectedAccount || !arrangements) return [];
     
@@ -677,18 +675,16 @@ export default function ConsumerDashboardSimple() {
         return hasActiveSchedule;
       }
       
-      // Calculate what the payment would be for this arrangement
-      const calculatedPaymentAmount = calculateArrangementPayment(arr, selectedAccount.balanceCents || 0);
-      
-      // Filter out arrangements where the calculated payment is less than the minimum.
-      // Exceptions: pay_in_full and settlement plans should always remain available.
-      if (arr.planType !== 'pay_in_full' && arr.planType !== 'settlement' && calculatedPaymentAmount < minimumMonthlyPaymentCents) {
-        return false;
-      }
-      
+      // minBalance/maxBalance above is the company's own tiering mechanism -
+      // an arrangement template configured for a smaller balance range is
+      // legitimately allowed to have a smaller payment amount than the
+      // general Minimum Payment setting. Re-filtering it against that
+      // general minimum here would hide a tier the company deliberately
+      // set up for exactly this balance range, so this template is offered
+      // once its balance range matches, with no further amount check.
       return true;
     }) || [];
-  }, [selectedAccount, arrangements, settings?.forceArrangement, paymentSchedules, minimumMonthlyPaymentCents]);
+  }, [selectedAccount, arrangements, settings?.forceArrangement, paymentSchedules]);
   
   // Get existing SMAX arrangements for this consumer
   const existingSMAXArrangements = arrangements?.existingArrangements || [];
@@ -785,13 +781,25 @@ export default function ConsumerDashboardSimple() {
         return;
       }
     } else if (paymentMethod === 'custom' && customPaymentAmount) {
-      // Custom payment amount validation (for existing SMAX arrangements or other custom payments)
+      // Custom payment amount validation (for existing SMAX/DMP arrangements or other custom payments)
       const amount = parseFloat(customPaymentAmount);
       const maxAmount = (selectedAccount.balanceCents || 0) / 100;
-      // The minimum can never exceed what's actually owed - a consumer
-      // paying off a small remaining balance must not be blocked by a
-      // configured minimum that's now higher than the balance itself.
-      const minAmount = Math.min((settings?.minimumMonthlyPayment || 100) / 100, maxAmount);
+      // The minimum payment setting is a floor for amounts with no company-
+      // approved tier behind them. It must never block an amount the company
+      // already approved via a lower tier - an existing SMAX/DMP arrangement
+      // for this account is exactly that, so its own (lower) amount becomes
+      // the floor instead when one exists. It also can never exceed what's
+      // actually owed - a consumer paying off a small remaining balance must
+      // not be blocked by a configured minimum that's now higher than the
+      // balance itself.
+      const existingArrangementAmount = selectedAccountSMAXArrangement?.monthlyPayment
+        ? Number(selectedAccountSMAXArrangement.monthlyPayment) / 100
+        : null;
+      const minAmount = Math.min(
+        (settings?.minimumMonthlyPayment || 100) / 100,
+        ...(existingArrangementAmount !== null ? [existingArrangementAmount] : []),
+        maxAmount,
+      );
       
       if (isNaN(amount) || amount <= 0) {
         toast({
@@ -892,7 +900,6 @@ export default function ConsumerDashboardSimple() {
         accountId: selectedAccount.id,
         arrangementId: selectedArrangement?.id || null,
         manualArrangementId: selectedManualArrangement?.id || null,
-        settlementPaymentCount: selectedArrangement?.planType === 'settlement' ? (selectedArrangement?.settlementPaymentCount || 1) : undefined,
         cardName: paymentForm.cardName,
         zipCode: paymentForm.zipCode,
         saveCard: saveCard || isSimplifiedFlow,
@@ -902,12 +909,23 @@ export default function ConsumerDashboardSimple() {
         // 1. Explicit custom amounts entered by user (customPaymentAmount text field)
         // 2. SMAX one-time payments (no arrangement, just paying existing plan)
         // 3. Custom amount selected via range plan input (paymentMethod === 'custom', amount stored in calculatedPayment)
-        // For arrangement-driven term payments, leave null so backend uses arrangement logic
+        // 4. A frequency (weekly/biweekly/monthly) chosen for a fixed_monthly/range
+        //    arrangement (paymentMethod === 'term') - calculatedPayment already holds
+        //    the monthly amount divided for that frequency via convertToFrequency.
+        //    Leaving this null here used to mean "backend uses arrangement logic",
+        //    but that logic only knows the arrangement's full monthly figure, not
+        //    the frequency chosen for this payment - it charged the whole month's
+        //    amount regardless of frequency. Sending the already-correct divided
+        //    amount fixes that.
         customPaymentAmountCents: (customPaymentAmount && !isNaN(parseFloat(customPaymentAmount)) && parseFloat(customPaymentAmount) > 0)
           ? Math.round(parseFloat(customPaymentAmount) * 100)
-          : ((paymentMethod === 'smax' || paymentMethod === 'custom') && calculatedPayment !== null && calculatedPayment > 0)
+          : ((paymentMethod === 'smax' || paymentMethod === 'custom' || paymentMethod === 'term') && calculatedPayment !== null && calculatedPayment > 0)
             ? calculatedPayment
             : null,
+        // The recurring schedule this payment sets up must bill at the same
+        // cadence the consumer just paid at, not silently fall back to the
+        // arrangement's own configured default frequency.
+        paymentFrequency: paymentMethod === 'term' ? paymentFrequency : undefined,
         // Simplified flow specific data
         simplifiedFlow: isSimplifiedFlow ? {
           paymentMethod,
@@ -2630,7 +2648,11 @@ export default function ConsumerDashboardSimple() {
                           setPaymentMethod('custom');
                           setSelectedArrangement(null);
                         }}
-                        min={Math.min(settings?.minimumMonthlyPayment ? (settings.minimumMonthlyPayment / 100) : 1, (selectedAccount?.balanceCents || 0) / 100)}
+                        min={Math.min(
+                          settings?.minimumMonthlyPayment ? (settings.minimumMonthlyPayment / 100) : 1,
+                          ...(selectedAccountSMAXArrangement?.monthlyPayment ? [Number(selectedAccountSMAXArrangement.monthlyPayment) / 100] : []),
+                          (selectedAccount?.balanceCents || 0) / 100,
+                        )}
                         max={(selectedAccount?.balanceCents || 0) / 100}
                         step="0.01"
                         placeholder="0.00"
@@ -2641,7 +2663,11 @@ export default function ConsumerDashboardSimple() {
                       />
                     </div>
                     <p className="text-xs text-purple-100/50 mt-2">
-                      Min: ${Math.min((settings?.minimumMonthlyPayment || 100) / 100, (selectedAccount?.balanceCents || 0) / 100).toFixed(2)} |
+                      Min: ${Math.min(
+                        (settings?.minimumMonthlyPayment || 100) / 100,
+                        ...(selectedAccountSMAXArrangement?.monthlyPayment ? [Number(selectedAccountSMAXArrangement.monthlyPayment) / 100] : []),
+                        (selectedAccount?.balanceCents || 0) / 100,
+                      ).toFixed(2)} |
                       Max: ${((selectedAccount?.balanceCents || 0) / 100).toFixed(2)} (Full Balance)
                     </p>
                     {paymentMethod === 'custom' && customPaymentAmount && !isNaN(parseFloat(customPaymentAmount)) && (

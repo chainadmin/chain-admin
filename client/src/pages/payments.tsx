@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -24,6 +25,7 @@ import { formatUsPaymentDate, getUsPaymentDateKey, getUsRelativeDateLabel } from
 export default function Payments() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();
   const [filterStatus, setFilterStatus] = useState("all");
   const [showPayNowModal, setShowPayNowModal] = useState(false);
   const [paymentToDelete, setPaymentToDelete] = useState<string | null>(null);
@@ -46,6 +48,7 @@ export default function Payments() {
   const [payNowForm, setPayNowForm] = useState({
     consumerEmail: "",
     amount: "",
+    accountId: "",
     cardNumber: "",
     expiryDate: "",
     cvv: "",
@@ -103,6 +106,29 @@ export default function Payments() {
     }));
   };
 
+  // Arriving from an account's DMP pending-payment list ("Pay Now" there
+  // hands off here rather than duplicating this card-entry form) - prefill
+  // and open the same Pay Now modal admins already use, then drop the
+  // params so a refresh doesn't reopen it.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const consumerEmail = params.get('payNowConsumerEmail');
+    const amount = params.get('payNowAmount');
+    const accountId = params.get('payNowAccountId');
+    if (consumerEmail || amount || accountId) {
+      setPayNowForm(prev => ({
+        ...prev,
+        consumerEmail: consumerEmail || prev.consumerEmail,
+        amount: amount || prev.amount,
+        accountId: accountId || prev.accountId,
+      }));
+      setShowPayNowModal(true);
+      setLocation('/payments', { replace: true });
+    }
+    // Only ever meant to run once, against the URL this page was loaded with.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Process real-time payment mutation
   const processPaymentMutation = useMutation({
     mutationFn: async (paymentData: any) => {
@@ -120,6 +146,7 @@ export default function Payments() {
       setPayNowForm({
         consumerEmail: "",
         amount: "",
+        accountId: "",
         cardNumber: "",
         expiryDate: "",
         cvv: "",

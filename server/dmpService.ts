@@ -1073,13 +1073,31 @@ export class DebtManagerProService {
     return await this.makeRequest<any[]>(config, 'GET', '/api/v2/softphone/queue');
   }
 
+  // Tells DMP a call was answered by a specific collector, identified by the
+  // email they log into Chiamo with (the link set on their DMP collector
+  // profile - see collectors.chiamoEmail). DMP resolves the phone number to
+  // an account itself and pushes a screen-pop to that collector's live
+  // connection; Chiamo doesn't need to know whether that succeeded.
+  async notifyCallAnswered(tenantId: string, chiamoEmail: string, phoneNumber: string): Promise<any | null> {
+    const config = await this.getDmpConfig(tenantId);
+    if (!config) return null;
+
+    return await this.makeRequest<any>(config, 'POST', '/api/v2/softphone/call-event', {
+      event: 'answered',
+      chiamoEmail,
+      phoneNumber,
+    });
+  }
+
   async initiateCall(tenantId: string, filenumber: string, phoneNumber: string): Promise<any | null> {
     const config = await this.getDmpConfig(tenantId);
     if (!config) return null;
 
+    // DMP's /api/v2/softphone/initiate requires camelCase fileNumber/phoneNumber;
+    // see the identical translation note on insertNote/sendEmail above.
     return await this.makeRequest<any>(config, 'POST', '/api/v2/softphone/initiate', {
-      filenumber,
-      phone_number: phoneNumber,
+      fileNumber: filenumber,
+      phoneNumber,
     });
   }
 
@@ -1090,16 +1108,31 @@ export class DebtManagerProService {
       return null;
     }
 
-    return await this.makeRequest<any>(config, 'POST', '/api/v2/softphone/result', callData);
+    // DMP's /api/v2/softphone/result requires camelCase fileNumber/phoneNumber
+    // and calls the outcome field "outcome", not "result". DMP's handler
+    // doesn't currently read direction (it hardcodes "outbound" on its own
+    // side), but forward it anyway so the payload stays complete if that
+    // changes.
+    return await this.makeRequest<any>(config, 'POST', '/api/v2/softphone/result', {
+      fileNumber: callData.filenumber,
+      phoneNumber: callData.phone_number,
+      outcome: callData.result,
+      duration: callData.duration,
+      disposition: callData.disposition,
+      notes: callData.notes,
+      direction: callData.direction,
+    });
   }
 
   async setDisposition(tenantId: string, filenumber: string, dispositionCode: string, notes?: string): Promise<any | null> {
     const config = await this.getDmpConfig(tenantId);
     if (!config) return null;
 
+    // DMP's /api/v2/softphone/disposition requires camelCase fileNumber and
+    // calls the disposition field "disposition", not "disposition_code".
     return await this.makeRequest<any>(config, 'POST', '/api/v2/softphone/disposition', {
-      filenumber,
-      disposition_code: dispositionCode,
+      fileNumber: filenumber,
+      disposition: dispositionCode,
       notes,
     });
   }
@@ -1122,8 +1155,9 @@ export class DebtManagerProService {
     const config = await this.getDmpConfig(tenantId);
     if (!config) return null;
 
+    // DMP's /api/v2/softphone/inbound requires camelCase phoneNumber.
     return await this.makeRequest<any>(config, 'POST', '/api/v2/softphone/inbound', {
-      phone_number: phoneNumber,
+      phoneNumber,
     });
   }
 
@@ -1131,11 +1165,14 @@ export class DebtManagerProService {
     const config = await this.getDmpConfig(tenantId);
     if (!config) return null;
 
+    // DMP's /api/v2/softphone/markphone requires camelCase fileNumber/
+    // phoneNumber, a boolean isBad rather than a status string, and calls
+    // the free-text field "notes" rather than "reason".
     return await this.makeRequest<any>(config, 'PUT', '/api/v2/softphone/markphone', {
-      filenumber,
-      phone_number: phoneNumber,
-      status: 'bad',
-      reason,
+      fileNumber: filenumber,
+      phoneNumber,
+      isBad: true,
+      notes: reason,
     });
   }
 

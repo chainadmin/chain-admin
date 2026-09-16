@@ -10138,11 +10138,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const description = sanitizeOptionalText(body.description);
     const isActive = body.isActive === undefined ? true : Boolean(body.isActive);
 
-    // Parse settlementPaymentCounts as array
-    const settlementPaymentCounts = Array.isArray(body.settlementPaymentCounts) 
-      ? body.settlementPaymentCounts.map((c: number | string) => parseOptionalInteger(c)).filter((c: number | null): c is number => c !== null)
-      : [];
+    const settlementPaymentCount = parseOptionalInteger(body.settlementPaymentCount);
     const settlementPaymentFrequency = typeof body.settlementPaymentFrequency === "string" ? body.settlementPaymentFrequency.trim() : null;
+    const settlementStartDate = parseDateInput(body.settlementStartDate);
     const settlementOfferExpiresDate = parseDateInput(body.settlementOfferExpiresDate);
     const paymentFrequency = typeof body.paymentFrequency === "string" && ['weekly', 'biweekly', 'monthly'].includes(body.paymentFrequency) ? body.paymentFrequency : 'monthly';
 
@@ -10161,8 +10159,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       payoffText: planType === "settlement" ? payoffText : null,
       payoffPercentageBasisPoints: planType === "settlement" ? payoffPercentage : null,
       payoffDueDate: null,
-      settlementPaymentCounts: planType === "settlement" ? settlementPaymentCounts : null,
+      settlementPaymentCount: planType === "settlement" ? settlementPaymentCount : null,
       settlementPaymentFrequency: planType === "settlement" ? settlementPaymentFrequency : null,
+      settlementStartDate: planType === "settlement" ? settlementStartDate : null,
       settlementOfferExpiresDate: planType === "settlement" ? settlementOfferExpiresDate : null,
       paymentFrequency: (planType === "range" || planType === "fixed_monthly") ? paymentFrequency : null,
       customTermsText: planType === "custom_terms" ? customTermsText : null,
@@ -12408,45 +12407,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return false;
         }
         
-        // Check if settlement offer has expired
-        if (option.planType === 'settlement' && option.settlementOfferExpiresDate) {
-          const expirationDate = new Date(option.settlementOfferExpiresDate);
-          expirationDate.setHours(0, 0, 0, 0);
-          if (expirationDate < today) {
-            return false; // Offer has expired
+        // Settlement offers are only available within their start/end window.
+        // No end date means it's the standing offer for this tier.
+        if (option.planType === 'settlement') {
+          if (option.settlementStartDate) {
+            const startDate = new Date(option.settlementStartDate);
+            startDate.setHours(0, 0, 0, 0);
+            if (startDate > today) {
+              return false; // Offer isn't active yet
+            }
+          }
+          if (option.settlementOfferExpiresDate) {
+            const expirationDate = new Date(option.settlementOfferExpiresDate);
+            expirationDate.setHours(0, 0, 0, 0);
+            if (expirationDate < today) {
+              return false; // Offer has expired
+            }
           }
         }
-        
+
         // If forceArrangement is enabled, filter out one_time_payment plans
         if (settings?.forceArrangement && option.planType === 'one_time_payment') {
           return false;
         }
-        
+
         return true;
       });
       
-      // Expand settlement options with multiple payment counts into separate options
-      const expandedOptions: any[] = [];
-      for (const option of applicableOptions) {
-        if (option.planType === 'settlement' && option.settlementPaymentCounts && Array.isArray(option.settlementPaymentCounts) && option.settlementPaymentCounts.length > 0) {
-          // Create a separate option for each payment count
-          for (const paymentCount of option.settlementPaymentCounts) {
-            expandedOptions.push({
-              ...option,
-              settlementPaymentCount: paymentCount, // Add individual count for calculation
-              name: `${option.name} - ${paymentCount} ${paymentCount === 1 ? 'Payment' : 'Payments'}`, // Unique name for each option
-            });
-          }
-        } else {
-          // Non-settlement or settlement without counts array
-          expandedOptions.push(option);
-        }
-      }
-      
-      // Calculate payment details for each expanded option and filter out non-viable ones
+      // Calculate payment details for each applicable option and filter out non-viable ones
       // Use tenant's global minimumMonthlyPayment as fallback when plan has no specific minimum
       const tenantGlobalMinimum = settings?.minimumMonthlyPayment || 0;
-      const calculatedOptions = expandedOptions
+      const calculatedOptions = applicableOptions
         .map(option => calculateArrangementDetails(option, balanceCents, tenantGlobalMinimum))
         .filter(option => option !== null);
       
@@ -13917,7 +13908,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const {
         accountId,
         arrangementId,
-        settlementPaymentCount: requestedSettlementPaymentCount,
         cardNumber,
         expiryMonth,
         expiryYear,
@@ -13932,8 +13922,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         simplifiedFlow, // New simplified arrangement flow data
         manualArrangementId, // Consumer paying against an admin-created manual arrangement
         opaqueDataDescriptor, // Authorize.net tokenized data
-        opaqueDataValue // Authorize.net tokenized data
+        opaqueDataValue, // Authorize.net tokenized data
+        // The frequency the consumer chose for this payment on a fixed_monthly/
+        // range arrangement (weekly/biweekly/monthly) - the schedule this
+        // payment sets up must bill at this cadence, not the arrangement's own
+        // configured default, which may not match what the consumer picked.
+        paymentFrequency: requestedPaymentFrequency,
       } = req.body;
+      const validPaymentFrequency = ['weekly', 'biweekly', 'monthly'].includes(requestedPaymentFrequency)
+        ? requestedPaymentFrequency
+        : null;
 
       let normalizedFirstPaymentDate: Date | null = null;
       if (firstPaymentDate) {
@@ -14203,20 +14201,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
-        if (arrangement.planType === 'settlement' && requestedSettlementPaymentCount) {
-          const validCounts = arrangement.settlementPaymentCounts || [1];
-          const requestedCount = Number(requestedSettlementPaymentCount);
-          if (validCounts.includes(requestedCount)) {
-            (arrangement as any).settlementPaymentCount = requestedCount;
-            console.log('📋 Settlement payment count set from request:', requestedCount);
-          } else {
-            (arrangement as any).settlementPaymentCount = validCounts[0] || 1;
-            console.log('⚠️ Requested settlement count not in valid options, using default:', validCounts[0] || 1);
-          }
-        } else if (arrangement.planType === 'settlement') {
-          const validCounts = arrangement.settlementPaymentCounts || [1];
-          (arrangement as any).settlementPaymentCount = validCounts[0] || 1;
-          console.log('📋 Settlement payment count defaulted to:', validCounts[0] || 1);
+        if (arrangement.planType === 'settlement') {
+          // Settlement is a single exact offer defined by the admin, not a
+          // consumer-selectable menu — use the arrangement's own count.
+          (arrangement as any).settlementPaymentCount = arrangement.settlementPaymentCount || 1;
         }
 
         // Calculate payment amount based on arrangement type
@@ -14555,6 +14543,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
+        // Report this payment to DMP the same way it's reported to SMAX above.
+        // DMP owns the actual schedule and its own posted/pending status for
+        // this account - Chain isn't telling DMP to do anything here, just
+        // handing it a completed payment record so DMP's own reconciliation
+        // (and the regular DMP sync pulling balance/status back into Chain)
+        // can pick it up on its own.
+        if (settings.dmpEnabled && !settings.smaxEnabled && account.filenumber && consumer) {
+          try {
+            const { dmpService } = await import('./dmpService');
+            const payorName = `${consumer.firstName || ''} ${consumer.lastName || ''}`.trim() || 'Consumer';
+
+            await dmpService.insertPayment(tenantId, {
+              filenumber: account.filenumber,
+              paymentdate: new Date().toISOString().split('T')[0],
+              paymentamount: amountCents / 100,
+              paymentmethod: 'CREDIT CARD',
+              paymentstatus: 'PROCESSED',
+              typeofpayment: 'Online',
+              cardtype: cardBrand || '',
+              cardnumber: cardLast4 ? `****${cardLast4}` : '',
+              cardexpirationmonth: expiryMonth || '',
+              cardexpirationyear: expiryYear || '',
+              transactionid: paymentResult.transactionId || undefined,
+              invoice: paymentResult.transactionId || '',
+            });
+
+            console.log('✅ Authorize.net payment reported to DMP');
+          } catch (dmpError) {
+            console.error('Failed to report Authorize.net payment to DMP:', dmpError);
+          }
+        }
+
         // Create customer payment profile and save payment method if needed
         let savedPaymentMethod = null;
         const needsPaymentProfile = saveCard || setupRecurring || (normalizedFirstPaymentDate !== null && normalizedFirstPaymentDate.getTime() > today.getTime());
@@ -14605,7 +14625,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let createdSchedule: any = null;
         if (arrangement && savedPaymentMethod) {
           const paymentStartDate = normalizedFirstPaymentDate ? new Date(normalizedFirstPaymentDate) : new Date();
-          const arrangementFrequency = arrangement?.paymentFrequency || arrangement?.settlementPaymentFrequency || 'monthly';
+          const arrangementFrequency = validPaymentFrequency || arrangement?.paymentFrequency || arrangement?.settlementPaymentFrequency || 'monthly';
           const nextMonth = calculateNextPaymentDate(paymentStartDate, arrangementFrequency);
           const today = new Date();
           today.setHours(0, 0, 0, 0);
@@ -14875,6 +14895,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
         }
 
+        if (settings.dmpEnabled && !settings.smaxEnabled && account.filenumber && consumer) {
+          try {
+            const { dmpService } = await import('./dmpService');
+
+            await dmpService.insertPayment(tenantId, {
+              filenumber: account.filenumber,
+              paymentdate: new Date().toISOString().split('T')[0],
+              paymentamount: amountCents / 100,
+              paymentmethod: 'CREDIT CARD',
+              paymentstatus: 'PROCESSED',
+              typeofpayment: 'Online',
+              cardnumber: cardLast4 ? `****${cardLast4}` : '',
+              cardexpirationmonth: expiryMonth || '',
+              cardexpirationyear: expiryYear || '',
+              transactionid: paymentResult.transactionId || undefined,
+              invoice: paymentResult.transactionId || '',
+            });
+
+            console.log('✅ Authorize.net payment reported to DMP');
+          } catch (dmpError) {
+            console.error('Failed to report Authorize.net payment to DMP:', dmpError);
+          }
+        }
+
         return res.json({
           success: true,
           message: 'Payment processed successfully',
@@ -15131,6 +15175,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
               console.error('Failed to sync NMI payment to SMAX:', smaxError);
             }
           }
+
+          if (settings.dmpEnabled && !settings.smaxEnabled && account.filenumber && consumerForSmax) {
+            try {
+              const { dmpService } = await import('./dmpService');
+
+              await dmpService.insertPayment(tenantId, {
+                filenumber: account.filenumber,
+                paymentdate: new Date().toISOString().split('T')[0],
+                paymentamount: amountCents / 100,
+                paymentmethod: 'CREDIT CARD',
+                paymentstatus: 'PROCESSED',
+                typeofpayment: 'Online',
+                cardtype: cardBrand || '',
+                cardnumber: cardLast4 ? `****${cardLast4}` : '',
+                cardexpirationmonth: expiryMonth || '',
+                cardexpirationyear: expiryYear || '',
+                transactionid: transactionId || undefined,
+                invoice: transactionId || '',
+              });
+
+              console.log('✅ NMI payment reported to DMP');
+            } catch (dmpError) {
+              console.error('Failed to report NMI payment to DMP:', dmpError);
+            }
+          }
         }
 
         // Save payment method to SMAX (only if not using NMI vault)
@@ -15180,7 +15249,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let createdSchedule: any = null;
         if (arrangement && savedPaymentMethod) {
           const paymentStartDate = normalizedFirstPaymentDate ? new Date(normalizedFirstPaymentDate) : new Date();
-          const arrangementFrequency = arrangement?.paymentFrequency || arrangement?.settlementPaymentFrequency || 'monthly';
+          const arrangementFrequency = validPaymentFrequency || arrangement?.paymentFrequency || arrangement?.settlementPaymentFrequency || 'monthly';
           const nextMonth = calculateNextPaymentDate(paymentStartDate, arrangementFrequency);
 
           let remainingPayments = null;
@@ -15747,6 +15816,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } else if (!account.filenumber) {
           console.log('ℹ️ No filenumber available - skipping SMAX payment sync');
         }
+
+        if (settings.dmpEnabled && !settings.smaxEnabled && account.filenumber) {
+          try {
+            const { dmpService } = await import('./dmpService');
+
+            await dmpService.insertPayment(tenantId, {
+              filenumber: account.filenumber,
+              paymentdate: normalizedPaymentDate
+                ? normalizedPaymentDate.toISOString().split('T')[0]
+                : new Date().toISOString().split('T')[0],
+              paymentamount: amountCents / 100,
+              paymentmethod: 'CREDIT CARD',
+              paymentstatus: 'PROCESSED',
+              typeofpayment: 'Online',
+              cardtype: cardBrand || 'Unknown',
+              cardnumber: cardLast4 ? `****${cardLast4}` : '',
+              cardexpirationmonth: expiryMonth || '',
+              cardexpirationyear: expiryYear || '',
+              transactionid: transactionId || undefined,
+              invoice: transactionId || '',
+            });
+
+            console.log('✅ USAePay payment reported to DMP');
+          } catch (dmpError) {
+            console.error('Failed to report USAePay payment to DMP:', dmpError);
+          }
+        }
       } else {
         success = true;
         console.log('⏭️ Skipping immediate charge - will create payment schedule instead');
@@ -15793,7 +15889,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const paymentStartDate = normalizedFirstPaymentDate ? new Date(normalizedFirstPaymentDate) : new Date();
         console.log('📆 Payment start date:', paymentStartDate.toISOString());
         
-        const mainArrangementFrequency = arrangement?.paymentFrequency || arrangement?.settlementPaymentFrequency || simplifiedArrangementData?.paymentFrequency || 'monthly';
+        const mainArrangementFrequency = validPaymentFrequency || arrangement?.paymentFrequency || arrangement?.settlementPaymentFrequency || simplifiedArrangementData?.paymentFrequency || 'monthly';
         const nextMonth = calculateNextPaymentDate(paymentStartDate, mainArrangementFrequency);
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -17180,14 +17276,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
             const merchantProvider = detectProcessorForPayment(settings, paymentMethod);
             console.log(`🏦 Schedule ${schedule.id}: detected processor='${merchantProvider}' (tenant setting='${tenantDefaultProvider}', token='${paymentMethod.paymentToken?.substring(0, 12)}...')`);
 
+            // A scheduled charge must never exceed what's actually still owed -
+            // not just on the installment the schedule's own counter thinks is
+            // last. The balance can already be smaller than schedule.amountCents
+            // on an earlier installment too (an extra manual payment elsewhere,
+            // a credit, a DMP-side adjustment the sync hasn't caught up
+            // schedule.remainingPayments for yet), so this checks the real
+            // current balance on every scheduled charge, not only when
+            // remainingPayments says 1.
             let paymentAmountCents = schedule.amountCents;
-            const isLastPayment = schedule.remainingPayments !== null && schedule.remainingPayments === 1;
-            if (isLastPayment) {
-              const acct = await storage.getAccount(schedule.accountId);
-              if (acct && acct.balanceCents > 0 && acct.balanceCents < schedule.amountCents) {
-                console.log(`💳 Final payment - using remaining balance: $${(acct.balanceCents / 100).toFixed(2)}`);
-                paymentAmountCents = acct.balanceCents;
-              }
+            const acct = await storage.getAccount(schedule.accountId);
+            if (acct && acct.balanceCents > 0 && acct.balanceCents < schedule.amountCents) {
+              console.log(`💳 Scheduled amount exceeds remaining balance - using remaining balance: $${(acct.balanceCents / 100).toFixed(2)}`);
+              paymentAmountCents = acct.balanceCents;
             }
 
             let success = false;
@@ -17523,7 +17624,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 );
                 console.log(
                   `[DMP Sync] Tenant ${tenant.name}: payments synced for ${paymentResults.accountsSynced} accounts `
-                  + `(${paymentResults.historyPayments} history, ${paymentResults.pendingPayments} pending)`,
+                  + `(${paymentResults.historyPayments} history, ${paymentResults.pendingPayments} pending, `
+                  + `${paymentResults.arrangementsSynced} arrangements)`,
                 );
               }
               // A successful run (even one that fetched 0 accounts) clears any
@@ -19802,6 +19904,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       } catch (smaxError) {
         console.error('SMAX sync failed:', smaxError);
+      }
+
+      // Report to DMP the same way, mirroring the SMAX sync above. Chain is
+      // just the payment gateway here - DMP owns the arrangement/schedule
+      // and its own reconciliation once it has this record.
+      try {
+        if (settings?.dmpEnabled && !settings?.smaxEnabled) {
+          const { dmpService } = await import('./dmpService');
+          const accounts = await storage.getAccountsByConsumer(consumer.id);
+          const account = (targetAccountId && accounts.find(a => a.id === targetAccountId)) || accounts[0];
+          if (account?.filenumber) {
+            await dmpService.insertPayment(tenantId, {
+              filenumber: account.filenumber,
+              paymentdate: new Date().toISOString().split('T')[0],
+              paymentamount: amountCents / 100,
+              paymentmethod: 'CREDIT CARD',
+              paymentstatus: 'PROCESSED',
+              typeofpayment: 'Manual',
+              cardnumber: cardLast4 ? `****${cardLast4}` : '',
+              cardexpirationmonth: expiryMonth || '',
+              cardexpirationyear: expiryYear || '',
+              transactionid: transactionId || undefined,
+              invoice: transactionId || '',
+            });
+            console.log(`✅ Admin payment reported to DMP for filenumber: ${account.filenumber}`);
+          } else {
+            console.warn(`⚠️ No filenumber for account ${account?.accountNumber || account?.id} - skipping DMP report`);
+          }
+        }
+      } catch (dmpError) {
+        console.error('DMP payment report failed:', dmpError);
       }
 
       res.json({
@@ -27330,6 +27463,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Fired by the softphone widget when an inbound call is answered, so DMP
+  // can screen-pop the matching account for whoever answered. Non-blocking
+  // by design (mirrors the existing DMP sync calls throughout this file) -
+  // a failure here should never affect the call itself.
+  app.post('/api/voip/dmp-notify-answered', authenticateUser, async (req, res) => {
+    try {
+      const user = await getCurrentUser(req);
+      if (!user) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+
+      const { phoneNumber } = req.body;
+      if (!phoneNumber || typeof phoneNumber !== 'string') {
+        return res.status(400).json({ message: "phoneNumber is required" });
+      }
+
+      const tenantSettings = await storage.getTenantSettings(user.tenantId);
+      if (!(tenantSettings as any)?.dmpEnabled || !user.email) {
+        return res.json({ success: true, notified: false });
+      }
+
+      const { dmpService } = await import('./dmpService');
+      const result = await dmpService.notifyCallAnswered(user.tenantId, user.email, phoneNumber);
+      res.json({ success: true, notified: result !== null });
+    } catch (error) {
+      console.error("Error notifying DMP of answered call:", error);
+      // Never surface this as a failure to the softphone UI - the call
+      // itself already connected successfully.
+      res.json({ success: true, notified: false });
+    }
+  });
+
   // Get tenant's VoIP phone numbers
   app.get('/api/voip/phone-numbers', authenticateUser, async (req, res) => {
     try {
@@ -28369,7 +28534,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       for (const pkg of packages) for (const geo of pkg.geographies || []) areaStates.set(geo.areaCode, geo.state);
       return areaCode => areaStates.get(areaCode);
     },
-    createCallLog: values => voipStorage.createVoipCallLog(values),
+    createCallLog: async values => {
+      const callLog = await voipStorage.createVoipCallLog(values);
+
+      // Tell DMP this call is starting so it shows up in the account's
+      // communication history, same as the note/email/SMS sync. Only
+      // possible for outbound calls dialed from a known account (inbound
+      // calls don't have a resolved account yet at this point - DMP
+      // resolves those itself via the answered-call webhook).
+      if (values.accountId) {
+        try {
+          const tenantSettings = await storage.getTenantSettings(values.tenantId);
+          if ((tenantSettings as any)?.dmpEnabled) {
+            const account = await storage.getAccount(values.accountId);
+            if (account?.filenumber) {
+              const { dmpService } = await import('./dmpService');
+              await dmpService.initiateCall(values.tenantId, account.filenumber, values.toNumber);
+            }
+          }
+        } catch (dmpError) {
+          console.error('⚠️ Failed to notify DMP of call initiation (non-blocking):', dmpError);
+        }
+      }
+
+      return callLog;
+    },
     signSelectionToken: async payload => {
       const jwt = (await import('jsonwebtoken')).default;
       return jwt.sign(payload, process.env.JWT_SECRET!, { expiresIn: '5m' });
@@ -28739,6 +28928,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         await voipStorage.updateVoipCallLog(callLog.id, tenantId, updates);
+
+        // Log the finished call to DMP so it appears in the account's
+        // communication history. Only possible when this call is tied to
+        // a known account with a filenumber - true for outbound calls
+        // (known up front) and for inbound calls the collector has since
+        // linked to an account via the call log's consumerId/accountId.
+        if (['completed', 'busy', 'no-answer', 'failed', 'canceled'].includes(CallStatus) && callLog.accountId) {
+          try {
+            const tenantSettings = await storage.getTenantSettings(tenantId);
+            if ((tenantSettings as any)?.dmpEnabled) {
+              const account = await storage.getAccount(callLog.accountId);
+              if (account?.filenumber) {
+                const wasAnswered = Boolean(updates.answeredAt || callLog.answeredAt);
+                const outcome = wasAnswered ? 'connected' : CallStatus.replace(/-/g, '_');
+                const { dmpService } = await import('./dmpService');
+                await dmpService.logCallResult(tenantId, {
+                  filenumber: account.filenumber,
+                  phone_number: callLog.direction === 'outbound' ? callLog.toNumber : callLog.fromNumber,
+                  direction: callLog.direction,
+                  duration: updates.duration ?? callLog.duration ?? undefined,
+                  result: outcome,
+                  notes: callLog.notes || undefined,
+                });
+              }
+            }
+          } catch (dmpError) {
+            console.error('⚠️ Failed to sync call result to DMP (non-blocking):', dmpError);
+          }
+        }
       }
 
       res.sendStatus(200);
