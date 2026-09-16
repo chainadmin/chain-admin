@@ -171,6 +171,26 @@ export default function SoftphonePage() {
   // needs to know about ones the agent answered - marked here, the only
   // point that's unambiguously inbound-only, and consumed once in onActive.
   const inboundCallsRef = useRef(new WeakSet<object>());
+  // Identifies this specific browser tab's /ws/softphone connection, set
+  // once the socket confirms it (see the WS effect below). Included in
+  // every DMP call-state push so a later call-control command from DMP can
+  // target this exact tab (pushToConnection) instead of broadcasting to
+  // every tab this user has open - see server/realtimeSoftphone.ts.
+  const connectionIdRef = useRef<string | undefined>(undefined);
+  // A call put on hold or parked gets disconnected client-side as part of
+  // that (see retainAgentCall), which would otherwise be reported to DMP as
+  // "ended" - this suppresses that for exactly the call objects currently
+  // being retained. Populated in handleToggleHold/handleParkCall right
+  // before the retain request, checked in onEnded.
+  const retainedCallsRef = useRef(new WeakSet<object>());
+  // Resuming a held/parked call arrives through the lifecycle controller's
+  // recovery path, which never calls onIncoming - so inboundCallsRef, which
+  // is only populated there, can't tell a resumed inbound call apart from
+  // an outbound one. Keyed by the retained call's id (stable across the
+  // hold -> resume transition, unlike the call object itself), populated
+  // when going on hold/park, consumed in onActive via the reconnect
+  // metadata's id.
+  const retainedCallDirectionRef = useRef(new Map<string, "inbound" | "outbound">());
 
   const setStableStatus = (message: string) => setInlineStatus((previous) => dedupeStatus(previous, message));
 
@@ -189,7 +209,7 @@ export default function SoftphonePage() {
       method: "POST",
       headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       credentials: "include",
-      body: JSON.stringify({ status, direction, phoneNumber, callerName }),
+      body: JSON.stringify({ status, direction, phoneNumber, callerName, connectionId: connectionIdRef.current }),
     }).catch((error) => console.error("Failed to notify DMP of call state (non-blocking):", error));
   };
 
@@ -206,7 +226,14 @@ export default function SoftphonePage() {
       // just re-renders the same state), so this doesn't special-case
       // recovered/resumed calls.
       {
-        const direction = inboundCallsRef.current.has(activeCall as unknown as object) ? "inbound" : "outbound";
+        // A resumed call arrives through the recovery path, which never
+        // calls onIncoming, so inboundCallsRef alone can't tell its
+        // direction - look up what it was when originally retained instead.
+        const retainedDirection = metadata ? retainedCallDirectionRef.current.get(metadata.id) : undefined;
+        const direction = retainedDirection
+          ?? (inboundCallsRef.current.has(activeCall as unknown as object) ? "inbound" : "outbound");
+        if (retainedDirection === "inbound") inboundCallsRef.current.add(activeCall as unknown as object);
+        if (metadata) retainedCallDirectionRef.current.delete(metadata.id);
         const phoneNumber = (direction === "inbound" ? activeCall.parameters?.From : activeCall.parameters?.To)
           || metadata?.callerNumber;
         notifyDmpCallState("connected", direction, phoneNumber, metadata?.callerName);
@@ -228,7 +255,10 @@ export default function SoftphonePage() {
       setCallState(transitioning ? "connecting" : "ended");
       // A hold/park handoff also disconnects the SDK call object - don't
       // report "ended" for that, only for a call that's genuinely over.
-      if (!transitioning) {
+      // isCallTransitionPending() alone doesn't cover this (retention has
+      // no lifecycle flag of its own), so retainedCallsRef tracks it
+      // directly against the call object instead.
+      if (!transitioning && !retainedCallsRef.current.has(call as unknown as object)) {
         const endedCall = call as Call;
         const direction = inboundCallsRef.current.has(endedCall as unknown as object) ? "inbound" : "outbound";
         const phoneNumber = dialpadNumber || (direction === "inbound" ? endedCall.parameters?.From : endedCall.parameters?.To);
@@ -267,15 +297,16 @@ export default function SoftphonePage() {
         notifyDmpCallState("ringing", "inbound", callerNumber, name);
       });
     },
-    onIncomingCleared: (call) => {
+    onIncomingCleared: (call, reason) => {
       const providerCall = call as Call;
-      const wasStillWaiting = waitingCalls.some((waiting) => waiting.call === call);
       setWaitingCalls((current) => current.filter((waiting) => waiting.call !== call));
       setHandoffCall((current) => current === call ? null : current);
-      // Only "missed" if it was actually taken away (caller hung up, someone
-      // else in the ring group answered) - not when we're the ones accepting
-      // it (that already routes through onActive as "connected").
-      if (wasStillWaiting) {
+      // clearIncoming() fires before onActive() during a normal accept, so
+      // this can't tell "accepted" apart from "actually gone" just by
+      // checking the waiting list - the controller now reports why
+      // explicitly. Only "missed"/"rejected" clear DMP's incoming banner
+      // as missed; "accepted" is about to get "connected" from onActive.
+      if (reason !== "accepted") {
         notifyDmpCallState("missed", "inbound", providerCall.parameters?.From);
       }
     },
@@ -812,6 +843,10 @@ export default function SoftphonePage() {
     retentionLockRef.current = true;
     setIsRetentionPending(true);
     setInlineStatus("");
+    // Suppress the "ended" onEnded is about to fire for this exact call
+    // object once retainAgentCall disconnects it below.
+    retainedCallsRef.current.add(oldAgentCall as unknown as object);
+    const direction = inboundCallsRef.current.has(oldAgentCall as unknown as object) ? "inbound" : "outbound";
     try {
       const retained = await retainAgentCall<HeldCall>(
         "held",
@@ -820,14 +855,12 @@ export default function SoftphonePage() {
         getAuthHeaders(),
         () => activeCallRef.current,
       );
+      // Resuming this held call later arrives through the recovery path,
+      // which can't tell direction on its own - see retainedCallDirectionRef.
+      retainedCallDirectionRef.current.set(retained.id, direction);
       setHeldCall({ ...retained, callerName: retained.callerName || activeCallerName, callerNumber: retained.callerNumber || dialpadNumber, duration: retained.duration ?? callDuration });
       setStableStatus("Caller is on hold. Select Resume to reconnect.");
-      notifyDmpCallState(
-        "held",
-        inboundCallsRef.current.has(oldAgentCall as unknown as object) ? "inbound" : "outbound",
-        retained.callerNumber || dialpadNumber,
-        retained.callerName || activeCallerName,
-      );
+      notifyDmpCallState("held", direction, retained.callerNumber || dialpadNumber, retained.callerName || activeCallerName);
     } catch (error) {
       setStableStatus(error instanceof Error ? error.message : "Could not retain the call. The caller remains connected.");
     } finally {
@@ -848,14 +881,25 @@ export default function SoftphonePage() {
     if (!activeCallSid) return;
     retentionLockRef.current = true;
     setIsRetentionPending(true);
+    // Suppress the "ended" onEnded is about to fire for this exact call
+    // object once retainAgentCall disconnects it below.
+    retainedCallsRef.current.add(oldAgentCall as unknown as object);
+    const direction = inboundCallsRef.current.has(oldAgentCall as unknown as object) ? "inbound" : "outbound";
     try {
-      await retainAgentCall<ParkedCall>(
+      const retained = await retainAgentCall<ParkedCall>(
         "parked",
         oldAgentCall,
         { callerName: activeCallerName, callerNumber: dialpadNumber, duration: callDuration },
         getAuthHeaders(),
         () => activeCallRef.current,
       );
+      // Only covers this same collector picking their own parked call back
+      // up (the parked-call flow is meant for cross-collector handoff, and
+      // another collector's browser has no way to see this map) - a
+      // different collector resuming it will still be misclassified as
+      // outbound. Fixing that needs the server to carry direction through
+      // the parked-call record itself, not just this client-side cache.
+      retainedCallDirectionRef.current.set(retained.id, direction);
       await refreshParkedCalls();
       setStableStatus("Call parked. It remains available in Parked Calls.");
     } catch (error) {
@@ -960,9 +1004,11 @@ export default function SoftphonePage() {
 
         socket.onmessage = (event) => {
           try {
-            const message = JSON.parse(event.data) as { type: string; phoneNumber?: string; action?: string };
+            const message = JSON.parse(event.data) as { type: string; phoneNumber?: string; action?: string; connectionId?: string };
             const handlers = remoteCommandHandlersRef.current;
-            if (message.type === "click-to-dial" && message.phoneNumber) {
+            if (message.type === "connected" && message.connectionId) {
+              connectionIdRef.current = message.connectionId;
+            } else if (message.type === "click-to-dial" && message.phoneNumber) {
               handlers.dial(message.phoneNumber);
             } else if (message.type === "call-control") {
               switch (message.action) {
@@ -981,6 +1027,7 @@ export default function SoftphonePage() {
         };
 
         socket.onclose = () => {
+          connectionIdRef.current = undefined;
           if (cancelled) return;
           reconnectTimer = window.setTimeout(connect, 5000);
         };
@@ -999,6 +1046,7 @@ export default function SoftphonePage() {
 
     return () => {
       cancelled = true;
+      connectionIdRef.current = undefined;
       if (reconnectTimer) window.clearTimeout(reconnectTimer);
       socket?.close();
     };

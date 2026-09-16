@@ -27006,7 +27006,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/v2/call_control', authenticateDmpCallback, async (req, res) => {
     try {
       const tenantId = (req as any).dmpTenantId as string;
-      const { chiamoEmail, action } = req.body || {};
+      const { chiamoEmail, action, connectionId } = req.body || {};
       if (!CALL_CONTROL_ACTIONS.includes(action)) {
         return res.status(400).json({ success: false, error: `action must be one of: ${CALL_CONTROL_ACTIONS.join(', ')}` });
       }
@@ -27014,8 +27014,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const credentials = await resolveDmpTargetUser(tenantId, chiamoEmail, res);
       if (!credentials) return;
 
-      const { pushToUser } = await import('./realtimeSoftphone');
-      const delivered = pushToUser(credentials.id, { type: 'call-control', action });
+      const { pushToUser, pushToConnection } = await import('./realtimeSoftphone');
+      const message = { type: 'call-control', action };
+      // Target the specific tab that reported the call this command is for,
+      // when DMP has one - a user with two tabs on two different calls must
+      // not have a command meant for one executed against both, so a stale
+      // connectionId (that tab closed) must not fall back to broadcasting -
+      // that would risk hitting an unrelated call in another tab. Broadcast
+      // only when there's no connectionId to target at all (an older
+      // client, or the call was never resolved to a specific tab).
+      const delivered = typeof connectionId === 'string' && connectionId
+        ? pushToConnection(credentials.id, connectionId, message)
+        : pushToUser(credentials.id, message);
       if (!delivered) {
         return res.status(409).json({ success: false, error: 'That Chiamo user does not have the softphone open right now' });
       }
@@ -27706,7 +27716,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const { status, direction, phoneNumber, callerName } = req.body;
+      const { status, direction, phoneNumber, callerName, connectionId } = req.body;
       const validStatuses = ['ringing', 'connected', 'held', 'muted', 'unmuted', 'ended', 'missed'];
       if (!validStatuses.includes(status)) {
         return res.status(400).json({ message: "Invalid status" });
@@ -27727,6 +27737,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const result = await dmpService.notifyCallState(user.tenantId, user.email, {
         status, direction, phoneNumber,
         callerName: typeof callerName === 'string' ? callerName : undefined,
+        connectionId: typeof connectionId === 'string' ? connectionId : undefined,
       });
       res.json({ success: true, notified: result !== null });
     } catch (error) {

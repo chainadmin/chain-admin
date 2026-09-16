@@ -1090,6 +1090,11 @@ export class DebtManagerProService {
       direction: 'inbound' | 'outbound';
       phoneNumber: string;
       callerName?: string;
+      // Identifies which of this collector's open softphone tabs the call
+      // is on, so a DMP-issued command (hang up, mute, hold) can target
+      // that one tab instead of every tab this collector has open - see
+      // /api/v2/call_control's use of pushToConnection.
+      connectionId?: string;
     },
   ): Promise<any | null> {
     const config = await this.getDmpConfig(tenantId);
@@ -1102,6 +1107,7 @@ export class DebtManagerProService {
       direction: state.direction,
       phoneNumber: state.phoneNumber,
       callerName: state.callerName,
+      connectionId: state.connectionId,
     });
   }
 
