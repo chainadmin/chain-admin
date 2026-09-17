@@ -1810,52 +1810,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
     return next();
   });
-  // Request/Response logger - log all incoming requests and outgoing responses for debugging
+  // Request/Response logger - one concise line per request. Railway (and
+  // similar hosts) rate-limit log ingestion and silently drop lines once a
+  // deployment exceeds it, so in production this only logs errors and slow
+  // requests; outside production it logs every request.
   app.use((req, res, next) => {
     const startTime = Date.now();
-    console.log(`📨 [REQUEST] ${req.method} ${req.path}`, {
-      origin: req.headers.origin || 'none',
-      contentType: req.headers['content-type'] || 'none',
-      userAgent: req.headers['user-agent']?.substring(0, 50) || 'none'
+    const isProduction = process.env.NODE_ENV === 'production';
+
+    res.on('finish', () => {
+      const duration = Date.now() - startTime;
+      const isError = res.statusCode >= 400;
+      const isSlow = duration > 2000;
+
+      if (isProduction && !isError && !isSlow) {
+        return;
+      }
+
+      console.log(`${req.method} ${req.path} → ${res.statusCode} (${duration}ms)`);
     });
-    
-    // Capture the original send and json methods to log responses
-    const originalSend = res.send;
-    const originalJson = res.json;
-    const originalSendFile = res.sendFile;
-    
-    res.send = function(data) {
-      const duration = Date.now() - startTime;
-      const sensitiveResponse = [
-        '/temporary-password',
-        '/api/agency/login',
-        '/api/chiamo/change-password',
-        '/api/auth/user',
-      ].some((path) => req.path.includes(path));
-      console.log(`📤 [RESPONSE] ${req.method} ${req.path} → ${res.statusCode} (${duration}ms)`, {
-        contentType: res.getHeader('content-type') || 'unknown',
-        bodyType: typeof data,
-        bodyPreview: sensitiveResponse ? '[REDACTED]' : (typeof data === 'string' ? data.substring(0, 100) : 'not-string')
-      });
-      return originalSend.call(this, data);
-    };
-    
-    res.json = function(data) {
-      const duration = Date.now() - startTime;
-      console.log(`📤 [RESPONSE-JSON] ${req.method} ${req.path} → ${res.statusCode} (${duration}ms)`, {
-        dataKeys: data && typeof data === 'object' ? Object.keys(data).join(', ') : 'not-object'
-      });
-      return originalJson.call(this, data);
-    };
-    
-    res.sendFile = function(filePath: string, ...args: any[]) {
-      const duration = Date.now() - startTime;
-      console.log(`📤 [RESPONSE-FILE] ${req.method} ${req.path} → ${res.statusCode} (${duration}ms)`, {
-        file: filePath.includes('index.html') ? 'index.html' : 'other'
-      });
-      return originalSendFile.apply(this, [filePath, ...args] as any);
-    };
-    
+
     next();
   });
   
