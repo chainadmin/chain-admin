@@ -26741,6 +26741,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     next();
   };
 
+  // Shared by every DMP-delegated route below: resolves a chiamoEmail to
+  // this tenant's agency credentials and confirms they have softphone
+  // access, or writes the appropriate error response itself and returns
+  // null so the caller can just `if (!credentials) return;`.
+  async function resolveDmpTargetUser(tenantId: string, chiamoEmail: unknown, res: any) {
+    if (typeof chiamoEmail !== 'string' || !chiamoEmail.trim()) {
+      res.status(400).json({ success: false, error: 'chiamoEmail is required' });
+      return null;
+    }
+    const credentials = await storage.getAgencyCredentialsByEmail(chiamoEmail);
+    if (!credentials || credentials.tenantId !== tenantId) {
+      res.status(404).json({ success: false, error: 'No Chiamo user found for that email' });
+      return null;
+    }
+    if (!canUseSoftphone(credentials as any)) {
+      res.status(403).json({ success: false, error: 'That Chiamo user does not have VoIP access enabled' });
+      return null;
+    }
+    return credentials;
+  }
+
   app.post('/api/v2/parked_call_pickup', authenticateDmpCallback, async (req, res) => {
     try {
       const tenantId = (req as any).dmpTenantId as string;
@@ -26748,17 +26769,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (typeof parkedCallId !== 'string' || !parkedCallId.trim()) {
         return res.status(400).json({ success: false, error: 'parkedCallId is required' });
       }
-      if (typeof chiamoEmail !== 'string' || !chiamoEmail.trim()) {
-        return res.status(400).json({ success: false, error: 'chiamoEmail is required' });
-      }
 
-      const credentials = await storage.getAgencyCredentialsByEmail(chiamoEmail);
-      if (!credentials || credentials.tenantId !== tenantId) {
-        return res.status(404).json({ success: false, error: 'No Chiamo user found for that email' });
-      }
-      if (!canUseSoftphone(credentials as any)) {
-        return res.status(403).json({ success: false, error: 'That Chiamo user does not have VoIP access enabled' });
-      }
+      const credentials = await resolveDmpTargetUser(tenantId, chiamoEmail, res);
+      if (!credentials) return;
 
       const reconnectToken = crypto.randomBytes(24).toString('hex');
       const outcome = await pickupParkedCallForUser(tenantId, credentials.id, parkedCallId, reconnectToken);
@@ -26783,20 +26796,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const tenantId = (req as any).dmpTenantId as string;
       const { chiamoEmail, phoneNumber, fileNumber } = req.body || {};
-      if (typeof chiamoEmail !== 'string' || !chiamoEmail.trim()) {
-        return res.status(400).json({ success: false, error: 'chiamoEmail is required' });
-      }
       if (typeof phoneNumber !== 'string' || !phoneNumber.trim()) {
         return res.status(400).json({ success: false, error: 'phoneNumber is required' });
       }
 
-      const credentials = await storage.getAgencyCredentialsByEmail(chiamoEmail);
-      if (!credentials || credentials.tenantId !== tenantId) {
-        return res.status(404).json({ success: false, error: 'No Chiamo user found for that email' });
-      }
-      if (!canUseSoftphone(credentials as any)) {
-        return res.status(403).json({ success: false, error: 'That Chiamo user does not have VoIP access enabled' });
-      }
+      const credentials = await resolveDmpTargetUser(tenantId, chiamoEmail, res);
+      if (!credentials) return;
 
       const { pushToUser } = await import('./realtimeSoftphone');
       const delivered = pushToUser(credentials.id, {
@@ -26811,6 +26816,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error handling DMP click-to-dial request:', error);
       res.status(500).json({ success: false, error: 'Failed to trigger call' });
+    }
+  });
+
+  // DMP is the control surface for CTI-enabled orgs: answer/decline an
+  // incoming call, hang up, mute, or hold, all pushed to the target user's
+  // softphone tab over /ws/softphone the same way click-to-dial is - none
+  // of these can be a pure server-side Twilio REST action (unlike parked-call
+  // pickup) because they act on a live device.connect() session that only
+  // exists inside that browser tab.
+  const CALL_CONTROL_ACTIONS = ['answer', 'decline', 'hangup', 'mute', 'unmute', 'hold', 'resume'] as const;
+  app.post('/api/v2/call_control', authenticateDmpCallback, async (req, res) => {
+    try {
+      const tenantId = (req as any).dmpTenantId as string;
+      const { chiamoEmail, action, connectionId } = req.body || {};
+      if (!CALL_CONTROL_ACTIONS.includes(action)) {
+        return res.status(400).json({ success: false, error: `action must be one of: ${CALL_CONTROL_ACTIONS.join(', ')}` });
+      }
+
+      const credentials = await resolveDmpTargetUser(tenantId, chiamoEmail, res);
+      if (!credentials) return;
+
+      const { pushToUser, pushToConnection } = await import('./realtimeSoftphone');
+      const message = { type: 'call-control', action };
+      // Target the specific tab that reported the call this command is for,
+      // when DMP has one - a user with two tabs on two different calls must
+      // not have a command meant for one executed against both, so a stale
+      // connectionId (that tab closed) must not fall back to broadcasting -
+      // that would risk hitting an unrelated call in another tab. Broadcast
+      // only when there's no connectionId to target at all (an older
+      // client, or the call was never resolved to a specific tab).
+      const delivered = typeof connectionId === 'string' && connectionId
+        ? pushToConnection(credentials.id, connectionId, message)
+        : pushToUser(credentials.id, message);
+      if (!delivered) {
+        return res.status(409).json({ success: false, error: 'That Chiamo user does not have the softphone open right now' });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error handling DMP call-control request:', error);
+      res.status(500).json({ success: false, error: 'Failed to send call control command' });
     }
   });
 
@@ -27481,18 +27526,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Fired by the softphone widget when an inbound call is answered, so DMP
-  // can screen-pop the matching account for whoever answered. Non-blocking
-  // by design (mirrors the existing DMP sync calls throughout this file) -
-  // a failure here should never affect the call itself.
-  app.post('/api/voip/dmp-notify-answered', authenticateUser, async (req, res) => {
+  // Fired by the softphone widget at every point in a call's lifecycle
+  // (ringing, connected, held, ended...) so DMP - the actual control
+  // surface for CTI-enabled orgs - can render live call state and screen-pop
+  // the matching account. Non-blocking by design (mirrors the existing DMP
+  // sync calls throughout this file) - a failure here should never affect
+  // the call itself.
+  app.post('/api/voip/dmp-call-state', authenticateUser, async (req, res) => {
     try {
       const user = await getCurrentUser(req);
       if (!user) {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const { phoneNumber } = req.body;
+      const { status, direction, phoneNumber, callerName, connectionId } = req.body;
+      const validStatuses = ['ringing', 'connected', 'held', 'muted', 'unmuted', 'ended', 'missed'];
+      if (!validStatuses.includes(status)) {
+        return res.status(400).json({ message: "Invalid status" });
+      }
+      if (direction !== 'inbound' && direction !== 'outbound') {
+        return res.status(400).json({ message: "Invalid direction" });
+      }
       if (!phoneNumber || typeof phoneNumber !== 'string') {
         return res.status(400).json({ message: "phoneNumber is required" });
       }
@@ -27503,12 +27557,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { dmpService } = await import('./dmpService');
-      const result = await dmpService.notifyCallAnswered(user.tenantId, user.email, phoneNumber);
+      const result = await dmpService.notifyCallState(user.tenantId, user.email, {
+        status, direction, phoneNumber,
+        callerName: typeof callerName === 'string' ? callerName : undefined,
+        connectionId: typeof connectionId === 'string' ? connectionId : undefined,
+      });
       res.json({ success: true, notified: result !== null });
     } catch (error) {
-      console.error("Error notifying DMP of answered call:", error);
+      console.error("Error notifying DMP of call state:", error);
       // Never surface this as a failure to the softphone UI - the call
-      // itself already connected successfully.
+      // itself is unaffected.
       res.json({ success: true, notified: false });
     }
   });

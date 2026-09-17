@@ -19,8 +19,14 @@ const TOKEN_TTL_MS = 30_000;
 const pendingTokens = new Map<string, PendingToken>();
 
 // A user may have more than one tab/window open, so each userId maps to a
-// set of live sockets rather than a single one.
+// set of live sockets for broadcast-style pushes (click-to-dial: any open
+// tab can take it). connectionSockets additionally lets a caller target one
+// specific tab - needed for call-control commands (mute/hold/hangup/etc.),
+// since a user with two tabs open on two different calls must not have a
+// command meant for one call executed against both.
 const userSockets = new Map<string, Set<WebSocket>>();
+const connectionSockets = new Map<string, WebSocket>();
+const socketConnectionId = new WeakMap<WebSocket, string>();
 
 export function mintRealtimeToken(userId: string, tenantId: string): string {
   const token = randomUUID();
@@ -51,6 +57,10 @@ export function initRealtimeSoftphone(httpServer: Server): void {
       return;
     }
 
+    const connectionId = randomUUID();
+    socketConnectionId.set(ws, connectionId);
+    connectionSockets.set(connectionId, ws);
+
     let sockets = userSockets.get(identity.userId);
     if (!sockets) {
       sockets = new Set();
@@ -59,6 +69,7 @@ export function initRealtimeSoftphone(httpServer: Server): void {
     sockets.add(ws);
 
     ws.on("close", () => {
+      connectionSockets.delete(connectionId);
       const current = userSockets.get(identity.userId);
       if (!current) return;
       current.delete(ws);
@@ -73,7 +84,7 @@ export function initRealtimeSoftphone(httpServer: Server): void {
       // crashing the process.
     });
 
-    ws.send(JSON.stringify({ type: "connected" }));
+    ws.send(JSON.stringify({ type: "connected", connectionId }));
   });
 
   // Tokens that were minted but never used to open a connection (the tab
@@ -104,4 +115,21 @@ export function pushToUser(userId: string, message: unknown): boolean {
     }
   }
   return sent;
+}
+
+/**
+ * Sends to exactly one tab's connection, verifying it still belongs to this
+ * userId (a stale/forged connectionId can't be used to reach another
+ * user's tab). Returns false if that connection is gone or mismatched -
+ * callers should fall back to pushToUser's broadcast in that case, since a
+ * closed tab is a normal reason a targeted send can miss.
+ */
+export function pushToConnection(userId: string, connectionId: string, message: unknown): boolean {
+  const ws = connectionSockets.get(connectionId);
+  if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+  const owningUserSockets = userSockets.get(userId);
+  if (!owningUserSockets || !owningUserSockets.has(ws)) return false;
+
+  ws.send(JSON.stringify(message));
+  return true;
 }

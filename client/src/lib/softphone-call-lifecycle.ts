@@ -36,11 +36,17 @@ export interface ProviderCall {
   on(event: string, listener: (...args: any[]) => void): void;
 }
 
+// Why an incoming call left the waiting list - callers (e.g. DMP call-state
+// reporting) need this to tell "we answered it" apart from "it's genuinely
+// gone", since clearIncoming() fires before onActive() during a normal
+// accept and the waiting list alone can't distinguish the two.
+export type IncomingClearedReason = "accepted" | "rejected" | "missed";
+
 export interface LifecycleCallbacks {
   onActive(call: ProviderCall, recovered: boolean, metadata?: PendingReconnect): void;
   onEnded(call: ProviderCall): void;
   onIncoming(call: ProviderCall): void;
-  onIncomingCleared(call: ProviderCall): void;
+  onIncomingCleared(call: ProviderCall, reason: IncomingClearedReason): void;
   onReconnectChanged(pending: PendingReconnect | null): void;
   onError(message: string): void;
   onCallTransitionChanged?(pending: boolean): void;
@@ -228,7 +234,7 @@ export class SoftphoneCallController {
   rejectIncoming(call: ProviderCall): boolean {
     if (!this.incomingCalls.includes(call)) return false;
     this.safeReject(call);
-    this.clearIncoming(call);
+    this.clearIncoming(call, "rejected");
     return true;
   }
 
@@ -376,7 +382,7 @@ export class SoftphoneCallController {
     this.acceptingCall = null;
     this.acceptingRecovery = null;
     this.recentTerminal = null;
-    if (this.incomingCalls.includes(call)) this.clearIncoming(call);
+    if (this.incomingCalls.includes(call)) this.clearIncoming(call, "accepted");
     this.activeCall = call;
     this.notifyCallTransition();
     if (recovery) this.clearPending(true);
@@ -392,7 +398,7 @@ export class SoftphoneCallController {
     if (!relevant) return; // An old incoming call cannot disturb a newer call.
     const wasActive = this.activeCall === call;
     const wasRecovery = (this.acceptingCall === call && !!this.acceptingRecovery) || !!terminal?.recovery;
-    if (this.incomingCalls.includes(call)) this.clearIncoming(call);
+    if (this.incomingCalls.includes(call)) this.clearIncoming(call, "missed");
     if (this.answerAfterActiveEnds === call) this.answerAfterActiveEnds = null;
     if (this.acceptingCall === call) {
       this.acceptingCall = null;
@@ -412,7 +418,7 @@ export class SoftphoneCallController {
     const wasRecovery = this.acceptingCall === call && !!this.acceptingRecovery;
     const wasActive = this.activeCall === call;
     const wasRelevant = wasActive || this.incomingCalls.includes(call) || this.acceptingCall === call;
-    if (this.incomingCalls.includes(call)) this.clearIncoming(call);
+    if (this.incomingCalls.includes(call)) this.clearIncoming(call, "missed");
     if (this.answerAfterActiveEnds === call) this.answerAfterActiveEnds = null;
     if (this.acceptingCall === call) {
       this.acceptingCall = null;
@@ -434,10 +440,10 @@ export class SoftphoneCallController {
     try { call.reject(); } catch {}
   }
 
-  private clearIncoming(call: ProviderCall): void {
+  private clearIncoming(call: ProviderCall, reason: IncomingClearedReason): void {
     if (!this.incomingCalls.includes(call)) return;
     this.incomingCalls = this.incomingCalls.filter((candidate) => candidate !== call);
-    this.callbacks.onIncomingCleared(call);
+    this.callbacks.onIncomingCleared(call, reason);
   }
 
   private clearAllIncoming(): void {
@@ -446,7 +452,7 @@ export class SoftphoneCallController {
     this.answerAfterActiveEnds = null;
     for (const call of calls) {
       this.safeReject(call);
-      this.callbacks.onIncomingCleared(call);
+      this.callbacks.onIncomingCleared(call, "missed");
     }
   }
 
