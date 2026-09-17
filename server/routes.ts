@@ -24932,10 +24932,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Process inbound email from consumer
-  async function processInboundEmail(event: any) {
-    console.log('📨 Processing inbound email from Postmark');
-    
+  // Process an inbound email (consumer reply) from Postmark. Shared by both
+  // the dedicated inbound webhook and the generic tracking webhook, so a
+  // reply is handled correctly no matter which URL Postmark is configured to
+  // call. Matches the reply to a tenant primarily via the In-Reply-To header
+  // (looked up against emailLogs for the exact original message), since
+  // outbound mail's Reply-To is the shared Postmark inbound address, not a
+  // per-tenant address - a To-address match alone can never find the tenant.
+  async function processInboundEmailReply(event: any): Promise<{ message: string }> {
     const {
       From,
       FromFull,
@@ -24944,46 +24948,96 @@ export async function registerRoutes(app: Express): Promise<Server> {
       HtmlBody,
       TextBody,
       MessageID,
-      Date: receivedDate,
       Headers,
     } = event;
 
-    // Extract sender email and name
     const fromEmail = (From || '').toLowerCase().trim();
-    const fromName = FromFull?.Name || fromEmail.split('@')[0];
-    
-    // Extract the To address to determine which tenant this belongs to
     const toEmail = (To || '').toLowerCase().trim();
-    
-    console.log('📧 Email details:', {
+
+    console.log('📧 Inbound email details:', {
       from: fromEmail,
       to: toEmail,
       subject: Subject,
     });
 
-    // Find the tenant by matching the To address with tenant slug or custom sender email
-    const allTenants = await storage.getAllTenants();
     let matchedTenant = null;
-    
-    for (const tenant of allTenants) {
-      const tenantEmail = `${tenant.slug}@chainsoftwaregroup.com`;
-      if (toEmail.includes(tenantEmail) || (tenant.customSenderEmail && toEmail.includes(tenant.customSenderEmail))) {
-        matchedTenant = tenant;
-        break;
+    let inReplyToMessageId: string | null = null;
+    let assignedUserId: string | null = null;
+
+    // Extract In-Reply-To header from Headers array
+    if (Headers && Array.isArray(Headers)) {
+      const inReplyToHeader = Headers.find((h: any) => h.Name === 'In-Reply-To');
+      if (inReplyToHeader) {
+        // Normalize the MessageID: remove angle brackets and extract the GUID
+        // Postmark sends: <guid@pm.mtasv.net> but we store just the GUID
+        const rawValue = inReplyToHeader.Value || '';
+        inReplyToMessageId = rawValue.replace(/[<>]/g, '').split('@')[0];
+
+        // Replies to platform announcements belong exclusively to the
+        // Global Admin inbox, never to a tenant conversation.
+        const [platformDelivery] = (await db.execute(sql`
+          SELECT id, announcement_id, tenant_id, consumer_id
+          FROM platform_announcement_deliveries
+          WHERE message_id = ${inReplyToMessageId}
+          LIMIT 1
+        `)).rows as Array<{ id: string; announcement_id: string; tenant_id: string; consumer_id: string | null }>;
+        if (platformDelivery) {
+          await db.execute(sql`
+            INSERT INTO platform_announcement_replies
+              (announcement_id, delivery_id, tenant_id, consumer_id, from_email, subject,
+               text_body, html_body, message_id, in_reply_to_message_id)
+            VALUES (${platformDelivery.announcement_id}, ${platformDelivery.id}, ${platformDelivery.tenant_id},
+                    ${platformDelivery.consumer_id}, ${fromEmail}, ${Subject || '(No Subject)'},
+                    ${TextBody || ''}, ${HtmlBody || ''}, ${MessageID || null}, ${inReplyToMessageId})
+            ON CONFLICT (message_id) WHERE message_id IS NOT NULL DO NOTHING
+          `);
+          console.log('✅ Routed platform announcement reply to Global Admin inbox');
+          return { message: 'Platform announcement reply received' };
+        }
+
+        // Look up the original email in emailLogs to find the tenant
+        const [originalEmail] = await db
+          .select({ tenantId: emailLogs.tenantId, metadata: emailLogs.metadata })
+          .from(emailLogs)
+          .where(eq(emailLogs.messageId, inReplyToMessageId))
+          .limit(1);
+
+        if (originalEmail) {
+          const originalMetadata = originalEmail.metadata as Record<string, unknown> | null;
+          assignedUserId = typeof originalMetadata?.senderUserId === 'string'
+            ? originalMetadata.senderUserId
+            : null;
+          const tenant = await storage.getTenant(originalEmail.tenantId);
+          if (tenant) {
+            matchedTenant = tenant;
+            console.log('✅ Matched tenant via In-Reply-To:', matchedTenant.name);
+          }
+        }
+      }
+    }
+
+    // Fallback: try to match by To address (for older emails or direct sends)
+    if (!matchedTenant) {
+      const allTenants = await storage.getAllTenants();
+
+      for (const tenant of allTenants) {
+        const tenantEmail = `${tenant.slug}@chainsoftwaregroup.com`;
+        if (toEmail.includes(tenantEmail) || (tenant.customSenderEmail && toEmail.includes(tenant.customSenderEmail))) {
+          matchedTenant = tenant;
+          console.log('✅ Matched tenant via To address:', matchedTenant.name);
+          break;
+        }
       }
     }
 
     if (!matchedTenant) {
-      console.warn('⚠️ Could not match inbound email to any tenant:', toEmail);
-      return;
+      console.warn('⚠️ Could not match inbound email to any tenant:', { toEmail, inReplyToMessageId });
+      return { message: 'Email received but no tenant matched' };
     }
-
-    console.log('✅ Matched tenant:', matchedTenant.name);
 
     // Try to find the consumer by email
     const consumer = await storage.getConsumerByEmailAndTenant(fromEmail, matchedTenant.slug);
-    
-    // Store the reply
+
     await storage.createEmailReply({
       tenantId: matchedTenant.id,
       consumerId: consumer?.id || null,
@@ -24993,41 +25047,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
       textBody: TextBody || '',
       htmlBody: HtmlBody || '',
       messageId: MessageID,
+      inReplyToMessageId,
+      assignedUserId,
       isRead: false,
     });
 
-    console.log('✅ Email reply stored successfully');
-    
+    console.log('✅ Email reply stored successfully for tenant:', matchedTenant.name);
+
     // Check if auto-response is enabled for this tenant
     const [autoResponseCfg] = await db
       .select()
       .from(autoResponseConfig)
       .where(eq(autoResponseConfig.tenantId, matchedTenant.id))
       .limit(1);
-    
+
     if (autoResponseCfg?.enabled && autoResponseCfg?.enableEmailAutoResponse && autoResponseCfg?.openaiApiKey && !autoResponseCfg?.testMode) {
-      console.log('🤖 Auto-response is enabled, generating AI response...');
-      
       try {
         const { AutoResponseService } = await import('./autoResponseService');
         const service = new AutoResponseService(matchedTenant.id);
-        
-        // Generate auto-response
+
         const autoResponse = await service.generateResponse({
           messageType: 'email',
           inboundMessage: TextBody || HtmlBody || '',
           tenantId: matchedTenant.id,
         });
-        
+
         if (autoResponse) {
-          // Send auto-response via email
           await emailService.sendEmail({
             to: fromEmail,
             subject: `Re: ${Subject || '(No Subject)'}`,
             html: `<p>${autoResponse.response.replace(/\n/g, '<br>')}</p>`,
             tenantId: matchedTenant.id,
           });
-          
           console.log('✅ Auto-response sent successfully');
         }
       } catch (error) {
@@ -25035,6 +25086,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // Don't fail the webhook - just log the error
       }
     }
+
+    return { message: 'Reply stored successfully' };
   }
 
   // Process individual Postmark webhook events
@@ -25046,7 +25099,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     if (isInboundEmail) {
       console.log('📨 Detected inbound email, routing to inbound handler...');
-      return await processInboundEmail(event);
+      await processInboundEmailReply(event);
+      return;
     }
 
     // Handle tracking events (delivery, bounce, open, etc.)
@@ -25581,182 +25635,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Postmark inbound email webhook for handling replies from consumers
   app.post('/api/webhooks/postmark-inbound', async (req, res) => {
     try {
-      console.log('📨 Received inbound email from Postmark');
-      
-      const {
-        From,
-        FromFull,
-        To,
-        Subject,
-        HtmlBody,
-        TextBody,
-        MessageID,
-        Date: receivedDate,
-        Headers,
-      } = req.body;
-
-      // Extract sender email and name
-      const fromEmail = (From || '').toLowerCase().trim();
-      const fromName = FromFull?.Name || fromEmail.split('@')[0];
-      // Declare toEmail at top level so it's available for createEmailReply
-      const toEmail = (To || '').toLowerCase().trim();
-      
-      console.log('📧 Email details:', {
-        from: fromEmail,
-        to: toEmail,
-        subject: Subject,
-      });
-
-      // Find the original email by looking at In-Reply-To header to determine which tenant this belongs to
-      let matchedTenant = null;
-      let inReplyToMessageId = null;
-      let assignedUserId: string | null = null;
-      
-      // Extract In-Reply-To header from Headers array
-      if (Headers && Array.isArray(Headers)) {
-        const inReplyToHeader = Headers.find(h => h.Name === 'In-Reply-To');
-        if (inReplyToHeader) {
-          // Normalize the MessageID: remove angle brackets and extract the GUID
-          // Postmark sends: <guid@pm.mtasv.net> but we store just the GUID
-          const rawValue = inReplyToHeader.Value || '';
-          inReplyToMessageId = rawValue.replace(/[<>]/g, '').split('@')[0];
-          console.log('📎 In-Reply-To (normalized):', inReplyToMessageId);
-
-          // Replies to platform announcements belong exclusively to the
-          // Global Admin inbox, never to a tenant conversation.
-          const [platformDelivery] = (await db.execute(sql`
-            SELECT id, announcement_id, tenant_id, consumer_id
-            FROM platform_announcement_deliveries
-            WHERE message_id = ${inReplyToMessageId}
-            LIMIT 1
-          `)).rows as Array<{ id: string; announcement_id: string; tenant_id: string; consumer_id: string | null }>;
-          if (platformDelivery) {
-            await db.execute(sql`
-              INSERT INTO platform_announcement_replies
-                (announcement_id, delivery_id, tenant_id, consumer_id, from_email, subject,
-                 text_body, html_body, message_id, in_reply_to_message_id)
-              VALUES (${platformDelivery.announcement_id}, ${platformDelivery.id}, ${platformDelivery.tenant_id},
-                      ${platformDelivery.consumer_id}, ${fromEmail}, ${Subject || '(No Subject)'},
-                      ${TextBody || ''}, ${HtmlBody || ''}, ${MessageID || null}, ${inReplyToMessageId})
-              ON CONFLICT (message_id) WHERE message_id IS NOT NULL DO NOTHING
-            `);
-            console.log('✅ Routed platform announcement reply to Global Admin inbox');
-            return res.status(200).json({ message: 'Platform announcement reply received' });
-          }
-          
-          // Look up the original email in emailLogs to find the tenant
-          const [originalEmail] = await db
-            .select({ tenantId: emailLogs.tenantId, metadata: emailLogs.metadata })
-            .from(emailLogs)
-            .where(eq(emailLogs.messageId, inReplyToMessageId))
-            .limit(1);
-          
-          if (originalEmail) {
-            const originalMetadata = originalEmail.metadata as Record<string, unknown> | null;
-            assignedUserId = typeof originalMetadata?.senderUserId === 'string'
-              ? originalMetadata.senderUserId
-              : null;
-            const tenant = await storage.getTenant(originalEmail.tenantId);
-            if (tenant) {
-              matchedTenant = tenant;
-              console.log('✅ Matched tenant via In-Reply-To:', matchedTenant.name);
-            }
-          }
-        }
-      }
-
-      // Fallback: try to match by To address (for older emails or direct sends)
-      if (!matchedTenant) {
-        const allTenants = await storage.getAllTenants();
-        
-        for (const tenant of allTenants) {
-          const tenantEmail = `${tenant.slug}@chainsoftwaregroup.com`;
-          if (toEmail.includes(tenantEmail) || (tenant.customSenderEmail && toEmail.includes(tenant.customSenderEmail))) {
-            matchedTenant = tenant;
-            console.log('✅ Matched tenant via To address:', matchedTenant.name);
-            break;
-          }
-        }
-      }
-
-      if (!matchedTenant) {
-        console.warn('⚠️ Could not match inbound email to any tenant');
-        return res.status(200).json({ message: 'Email received but no tenant matched' });
-      }
-
-      // Try to find the consumer by email
-      const consumer = await storage.getConsumerByEmailAndTenant(fromEmail, matchedTenant.slug);
-      
-      // Store the reply with error logging
-      try {
-        console.log('📝 Storing email reply:', {
-          tenantId: matchedTenant.id,
-          consumerId: consumer?.id || null,
-          fromEmail,
-          toEmail,
-          subject: Subject || '(No Subject)',
-          messageId: MessageID,
-        });
-        
-        await storage.createEmailReply({
-          tenantId: matchedTenant.id,
-          consumerId: consumer?.id || null,
-          fromEmail,
-          toEmail,
-          subject: Subject || '(No Subject)',
-          textBody: TextBody || '',
-          htmlBody: HtmlBody || '',
-          messageId: MessageID,
-          inReplyToMessageId,
-          assignedUserId,
-          isRead: false,
-        });
-
-        console.log('✅ Email reply stored successfully');
-      } catch (storeError) {
-        console.error('❌ Failed to store email reply:', storeError);
-        throw storeError;
-      }
-      
-      // Check if auto-response is enabled for this tenant
-      const [autoResponseCfg] = await db
-        .select()
-        .from(autoResponseConfig)
-        .where(eq(autoResponseConfig.tenantId, matchedTenant.id))
-        .limit(1);
-      
-      if (autoResponseCfg?.enabled && autoResponseCfg?.enableEmailAutoResponse && autoResponseCfg?.openaiApiKey && !autoResponseCfg?.testMode) {
-        console.log('🤖 Auto-response is enabled, generating AI response...');
-        
-        try {
-          const { AutoResponseService } = await import('./autoResponseService');
-          const service = new AutoResponseService(matchedTenant.id);
-          
-          // Generate auto-response
-          const autoResponse = await service.generateResponse({
-            messageType: 'email',
-            inboundMessage: TextBody || HtmlBody || '',
-            tenantId: matchedTenant.id,
-          });
-          
-          if (autoResponse) {
-            // Send auto-response via email
-            await emailService.sendEmail({
-              to: fromEmail,
-              subject: `Re: ${Subject || '(No Subject)'}`,
-              html: `<p>${autoResponse.response.replace(/\n/g, '<br>')}</p>`,
-              tenantId: matchedTenant.id,
-            });
-            
-            console.log('✅ Auto-response sent successfully');
-          }
-        } catch (error) {
-          console.error('❌ Auto-response generation failed:', error);
-          // Don't fail the webhook - just log the error
-        }
-      }
-      
-      res.status(200).json({ message: 'Reply stored successfully' });
+      const result = await processInboundEmailReply(req.body);
+      res.status(200).json(result);
     } catch (error) {
       console.error('❌ Inbound email webhook error:', error);
       res.status(500).json({ message: 'Failed to process inbound email' });
