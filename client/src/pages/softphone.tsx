@@ -36,6 +36,7 @@ import {
 import { cancelReconnect, requestReconnect, retainAgentCall } from "@/lib/softphone-call-requests";
 import { buildSoftphoneDeviceOptions, canStartSoftphoneOutboundCall, scheduleSoftphoneCallCleanup, synchronizeCallMute, updateLiveDeviceToken } from "@/lib/softphone-call-device";
 import { completeOutboundAttempt, SoftphoneOutboundCallCoordinator, type AbortableAttempt } from "@/lib/softphone-outbound-call";
+import { createRingtonePlayer, type RingtonePlayer } from "@/lib/softphone-ringtone";
 import { ConnectPhoneWorkspace } from "@/components/softphone/ConnectPhoneWorkspace";
 import { privacyLineNumber, type PrivacyLineResponse } from "@/components/voip/privacy-line";
 
@@ -145,6 +146,8 @@ export default function SoftphonePage() {
   const activeCallRef = useRef<Call | null>(null);
   const waitingCallIdRef = useRef(0);
   const lifecycleRef = useRef(new SoftphoneCallController());
+  const ringtoneRef = useRef<RingtonePlayer | null>(null);
+  if (!ringtoneRef.current) ringtoneRef.current = createRingtonePlayer();
   const retentionLockRef = useRef(false);
   const dialLockRef = useRef(false);
   const outboundRef = useRef(new SoftphoneOutboundCallCoordinator());
@@ -450,6 +453,10 @@ export default function SoftphonePage() {
     enabled: isAuthenticated,
     retry: false,
     refetchInterval: 1000 * 60 * 55,
+    // The voice token backs live call registration, so refreshing it must not
+    // pause just because the softphone tab lost focus - an agent legitimately
+    // keeps it open in the background between calls.
+    refetchIntervalInBackground: true,
     queryFn: async () => {
       const response = await fetch(softphoneApiUrl("/api/voip/token"), {
         headers: getAuthHeaders(),
@@ -508,6 +515,54 @@ export default function SoftphonePage() {
     };
   }, [retryVoiceToken]);
 
+  // A backgrounded/hidden tab throws off setInterval-based token refresh and the
+  // global queryClient disables refetch-on-focus, so returning to the tab is the
+  // one moment we can reliably notice a stale registration and repair it.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      if (deviceRef.current && !isProviderRegistered) {
+        deviceRef.current.register().catch((error: unknown) => setProviderError(providerErrorMessage(error, "registration")));
+      }
+      void retryVoiceToken();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [isAuthenticated, isProviderRegistered, retryVoiceToken]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (typeof Notification !== "undefined" && Notification.permission === "default") {
+      void Notification.requestPermission();
+    }
+  }, [isAuthenticated]);
+
+  // Rings for as long as at least one call is waiting to be answered, and
+  // raises a browser notification so a call isn't missed while the softphone
+  // tab is unfocused or minimized.
+  useEffect(() => {
+    if (waitingCalls.length === 0) {
+      ringtoneRef.current?.stop();
+      return;
+    }
+    ringtoneRef.current?.start();
+    if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    const latest = waitingCalls[waitingCalls.length - 1];
+    const notification = new Notification("Incoming call", {
+      body: latest.callerName || latest.callerNumber || "Unknown caller",
+      tag: "softphone-incoming-call",
+      requireInteraction: true,
+    });
+    notification.onclick = () => {
+      window.focus();
+      notification.close();
+    };
+    return () => notification.close();
+  }, [waitingCalls]);
+
+  useEffect(() => () => ringtoneRef.current?.stop(), []);
+
   // Device lifetime is scoped to the authenticated identity, not the rotating token.
   useEffect(() => {
     if (!voiceToken?.token) return;
@@ -536,6 +591,14 @@ export default function SoftphonePage() {
       if (deviceRef.current !== device) return;
       setProviderError(providerErrorMessage(error, "registration"));
       setIsProviderRegistered(false);
+    });
+
+    // Defense-in-depth against the 55-minute polling interval missing a beat
+    // (e.g. a throttled background tab): refresh as soon as the SDK itself
+    // says the current token is about to expire, so registration never lapses.
+    device.on("tokenWillExpire", () => {
+      if (deviceRef.current !== device) return;
+      void retryVoiceToken();
     });
 
     device.on("incoming", (call: Call) => {
