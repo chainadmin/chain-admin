@@ -1592,6 +1592,25 @@ export default function Communications() {
     },
   });
 
+  const cancelEmailCampaignMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("POST", `/api/email-campaigns/${id}/cancel`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/email-campaigns"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/email-metrics"] });
+      toast({
+        title: "Campaign Cancelled",
+        description: "Email campaign has been cancelled. Any remaining emails will not be sent.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to cancel email campaign",
+        variant: "destructive",
+      });
+    },
+  });
+
   const approveSmsCampaignMutation = useMutation({
     mutationFn: (id: string) => apiRequest("POST", `/api/sms-campaigns/${id}/approve`),
     onSuccess: () => {
@@ -5027,14 +5046,14 @@ export default function Communications() {
                               </AlertDialogContent>
                             </AlertDialog>
                           )}
-                          {/* Stop/Cancel button for sending SMS campaigns */}
-                          {communicationType === "sms" && campaign.status === "sending" && (
+                          {/* Stop/Cancel button for sending email or SMS campaigns */}
+                          {(communicationType === "sms" || communicationType === "email") && campaign.status === "sending" && (
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button
                                   variant="destructive"
                                   size="sm"
-                                  data-testid="button-cancel-sms-campaign"
+                                  data-testid={communicationType === "email" ? "button-cancel-email-campaign" : "button-cancel-sms-campaign"}
                                 >
                                   <XCircle className="h-4 w-4 mr-1" />
                                   Stop
@@ -5042,19 +5061,19 @@ export default function Communications() {
                               </AlertDialogTrigger>
                               <AlertDialogContent>
                                 <AlertDialogHeader>
-                                  <AlertDialogTitle>Stop SMS Campaign</AlertDialogTitle>
+                                  <AlertDialogTitle>Stop {communicationType === "email" ? "Email" : "SMS"} Campaign</AlertDialogTitle>
                                   <AlertDialogDescription>
-                                    This will immediately stop sending messages. {campaign.totalSent || 0} of {campaign.totalRecipients || 0} messages have been sent. Remaining messages will NOT be sent.
+                                    This will stop sending {communicationType === "email" ? "emails" : "messages"}. {campaign.totalSent || 0} of {campaign.totalRecipients || 0} {communicationType === "email" ? "emails" : "messages"} have been sent. Remaining {communicationType === "email" ? "emails" : "messages"} will NOT be sent.
                                   </AlertDialogDescription>
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
                                   <AlertDialogCancel>Keep Sending</AlertDialogCancel>
                                   <AlertDialogAction
                                     className="bg-red-600 hover:bg-red-700"
-                                    onClick={() => cancelSmsCampaignMutation.mutate(campaign.id)}
-                                    disabled={cancelSmsCampaignMutation.isPending}
+                                    onClick={() => communicationType === "email" ? cancelEmailCampaignMutation.mutate(campaign.id) : cancelSmsCampaignMutation.mutate(campaign.id)}
+                                    disabled={cancelEmailCampaignMutation.isPending || cancelSmsCampaignMutation.isPending}
                                   >
-                                    {cancelSmsCampaignMutation.isPending ? "Stopping..." : "Stop Campaign"}
+                                    {(communicationType === "email" ? cancelEmailCampaignMutation.isPending : cancelSmsCampaignMutation.isPending) ? "Stopping..." : "Stop Campaign"}
                                   </AlertDialogAction>
                                 </AlertDialogFooter>
                               </AlertDialogContent>
@@ -5099,14 +5118,15 @@ export default function Communications() {
                                 <AlertDialogAction
                                   className="bg-red-600 hover:bg-red-700"
                                   onClick={() => {
-                                    if (communicationType === "sms" && campaign.status === 'sending') {
-                                      cancelSmsCampaignMutation.mutate(campaign.id);
+                                    if (campaign.status === 'sending') {
+                                      if (communicationType === "sms") cancelSmsCampaignMutation.mutate(campaign.id);
+                                      else cancelEmailCampaignMutation.mutate(campaign.id);
                                       setTimeout(() => deleteCampaignMutation.mutate({ id: campaign.id, type: communicationType }), 500);
                                     } else {
                                       deleteCampaignMutation.mutate({ id: campaign.id, type: communicationType });
                                     }
                                   }}
-                                  disabled={deleteCampaignMutation.isPending || cancelSmsCampaignMutation.isPending}
+                                  disabled={deleteCampaignMutation.isPending || cancelSmsCampaignMutation.isPending || cancelEmailCampaignMutation.isPending}
                                 >
                                   {deleteCampaignMutation.isPending ? "Deleting..." : "Delete"}
                                 </AlertDialogAction>

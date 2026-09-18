@@ -4539,6 +4539,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Email campaign routes
+  // Tracks campaign IDs cancelled mid-send so the background batch loop below
+  // stops claiming further batches instead of running the audience to completion.
+  const cancelledEmailCampaigns = new Set<string>();
+
   app.get('/api/email-campaigns', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
@@ -4701,8 +4705,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         let cursor: string | undefined;
         let successful = 0;
         let failed = 0;
+        let cancelled = false;
         try {
           while (true) {
+            if (cancelledEmailCampaigns.has(campaign.id)) {
+              cancelled = true;
+              break;
+            }
             const consumerBatch = await getEmailCampaignAudienceBatch(
               tenantId,
               campaign.targetGroup,
@@ -4749,8 +4758,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             if (consumerBatch.length < EMAIL_CAMPAIGN_BATCH_SIZE) break;
           }
 
+          if (cancelled) cancelledEmailCampaigns.delete(campaign.id);
+
           await storage.updateEmailCampaign(campaign.id, {
-            status: successful === 0 && failed > 0 ? 'failed' : 'completed',
+            status: cancelled ? 'cancelled' : (successful === 0 && failed > 0 ? 'failed' : 'completed'),
             totalSent: successful,
             totalErrors: failed,
             totalRecipients: recipientCount,
@@ -4763,12 +4774,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
               const rates = await walletService.getRates(tenantId);
               const actualCents = walletService.computeChargeCents(rates.emailRateMicros, successful);
               await walletService.commitReservation(reservation.id, actualCents, 'email_send',
-                `Email campaign "${campaign.name}": ${successful} sent`,
-                { campaignId: campaign.id, sent: successful, failed });
+                `Email campaign "${campaign.name}": ${successful} sent${cancelled ? ' (cancelled)' : ''}`,
+                { campaignId: campaign.id, sent: successful, failed, cancelled });
               walletService.maybeAutoReload(tenantId).catch(() => {});
             }
           }
         } catch (bgError) {
+          cancelledEmailCampaigns.delete(campaign.id);
           console.error(`Background email campaign failed for "${campaign.name}":`, bgError);
           await storage.updateEmailCampaign(campaign.id, {
             status: 'failed', totalSent: successful, totalErrors: failed, completedAt: new Date(),
@@ -4799,6 +4811,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Cancel an active/sending email campaign
+  app.post('/api/email-campaigns/:id/cancel', authenticateUser, async (req: any, res) => {
+    try {
+      const tenantId = req.user.tenantId;
+      if (!tenantId) {
+        return res.status(403).json({ message: "No tenant access" });
+      }
+
+      const { id } = req.params;
+      const campaign = await storage.getEmailCampaignById(id, tenantId);
+
+      if (!campaign) {
+        return res.status(404).json({ message: "Campaign not found" });
+      }
+
+      const normalizedStatus = (campaign.status || '').trim().toLowerCase();
+
+      // Can cancel pending, pending_approval, or sending campaigns
+      if (!['pending', 'pending_approval', 'sending'].includes(normalizedStatus)) {
+        return res.status(400).json({ message: "Campaign cannot be cancelled (already completed or failed)" });
+      }
+
+      // Signal the background batch loop (if this campaign is still actively sending
+      // in this process) to stop before claiming its next batch.
+      cancelledEmailCampaigns.add(id);
+      console.log(`🛑 Email campaign ${id} marked for cancellation`);
+
+      await storage.updateEmailCampaign(id, {
+        status: 'cancelled',
+        completedAt: new Date(),
+      });
+
+      console.log(`🛑 Email campaign "${campaign.name}" cancelled by user`);
+
+      res.json({ message: 'Campaign cancelled successfully', status: 'cancelled' });
+    } catch (error) {
+      console.error("Error cancelling email campaign:", error);
+      res.status(500).json({ message: "Failed to cancel email campaign" });
+    }
+  });
+
   app.delete('/api/email-campaigns/:id', authenticateUser, async (req: any, res) => {
     try {
       const tenantId = req.user.tenantId;
@@ -4813,8 +4866,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "Campaign not found" });
       }
 
-      if (!['pending', 'pending_approval'].includes((campaign.status || '').toLowerCase())) {
-        return res.status(400).json({ message: "Only pending campaigns can be deleted" });
+      const normalizedStatus = (campaign.status || '').toLowerCase();
+
+      // A sending campaign is cancelled first so the background batch loop stops
+      // before the row (and its email_tracking rows) are removed underneath it.
+      if (normalizedStatus === 'sending') {
+        cancelledEmailCampaigns.add(id);
+        await storage.updateEmailCampaign(id, { status: 'cancelled', completedAt: new Date() });
+      } else if (!['pending', 'pending_approval'].includes(normalizedStatus)) {
+        return res.status(400).json({ message: "Only pending or actively sending campaigns can be deleted" });
       }
 
       await storage.deleteEmailCampaign(id, tenantId);
